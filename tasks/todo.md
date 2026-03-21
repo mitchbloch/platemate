@@ -10,7 +10,7 @@
 - [x] Git init + GitHub repo + first PR merged
 - [x] `npm run build` + `npm run lint` pass
 - [x] `npm run dev` starts, auth redirect works
-- [ ] Vercel deployment
+- [x] Vercel deployment (https://platemate-psi.vercel.app)
 
 ## Phase 2: Recipe Management ✅ (code complete, needs functional testing)
 - [x] Recipe parser (`recipeParser.ts` + `/api/recipes/parse`)
@@ -48,4 +48,4 @@
 - [ ] USDA API for precise nutrition (optional)
 
 ## Remaining Setup
-- [ ] Vercel deployment (connect GitHub repo, set env vars)
+- [x] Vercel deployment (connect GitHub repo, set env vars)

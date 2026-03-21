@@ -29,7 +29,9 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/lib/nutrition.ts` — Health flags, weekly summaries
 - `src/lib/recipes.ts` — Supabase CRUD (snake_case ↔ camelCase conversion)
 - `src/lib/supabase/` — Client (browser), server, middleware, auth helpers
-- `supabase/migrations/001_initial_schema.sql` — Full DB schema
+- `src/components/RecipeDetail.tsx` — Recipe view/edit/delete (client component)
+- `src/components/RecipeForm.tsx` — Recipe import flow (URL → parse → review → save)
+- `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields)
 
 ## Auth
 - Two users (created manually in Supabase dashboard)
@@ -49,6 +51,11 @@ npm run dev    # Start dev server
 npm run build  # Production build
 npm run lint   # ESLint
 ```
+
+## Deployment
+- **Vercel**: https://platemate-psi.vercel.app
+- Auto-deploys on push to main via GitHub integration
+- Env vars set in Vercel dashboard (Supabase URL, anon key, Anthropic API key)
 
 ## Environment Variables
 ```
