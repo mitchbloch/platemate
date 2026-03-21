@@ -6,15 +6,19 @@ import type { ParsedRecipe, CuisineType, MealType, DifficultyLevel, Ingredient }
 import { CUISINE_LABELS } from "@/lib/types";
 import NutritionBadge from "./NutritionBadge";
 
+type InputMode = "url" | "text";
+
 type FormState =
   | { step: "input" }
   | { step: "parsing" }
   | { step: "review"; parsed: ParsedRecipe }
   | { step: "saving" }
-  | { step: "error"; message: string };
+  | { step: "error"; message: string; isVideoUrl?: boolean };
 
 export default function RecipeForm() {
+  const [inputMode, setInputMode] = useState<InputMode>("url");
   const [url, setUrl] = useState("");
+  const [recipeText, setRecipeText] = useState("");
   const [formState, setFormState] = useState<FormState>({ step: "input" });
   const [editedRecipe, setEditedRecipe] = useState<ParsedRecipe | null>(null);
   const router = useRouter();
@@ -23,19 +27,44 @@ export default function RecipeForm() {
 
   async function handleParse(e: React.FormEvent) {
     e.preventDefault();
-    if (!url.trim()) return;
+
+    if (inputMode === "url" && !url.trim()) return;
+    if (inputMode === "text" && !recipeText.trim()) return;
 
     setFormState({ step: "parsing" });
 
     try {
-      const res = await fetch("/api/recipes/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
-      });
+      let res: Response;
+
+      if (inputMode === "text") {
+        res = await fetch("/api/recipes/parse-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: recipeText.trim(),
+            sourceUrl: url.trim() || undefined,
+          }),
+        });
+      } else {
+        res = await fetch("/api/recipes/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: url.trim() }),
+        });
+      }
 
       if (!res.ok) {
         const data = await res.json();
+        // If the API tells us it's a video URL, switch to text mode
+        if (data.isVideoUrl) {
+          setInputMode("text");
+          setFormState({
+            step: "error",
+            message: data.error,
+            isVideoUrl: true,
+          });
+          return;
+        }
         throw new Error(data.error || "Failed to parse recipe");
       }
 
@@ -87,26 +116,99 @@ export default function RecipeForm() {
     return (
       <div>
         <form onSubmit={handleParse} className="space-y-4">
-          <div>
-            <label
-              htmlFor="url"
-              className="mb-1 block text-sm font-medium text-gray-700"
+          {/* Mode toggle */}
+          <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+            <button
+              type="button"
+              onClick={() => setInputMode("url")}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                inputMode === "url"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
             >
-              Recipe URL
-            </label>
-            <input
-              id="url"
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://cooking.nytimes.com/recipes/..."
-              required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+              Paste URL
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode("text")}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                inputMode === "text"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Paste Text
+            </button>
           </div>
 
+          {inputMode === "url" ? (
+            <div>
+              <label
+                htmlFor="url"
+                className="mb-1 block text-sm font-medium text-gray-700"
+              >
+                Recipe URL
+              </label>
+              <input
+                id="url"
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://cooking.nytimes.com/recipes/..."
+                required
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          ) : (
+            <>
+              {/* Optional source URL for text mode */}
+              <div>
+                <label
+                  htmlFor="source-url"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Source URL <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  id="source-url"
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://www.tiktok.com/..."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="recipe-text"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Recipe Text
+                </label>
+                <textarea
+                  id="recipe-text"
+                  value={recipeText}
+                  onChange={(e) => setRecipeText(e.target.value)}
+                  placeholder="Paste the recipe here — ingredients, instructions, whatever you have. It doesn't need to be perfectly formatted."
+                  required
+                  rows={8}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+            </>
+          )}
+
           {formState.step === "error" && (
-            <p className="text-sm text-red-600">{formState.message}</p>
+            <div
+              className={`rounded-lg border p-3 text-sm ${
+                formState.isVideoUrl
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "text-red-600"
+              }`}
+            >
+              {formState.message}
+            </div>
           )}
 
           <button

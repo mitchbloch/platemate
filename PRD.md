@@ -7,7 +7,7 @@ Every weekend, a couple plans 2-4 dinners + 1 slow cooker lunch prep, then groce
 Platemate automates this workflow: curated recipe DB → AI-powered recipe import → health-aware weekly suggestions → store-grouped grocery list.
 
 ## Core Workflow
-1. **Import** — Paste a recipe URL → AI extracts structured recipe + estimates nutrition
+1. **Import** — Paste a recipe URL or freeform text (for video recipes) → AI extracts structured recipe + estimates nutrition
 2. **Review** — Edit extracted fields, see cholesterol/sat fat flags, save to library
 3. **Plan** — Get AI suggestions for the week → pick 3-4 dinners + slow cooker → assign days
 4. **Shop** — Auto-generated grocery list grouped by store (TJ's default), checkable, shared
@@ -30,6 +30,7 @@ Two accounts (the couple). Shared data — no multi-tenancy needed.
 
 ## Success Metrics
 - Can import a recipe from any major cooking site in <10 seconds
+- Video recipe links (TikTok, Instagram, YouTube) detected and gracefully redirected to text input
 - Nutrition flags correctly identify high-cholesterol recipes
 - Weekly planning takes <5 minutes (vs 30+ manual)
 - Grocery list is usable in-store on mobile

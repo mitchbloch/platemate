@@ -3,11 +3,30 @@ import type { ParsedRecipe, Ingredient, CuisineType, MealType, DifficultyLevel, 
 
 const anthropic = new Anthropic();
 
-const SYSTEM_PROMPT = `You are a recipe extraction and nutrition estimation assistant. Given the HTML content of a recipe page, extract the recipe data and estimate per-serving nutrition.
+const VIDEO_HOSTNAMES = [
+  "tiktok.com",
+  "www.tiktok.com",
+  "instagram.com",
+  "www.instagram.com",
+  "youtube.com",
+  "www.youtube.com",
+  "youtu.be",
+  "m.youtube.com",
+];
 
-Return ONLY valid JSON matching this schema (no markdown, no explanation):
+/** Check if a URL points to a video platform that can't be HTML-scraped */
+export function isVideoUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return VIDEO_HOSTNAMES.some(
+      (h) => hostname === h || hostname.endsWith(`.${h}`),
+    );
+  } catch {
+    return false;
+  }
+}
 
-{
+const RECIPE_SCHEMA = `{
   "title": string,
   "description": string | null,
   "cuisine": "american" | "italian" | "mexican" | "asian" | "mediterranean" | "indian" | "middle-eastern" | "french" | "other",
@@ -40,9 +59,9 @@ Return ONLY valid JSON matching this schema (no markdown, no explanation):
   "imageUrl": string | null,
   "isSlowCooker": boolean,
   "sourceName": string | null
-}
+}`;
 
-Nutrition estimation guidelines:
+const NUTRITION_GUIDELINES = `Nutrition estimation guidelines:
 - Estimate per serving based on the ingredients and serving count
 - Be realistic — use typical portion sizes
 - cholesterol in mg, saturatedFat in g, sodium in mg, fiber in g
@@ -51,6 +70,14 @@ Nutrition estimation guidelines:
 
 For isSlowCooker: true if the recipe uses a slow cooker, crock pot, or instant pot on slow cook mode.
 For sourceName: infer from the URL/page (e.g., "NYT Cooking", "Stealth Health", "Budget Bytes").`;
+
+const HTML_SYSTEM_PROMPT = `You are a recipe extraction and nutrition estimation assistant. Given the HTML content of a recipe page, extract the recipe data and estimate per-serving nutrition.
+
+Return ONLY valid JSON matching this schema (no markdown, no explanation):
+
+${RECIPE_SCHEMA}
+
+${NUTRITION_GUIDELINES}`;
 
 /** Fetch HTML from a recipe URL */
 async function fetchRecipeHtml(url: string): Promise<string> {
@@ -135,20 +162,26 @@ function validateParsedRecipe(data: unknown): ParsedRecipe {
   };
 }
 
-/** Parse a recipe from a URL using Claude API */
-export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe> {
-  const html = await fetchRecipeHtml(url);
+const TEXT_SYSTEM_PROMPT = `You are a recipe extraction and nutrition estimation assistant. Given freeform recipe text (from video captions, notes, messages, etc.), extract the recipe data and estimate per-serving nutrition.
 
+The text may be informal, incomplete, or use shorthand. Do your best to infer missing details (servings, timing, etc.) from context. If ingredients lack quantities, estimate reasonable amounts for a typical recipe.
+
+Return ONLY valid JSON matching this schema (no markdown, no explanation):
+
+${RECIPE_SCHEMA}
+
+${NUTRITION_GUIDELINES}`;
+
+/** Send content to Claude and parse the recipe JSON response */
+async function callClaudeForRecipe(
+  systemPrompt: string,
+  userMessage: string,
+): Promise<ParsedRecipe> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Extract the recipe from this page (URL: ${url}):\n\n${html}`,
-      },
-    ],
+    system: systemPrompt,
+    messages: [{ role: "user", content: userMessage }],
   });
 
   const content = message.content[0];
@@ -170,4 +203,25 @@ export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe> {
   }
 
   return validateParsedRecipe(parsed);
+}
+
+/** Parse a recipe from a URL using Claude API */
+export async function parseRecipeFromUrl(url: string): Promise<ParsedRecipe> {
+  const html = await fetchRecipeHtml(url);
+  return callClaudeForRecipe(
+    HTML_SYSTEM_PROMPT,
+    `Extract the recipe from this page (URL: ${url}):\n\n${html}`,
+  );
+}
+
+/** Parse a recipe from freeform text (video captions, notes, etc.) */
+export async function parseRecipeFromText(
+  text: string,
+  sourceUrl?: string,
+): Promise<ParsedRecipe> {
+  const urlContext = sourceUrl ? `\n\nSource URL: ${sourceUrl}` : "";
+  return callClaudeForRecipe(
+    TEXT_SYSTEM_PROMPT,
+    `Extract the recipe from the following text:${urlContext}\n\n${text}`,
+  );
 }

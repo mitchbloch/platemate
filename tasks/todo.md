@@ -16,6 +16,15 @@
 - [x] Consolidated prep/cook time into single total_time_minutes
 - [x] Verified: imported shrimp tacos, cholesterol flagged red, edited time, saved
 
+## Phase 2.5: Recipe Import Improvements
+- [x] Video URL detection (TikTok, Instagram, YouTube) with early 422 return
+- [x] Manual text input mode (paste recipe text from video captions, notes, etc.)
+- [x] Dual input toggle in RecipeForm (Paste URL / Paste Text)
+- [x] Auto-switch to text mode when video URL detected, with amber info banner
+- [x] Separate /api/recipes/parse-text endpoint
+- [x] Refactored shared Claude call logic (DRY: callClaudeForRecipe helper)
+- [x] Build + lint passing
+
 ## Phase 3: Meal Planning
 - [ ] Recommendation engine (variety, recency, season, nutrition balance, effort mix)
 - [ ] Weekly planner UI (suggestions → pick 3-4 → assign to days)

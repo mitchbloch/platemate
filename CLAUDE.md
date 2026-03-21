@@ -16,6 +16,8 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - **Client components** only when needed (`"use client"` for forms, auth state)
 - **JSONB ingredients** in recipes table (no normalization until Phase 4)
 - **Single Claude API call** per recipe import (extraction + nutrition in one pass)
+- **Dual input mode**: URL scraping for recipe sites, freeform text for video/non-scrapable sources
+- **Video URL detection**: TikTok, Instagram, YouTube auto-detected and redirected to text input
 
 ## Conventions
 - `@/*` path alias for `src/`
@@ -25,12 +27,12 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 
 ## Key Files
 - `src/lib/types.ts` — All domain types, nutrition thresholds
-- `src/lib/recipeParser.ts` — URL → HTML → Claude → ParsedRecipe
+- `src/lib/recipeParser.ts` — URL → HTML → Claude → ParsedRecipe (also text → Claude for video recipes)
 - `src/lib/nutrition.ts` — Health flags, weekly summaries
 - `src/lib/recipes.ts` — Supabase CRUD (snake_case ↔ camelCase conversion)
 - `src/lib/supabase/` — Client (browser), server, middleware, auth helpers
 - `src/components/RecipeDetail.tsx` — Recipe view/edit/delete (client component)
-- `src/components/RecipeForm.tsx` — Recipe import flow (URL → parse → review → save)
+- `src/components/RecipeForm.tsx` — Recipe import flow (URL or text → parse → review → save)
 - `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields)
 
 ## Auth
