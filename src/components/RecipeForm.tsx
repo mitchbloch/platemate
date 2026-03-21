@@ -116,32 +116,6 @@ export default function RecipeForm() {
     return (
       <div>
         <form onSubmit={handleParse} className="space-y-4">
-          {/* Mode toggle */}
-          <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-            <button
-              type="button"
-              onClick={() => setInputMode("url")}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                inputMode === "url"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Paste URL
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputMode("text")}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                inputMode === "text"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Paste Text
-            </button>
-          </div>
-
           {inputMode === "url" ? (
             <div>
               <label
@@ -155,30 +129,23 @@ export default function RecipeForm() {
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://cooking.nytimes.com/recipes/..."
+                placeholder="Paste any recipe link — websites, TikTok, YouTube..."
                 required
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
+              <p className="mt-1.5 text-xs text-gray-400">
+                Works with recipe sites, TikTok, and YouTube.{" "}
+                <button
+                  type="button"
+                  onClick={() => setInputMode("text")}
+                  className="text-primary hover:text-primary-dark"
+                >
+                  Or paste recipe text instead
+                </button>
+              </p>
             </div>
           ) : (
             <>
-              {/* Optional source URL for text mode */}
-              <div>
-                <label
-                  htmlFor="source-url"
-                  className="mb-1 block text-sm font-medium text-gray-700"
-                >
-                  Source URL <span className="text-gray-400">(optional)</span>
-                </label>
-                <input
-                  id="source-url"
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://www.tiktok.com/..."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
               <div>
                 <label
                   htmlFor="recipe-text"
@@ -193,6 +160,33 @@ export default function RecipeForm() {
                   placeholder="Paste the recipe here — ingredients, instructions, whatever you have. It doesn't need to be perfectly formatted."
                   required
                   rows={8}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <p className="mt-1.5 text-xs text-gray-400">
+                  For recipes from screenshots, texts, or videos that couldn&apos;t be auto-imported.{" "}
+                  <button
+                    type="button"
+                    onClick={() => setInputMode("url")}
+                    className="text-primary hover:text-primary-dark"
+                  >
+                    Or paste a URL instead
+                  </button>
+                </p>
+              </div>
+              {/* Optional source URL for text mode */}
+              <div>
+                <label
+                  htmlFor="source-url"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Source URL <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  id="source-url"
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://www.instagram.com/..."
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
