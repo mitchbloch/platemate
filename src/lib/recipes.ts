@@ -13,8 +13,7 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
     mealType: row.meal_type as Recipe["mealType"],
     difficulty: row.difficulty as Recipe["difficulty"],
     servings: row.servings as number,
-    prepTimeMinutes: row.prep_time_minutes as number | null,
-    cookTimeMinutes: row.cook_time_minutes as number | null,
+    totalTimeMinutes: row.total_time_minutes as number | null,
     ingredients: row.ingredients as Recipe["ingredients"],
     instructions: row.instructions as string[],
     nutrition: row.nutrition as Recipe["nutrition"],
@@ -37,8 +36,7 @@ function recipeToRow(recipe: ParsedRecipe & { sourceUrl?: string | null }) {
     meal_type: recipe.mealType,
     difficulty: recipe.difficulty,
     servings: recipe.servings,
-    prep_time_minutes: recipe.prepTimeMinutes,
-    cook_time_minutes: recipe.cookTimeMinutes,
+    total_time_minutes: recipe.totalTimeMinutes,
     ingredients: recipe.ingredients,
     instructions: recipe.instructions,
     nutrition: recipe.nutrition,
@@ -100,8 +98,7 @@ export async function updateRecipe(
   if (updates.mealType !== undefined) row.meal_type = updates.mealType;
   if (updates.difficulty !== undefined) row.difficulty = updates.difficulty;
   if (updates.servings !== undefined) row.servings = updates.servings;
-  if (updates.prepTimeMinutes !== undefined) row.prep_time_minutes = updates.prepTimeMinutes;
-  if (updates.cookTimeMinutes !== undefined) row.cook_time_minutes = updates.cookTimeMinutes;
+  if (updates.totalTimeMinutes !== undefined) row.total_time_minutes = updates.totalTimeMinutes;
   if (updates.ingredients !== undefined) row.ingredients = updates.ingredients;
   if (updates.instructions !== undefined) row.instructions = updates.instructions;
   if (updates.nutrition !== undefined) row.nutrition = updates.nutrition;

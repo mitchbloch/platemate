@@ -58,8 +58,7 @@ export interface Recipe {
   mealType: MealType;
   difficulty: DifficultyLevel;
   servings: number;
-  prepTimeMinutes: number | null;
-  cookTimeMinutes: number | null;
+  totalTimeMinutes: number | null;
   ingredients: Ingredient[];
   instructions: string[];
   nutrition: NutritionInfo | null;
@@ -125,8 +124,7 @@ export interface ParsedRecipe {
   mealType: MealType;
   difficulty: DifficultyLevel;
   servings: number;
-  prepTimeMinutes: number | null;
-  cookTimeMinutes: number | null;
+  totalTimeMinutes: number | null;
   ingredients: Ingredient[];
   instructions: string[];
   nutrition: NutritionInfo;

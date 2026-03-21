@@ -4,8 +4,7 @@ import { CUISINE_LABELS } from "@/lib/types";
 import NutritionBadge from "./NutritionBadge";
 
 export default function RecipeCard({ recipe }: { recipe: Recipe }) {
-  const totalTime =
-    (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
+  const totalTime = recipe.totalTimeMinutes ?? 0;
 
   return (
     <Link

@@ -14,8 +14,7 @@ Return ONLY valid JSON matching this schema (no markdown, no explanation):
   "mealType": "dinner" | "slow-cooker-lunch",
   "difficulty": "easy" | "medium" | "hard",
   "servings": number,
-  "prepTimeMinutes": number | null,
-  "cookTimeMinutes": number | null,
+  "totalTimeMinutes": number | null,
   "ingredients": [
     {
       "name": string,
@@ -109,8 +108,7 @@ function validateParsedRecipe(data: unknown): ParsedRecipe {
     mealType: (d.mealType as MealType) ?? "dinner",
     difficulty: (d.difficulty as DifficultyLevel) ?? "medium",
     servings: (d.servings as number) ?? 4,
-    prepTimeMinutes: (d.prepTimeMinutes as number) ?? null,
-    cookTimeMinutes: (d.cookTimeMinutes as number) ?? null,
+    totalTimeMinutes: (d.totalTimeMinutes as number) ?? null,
     ingredients: (d.ingredients as Ingredient[]).map((ing) => ({
       name: ing.name ?? "",
       quantity: ing.quantity ?? null,
