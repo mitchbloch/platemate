@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseRecipeFromUrl, isVideoUrl } from "@/lib/recipeParser";
+import { parseRecipeFromUrl, parseRecipeFromText, isVideoUrl, extractVideoContent } from "@/lib/recipeParser";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,11 +22,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Video platforms can't be HTML-scraped — tell frontend to switch to text mode
+    // Video platforms: try auto-extraction first, fall back to manual text paste
     if (isVideoUrl(url)) {
+      try {
+        const extracted = await extractVideoContent(url);
+        if (extracted) {
+          const parsed = await parseRecipeFromText(extracted.text, url);
+          return NextResponse.json(parsed);
+        }
+      } catch (err) {
+        console.error("Video content extraction failed:", err);
+      }
+      // Extraction failed or insufficient content — ask user to paste text
       return NextResponse.json(
         {
-          error: "This looks like a video link. Video recipes can't be auto-imported — paste the recipe text instead.",
+          error: "Couldn't auto-extract the recipe from this video. Paste the recipe text instead.",
           isVideoUrl: true,
         },
         { status: 422 },

@@ -224,11 +224,16 @@ export default function RecipeForm() {
 
   // ── Parsing step ──
   if (formState.step === "parsing") {
+    const isVideo = /tiktok\.com|instagram\.com|youtube\.com|youtu\.be/.test(url);
     return (
       <div className="py-12 text-center">
         <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-primary" />
         <p className="text-gray-600">
-          Fetching recipe and analyzing nutrition...
+          {inputMode === "text"
+            ? "Analyzing recipe text..."
+            : isVideo
+              ? "Extracting recipe from video..."
+              : "Fetching recipe and analyzing nutrition..."}
         </p>
         <p className="mt-1 text-sm text-gray-400">This may take a few seconds</p>
       </div>

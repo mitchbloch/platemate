@@ -23,6 +23,11 @@
 - [x] Auto-switch to text mode when video URL detected, with amber info banner
 - [x] Separate /api/recipes/parse-text endpoint
 - [x] Refactored shared Claude call logic (DRY: callClaudeForRecipe helper)
+- [x] TikTok auto-extraction via oEmbed API (full caption with recipe)
+- [x] YouTube auto-extraction via oEmbed title + HTML og:description
+- [x] Instagram cross-post search via Brave Search API (finds TikTok/YouTube reposts)
+- [x] Graceful degradation: auto-extract → manual text paste fallback
+- [x] Video-aware spinner messages in RecipeForm
 - [x] Build + lint passing
 
 ## Phase 3: Meal Planning

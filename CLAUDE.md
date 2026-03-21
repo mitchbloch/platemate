@@ -17,7 +17,8 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - **JSONB ingredients** in recipes table (no normalization until Phase 4)
 - **Single Claude API call** per recipe import (extraction + nutrition in one pass)
 - **Dual input mode**: URL scraping for recipe sites, freeform text for video/non-scrapable sources
-- **Video URL detection**: TikTok, Instagram, YouTube auto-detected and redirected to text input
+- **Video auto-extraction**: TikTok (oEmbed), YouTube (oEmbed + meta tags), Instagram (Brave Search cross-post lookup)
+- **Graceful degradation**: auto-extract → manual text paste fallback for all video platforms
 
 ## Conventions
 - `@/*` path alias for `src/`
@@ -64,4 +65,5 @@ npm run lint   # ESLint
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 ANTHROPIC_API_KEY
+BRAVE_SEARCH_API_KEY          # Optional — enables Instagram cross-post search
 ```
