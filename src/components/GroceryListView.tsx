@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { GroceryList, GroceryListItem, IngredientCategory, StoreName } from "@/lib/types";
+import type { GroceryList, GroceryListItem, IngredientCategory, PantryItem, StoreName } from "@/lib/types";
 import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER } from "@/lib/categoryMap";
 import { STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
@@ -13,6 +13,7 @@ interface GroceryListViewProps {
   initialItems: GroceryListItem[];
   initialWeekStart: string;
   hasMeals: boolean;
+  initialPantryItems: PantryItem[];
 }
 
 /** Format a week start date as "Week of Mar 23" */
@@ -55,6 +56,7 @@ export default function GroceryListView({
   initialItems,
   initialWeekStart,
   hasMeals: initialHasMeals,
+  initialPantryItems,
 }: GroceryListViewProps) {
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [list, setList] = useState<GroceryList | null>(initialList);
@@ -62,9 +64,12 @@ export default function GroceryListView({
   const [hasMeals, setHasMeals] = useState(initialHasMeals);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [addingItem, setAddingItem] = useState<string | null>(null); // category being added to
+  const [addingItem, setAddingItem] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [copied, setCopied] = useState(false);
+  const [mode, setMode] = useState<"edit" | "shop">("edit");
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>(initialPantryItems);
+  const [excludedExpanded, setExcludedExpanded] = useState(false);
 
   const supabaseRef = useRef(createClient());
 
@@ -82,7 +87,6 @@ export default function GroceryListView({
       },
       onInsert: (newItem) => {
         setItems((prev) => {
-          // Avoid duplicates (from optimistic updates)
           if (prev.some((i) => i.id === newItem.id)) return prev;
           return [...prev, newItem];
         });
@@ -100,9 +104,13 @@ export default function GroceryListView({
   const currentWeekStart = getCurrentWeekStart();
   const isCurrentWeek = weekStart === currentWeekStart;
 
-  // Group items by display category (TJ's items)
-  const tjItems = items.filter((i) => i.store === "trader-joes");
-  const nonTjItems = items.filter((i) => i.store !== "trader-joes");
+  // Split items into active vs dismissed
+  const activeItems = items.filter((i) => !i.dismissed);
+  const dismissedItems = items.filter((i) => i.dismissed);
+
+  // Group active items by display category (TJ's items)
+  const tjItems = activeItems.filter((i) => i.store === "trader-joes");
+  const nonTjItems = activeItems.filter((i) => i.store !== "trader-joes");
 
   const groupedByCategory = GROCERY_CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -110,26 +118,26 @@ export default function GroceryListView({
     items: tjItems.filter((i) => toDisplayCategory(i.category) === cat),
   })).filter((g) => g.items.length > 0);
 
-  // Group non-TJ's items by store
   const groupedByStore = NON_TJ_STORES.map((store) => ({
     store,
     label: STORE_LABELS[store],
     items: nonTjItems.filter((i) => i.store === store),
   })).filter((g) => g.items.length > 0);
 
+  // Pantry name set for checking if a dismissed item is a pantry staple
+  const pantryNameSet = new Set(pantryItems.map((p) => p.name.toLowerCase().trim()));
+
   // ── Data Fetching ──
 
   const fetchWeekData = useCallback(async (week: string) => {
     setLoading(true);
     try {
-      // Fetch grocery list
       const groceryRes = await fetch(`/api/grocery-lists?week=${week}`);
       if (!groceryRes.ok) throw new Error("Failed to fetch");
       const groceryData = await groceryRes.json();
       setList(groceryData.list ?? null);
       setItems(groceryData.items ?? []);
 
-      // Check if meal plan has meals
       const mealRes = await fetch(`/api/meal-plans?week=${week}`);
       if (mealRes.ok) {
         const mealData = await mealRes.json();
@@ -149,11 +157,13 @@ export default function GroceryListView({
   async function navigateWeek(direction: number) {
     const newWeek = shiftWeek(weekStart, direction);
     setWeekStart(newWeek);
+    setMode("edit");
     await fetchWeekData(newWeek);
   }
 
   async function goToCurrentWeek() {
     setWeekStart(currentWeekStart);
+    setMode("edit");
     await fetchWeekData(currentWeekStart);
   }
 
@@ -175,6 +185,7 @@ export default function GroceryListView({
       const data = await res.json();
       setList(data.list);
       setItems(data.items);
+      setMode("edit");
     } catch {
       alert("Failed to generate grocery list");
     } finally {
@@ -182,12 +193,10 @@ export default function GroceryListView({
     }
   }
 
-  // ── Check/Uncheck ──
+  // ── Check/Uncheck (Shop mode) ──
 
   async function toggleCheck(item: GroceryListItem) {
     const newChecked = !item.checked;
-
-    // Optimistic update
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, checked: newChecked } : i)),
     );
@@ -200,16 +209,73 @@ export default function GroceryListView({
       });
       if (!res.ok) throw new Error("Failed to update");
     } catch {
-      // Revert on failure
       setItems((prev) =>
-        prev.map((i) =>
-          i.id === item.id ? { ...i, checked: !newChecked } : i,
-        ),
+        prev.map((i) => (i.id === item.id ? { ...i, checked: !newChecked } : i)),
       );
     }
   }
 
-  // ── Add Item ──
+  // ── Dismiss/Restore (Edit mode) ──
+
+  async function dismissItem(item: GroceryListItem) {
+    setItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, dismissed: true } : i)),
+    );
+
+    try {
+      const res = await fetch(`/api/grocery-lists/${list!.id}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id, dismissed: true }),
+      });
+      if (!res.ok) throw new Error("Failed to dismiss");
+    } catch {
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, dismissed: false } : i)),
+      );
+    }
+  }
+
+  async function restoreItem(item: GroceryListItem) {
+    setItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, dismissed: false } : i)),
+    );
+
+    try {
+      const res = await fetch(`/api/grocery-lists/${list!.id}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id, dismissed: false }),
+      });
+      if (!res.ok) throw new Error("Failed to restore");
+    } catch {
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, dismissed: true } : i)),
+      );
+    }
+  }
+
+  // ── Mark as Pantry Staple ──
+
+  async function markAsPantryStaple(item: GroceryListItem) {
+    await dismissItem(item);
+
+    try {
+      const res = await fetch("/api/pantry-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: item.name }),
+      });
+      if (res.ok) {
+        const newPantry = await res.json();
+        setPantryItems((prev) => [...prev, newPantry]);
+      }
+    } catch {
+      // Item is already dismissed — pantry add is best-effort
+    }
+  }
+
+  // ── Add Item (Edit mode) ──
 
   async function addItem(category: IngredientCategory, store: StoreName = "trader-joes") {
     if (!newItemName.trim() || !list) return;
@@ -232,10 +298,9 @@ export default function GroceryListView({
     }
   }
 
-  // ── Remove Item ──
+  // ── Remove Item (Edit mode) ──
 
   async function removeItem(item: GroceryListItem) {
-    // Optimistic removal
     setItems((prev) => prev.filter((i) => i.id !== item.id));
 
     try {
@@ -246,17 +311,14 @@ export default function GroceryListView({
       });
       if (!res.ok) throw new Error("Failed to delete");
     } catch {
-      // Revert
       setItems((prev) => [...prev, item]);
     }
   }
 
-  // ── Change Store ──
+  // ── Change Store (Edit mode) ──
 
   async function changeStore(item: GroceryListItem, newStore: StoreName) {
     const oldStore = item.store;
-
-    // Optimistic update
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, store: newStore } : i)),
     );
@@ -269,14 +331,13 @@ export default function GroceryListView({
       });
       if (!res.ok) throw new Error("Failed to update");
     } catch {
-      // Revert
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, store: oldStore } : i)),
       );
     }
   }
 
-  // ── Copy to Clipboard ──
+  // ── Copy to Clipboard (Shop mode) ──
 
   async function copyToClipboard() {
     const text = formatForClipboard(items);
@@ -291,8 +352,8 @@ export default function GroceryListView({
 
   // ── Render ──
 
-  const checkedCount = items.filter((i) => i.checked).length;
-  const totalCount = items.length;
+  const checkedCount = activeItems.filter((i) => i.checked).length;
+  const activeCount = activeItems.length;
 
   return (
     <div className="space-y-6">
@@ -366,22 +427,48 @@ export default function GroceryListView({
               {/* Summary + Actions */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-500">
-                  {checkedCount}/{totalCount} items checked
+                  {mode === "shop"
+                    ? `${checkedCount}/${activeCount} items checked`
+                    : `${activeCount} items`}
+                  {dismissedItems.length > 0 && (
+                    <span className="ml-1 text-gray-400">
+                      ({dismissedItems.length} excluded)
+                    </span>
+                  )}
                 </p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={copyToClipboard}
-                    className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
-                  >
-                    {copied ? "Copied!" : "Copy to Notes"}
-                  </button>
-                  <button
-                    onClick={generateList}
-                    disabled={generating}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {generating ? "..." : "Regenerate"}
-                  </button>
+                  {mode === "edit" ? (
+                    <>
+                      <button
+                        onClick={() => setMode("shop")}
+                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+                      >
+                        Ready to Shop
+                      </button>
+                      <button
+                        onClick={generateList}
+                        disabled={generating}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {generating ? "..." : "Regenerate"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={copyToClipboard}
+                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+                      >
+                        {copied ? "Copied!" : "Copy to Notes"}
+                      </button>
+                      <button
+                        onClick={() => setMode("edit")}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Back to Edit
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -396,56 +483,62 @@ export default function GroceryListView({
                       <GroceryItemRow
                         key={item.id}
                         item={item}
+                        mode={mode}
                         onToggle={() => toggleCheck(item)}
+                        onDismiss={() => dismissItem(item)}
+                        onMarkPantry={() => markAsPantryStaple(item)}
                         onRemove={() => removeItem(item)}
                         onChangeStore={(store) => changeStore(item, store)}
                       />
                     ))}
                   </div>
-                  {/* Inline add */}
-                  {addingItem === group.category ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        // Use the first matching IngredientCategory for this display category
-                        const dbCat = group.items[0]?.category ?? "other";
-                        addItem(dbCat);
-                      }}
-                      className="mt-1 flex gap-2"
-                    >
-                      <input
-                        autoFocus
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                        placeholder="Add item..."
-                        className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                        onBlur={() => {
-                          if (!newItemName.trim()) setAddingItem(null);
-                        }}
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
-                      >
-                        Add
-                      </button>
-                    </form>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setAddingItem(group.category);
-                        setNewItemName("");
-                      }}
-                      className="mt-1 w-full rounded-lg border border-dashed border-gray-200 py-1.5 text-xs text-gray-400 hover:border-primary hover:text-primary"
-                    >
-                      + Add item
-                    </button>
+                  {/* Inline add (edit mode only) */}
+                  {mode === "edit" && (
+                    <>
+                      {addingItem === group.category ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const dbCat = group.items[0]?.category ?? "other";
+                            addItem(dbCat);
+                          }}
+                          className="mt-1 flex gap-2"
+                        >
+                          <input
+                            autoFocus
+                            value={newItemName}
+                            onChange={(e) => setNewItemName(e.target.value)}
+                            placeholder="Add item..."
+                            className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                            onBlur={() => {
+                              if (!newItemName.trim()) setAddingItem(null);
+                            }}
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+                          >
+                            Add
+                          </button>
+                        </form>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setAddingItem(group.category);
+                            setNewItemName("");
+                          }}
+                          className="mt-1 w-full rounded-lg border border-dashed border-gray-200 py-1.5 text-xs text-gray-400 hover:border-primary hover:text-primary"
+                        >
+                          + Add item
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
 
-              {/* Add new category section (for empty categories like Snacks) */}
-              {items.length > 0 && (
+              {/* Add new item (edit mode only) */}
+              {mode === "edit" && activeItems.length > 0 && (
                 <div>
                   {addingItem === "__new__" ? (
                     <form
@@ -497,7 +590,10 @@ export default function GroceryListView({
                       <GroceryItemRow
                         key={item.id}
                         item={item}
+                        mode={mode}
                         onToggle={() => toggleCheck(item)}
+                        onDismiss={() => dismissItem(item)}
+                        onMarkPantry={() => markAsPantryStaple(item)}
                         onRemove={() => removeItem(item)}
                         onChangeStore={(store) => changeStore(item, store)}
                       />
@@ -505,6 +601,51 @@ export default function GroceryListView({
                   </div>
                 </div>
               ))}
+
+              {/* Excluded/dismissed items section (edit mode only) */}
+              {mode === "edit" && dismissedItems.length > 0 && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setExcludedExpanded(!excludedExpanded)}
+                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    <span className="text-xs">{excludedExpanded ? "\u25BE" : "\u25B8"}</span>
+                    Excluded ({dismissedItems.length})
+                  </button>
+                  {excludedExpanded && (
+                    <div className="mt-2 space-y-1 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                      {dismissedItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between py-1.5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-400">
+                              {item.name}
+                            </span>
+                            {formatQuantity(item.quantity, item.unit) && (
+                              <span className="text-xs text-gray-300">
+                                {formatQuantity(item.quantity, item.unit)}
+                              </span>
+                            )}
+                            {pantryNameSet.has(item.name.toLowerCase().trim()) && (
+                              <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500">
+                                pantry
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => restoreItem(item)}
+                            className="text-xs font-medium text-primary hover:text-primary-dark"
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </>
@@ -517,42 +658,67 @@ export default function GroceryListView({
 
 function GroceryItemRow({
   item,
+  mode,
   onToggle,
+  onDismiss,
+  onMarkPantry,
   onRemove,
   onChangeStore,
 }: {
   item: GroceryListItem;
+  mode: "edit" | "shop";
   onToggle: () => void;
+  onDismiss: () => void;
+  onMarkPantry: () => void;
   onRemove: () => void;
   onChangeStore: (store: StoreName) => void;
 }) {
   const [showStoreMenu, setShowStoreMenu] = useState(false);
+  const [showActions, setShowActions] = useState(false);
   const qty = formatQuantity(item.quantity, item.unit);
 
-  return (
-    <div
-      className={`group flex items-center gap-3 rounded-lg px-3 py-2 ${
-        item.checked ? "opacity-50" : "hover:bg-gray-50"
-      }`}
-    >
-      <input
-        type="checkbox"
-        checked={item.checked}
-        onChange={onToggle}
-        className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary"
-      />
-      <span
-        className={`flex-1 text-sm ${
-          item.checked ? "text-gray-400 line-through" : "text-gray-900"
+  if (mode === "shop") {
+    // Shop mode: checkbox + name + qty, minimal controls
+    return (
+      <div
+        className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+          item.checked ? "opacity-50" : "hover:bg-gray-50"
         }`}
       >
-        {item.name}
-      </span>
+        <input
+          type="checkbox"
+          checked={item.checked}
+          onChange={onToggle}
+          className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary"
+        />
+        <span
+          className={`flex-1 text-sm ${
+            item.checked ? "text-gray-400 line-through" : "text-gray-900"
+          }`}
+        >
+          {item.name}
+        </span>
+        {qty && (
+          <span className="shrink-0 text-xs text-gray-400">{qty}</span>
+        )}
+        {item.store !== "trader-joes" && (
+          <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+            {STORE_LABELS[item.store]}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Edit mode: dismiss, store change, remove, mark pantry
+  return (
+    <div className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-50">
+      <span className="flex-1 text-sm text-gray-900">{item.name}</span>
       {qty && (
         <span className="shrink-0 text-xs text-gray-400">{qty}</span>
       )}
 
-      {/* Store tag (only for non-TJ's or when changing) */}
+      {/* Store tag */}
       <div className="relative">
         <button
           onClick={() => setShowStoreMenu(!showStoreMenu)}
@@ -591,13 +757,47 @@ function GroceryItemRow({
         )}
       </div>
 
-      <button
-        onClick={onRemove}
-        className="shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-        title="Remove"
-      >
-        &times;
-      </button>
+      {/* Actions menu */}
+      <div className="relative">
+        <button
+          onClick={() => setShowActions(!showActions)}
+          className="shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-gray-500 group-hover:opacity-100"
+          title="Actions"
+        >
+          &middot;&middot;&middot;
+        </button>
+        {showActions && (
+          <div className="absolute right-0 top-full z-10 mt-1 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+            <button
+              onClick={() => {
+                onDismiss();
+                setShowActions(false);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+            >
+              Have this already
+            </button>
+            <button
+              onClick={() => {
+                onMarkPantry();
+                setShowActions(false);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+            >
+              Always have (pantry staple)
+            </button>
+            <button
+              onClick={() => {
+                onRemove();
+                setShowActions(false);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-gray-50"
+            >
+              Remove from list
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

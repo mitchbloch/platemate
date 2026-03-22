@@ -4,16 +4,18 @@ import PinnedItemsManager from "@/components/PinnedItemsManager";
 import { getWeekStart, getMealPlanWithRecipes } from "@/lib/mealPlans";
 import { getGroceryListByMealPlan } from "@/lib/groceryList";
 import { getPinnedItems, getFrequentItems } from "@/lib/pinnedItems";
+import { getPantryItems } from "@/lib/pantryItems";
 
 export const dynamic = "force-dynamic";
 
 export default async function GroceryPage() {
   const weekStart = getWeekStart();
 
-  const [{ plan, meals }, pinnedItems, frequentItems] = await Promise.all([
+  const [{ plan, meals }, pinnedItems, frequentItems, pantryItems] = await Promise.all([
     getMealPlanWithRecipes(weekStart),
     getPinnedItems(),
     getFrequentItems(),
+    getPantryItems(),
   ]);
 
   let groceryData: { list: null; items: [] } | Awaited<ReturnType<typeof getGroceryListByMealPlan>> = {
@@ -35,6 +37,7 @@ export default async function GroceryPage() {
           initialItems={groceryData.items}
           initialWeekStart={weekStart}
           hasMeals={meals.length > 0}
+          initialPantryItems={pantryItems}
         />
         <div className="mt-8">
           <PinnedItemsManager

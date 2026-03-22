@@ -32,6 +32,7 @@ function rowToGroceryListItem(row: Record<string, unknown>): GroceryListItem {
     category: row.category as IngredientCategory,
     store: row.store as StoreName,
     checked: row.checked as boolean,
+    dismissed: row.dismissed as boolean,
     recipeIds: row.recipe_ids as string[],
   };
 }
@@ -93,6 +94,7 @@ export function generateGroceryItems(
 export async function saveGroceryList(
   mealPlanId: string,
   items: MergedIngredient[],
+  pantryNames: Set<string> = new Set(),
 ): Promise<GroceryListWithItems> {
   const supabase = await createClient();
 
@@ -112,7 +114,7 @@ export async function saveGroceryList(
   if (listError) throw listError;
   const list = rowToGroceryList(listData);
 
-  // Insert items
+  // Insert items (auto-dismiss pantry staples)
   const rows = items.map((item) => ({
     grocery_list_id: list.id,
     name: item.displayName,
@@ -121,6 +123,7 @@ export async function saveGroceryList(
     category: categoryToDb(item.category),
     store: item.store,
     checked: false,
+    dismissed: pantryNames.has(item.name.toLowerCase().trim()),
     recipe_ids: item.recipeIds,
   }));
 
@@ -178,6 +181,7 @@ export async function updateGroceryListItem(
     category: IngredientCategory;
     store: StoreName;
     checked: boolean;
+    dismissed: boolean;
   }>,
 ): Promise<void> {
   const supabase = await createClient();
@@ -189,6 +193,7 @@ export async function updateGroceryListItem(
   if (updates.category !== undefined) row.category = updates.category;
   if (updates.store !== undefined) row.store = updates.store;
   if (updates.checked !== undefined) row.checked = updates.checked;
+  if (updates.dismissed !== undefined) row.dismissed = updates.dismissed;
 
   const { error } = await supabase
     .from("grocery_list_items")

@@ -13,6 +13,7 @@ function payloadToGroceryListItem(
     category: payload.category as IngredientCategory,
     store: payload.store as StoreName,
     checked: payload.checked as boolean,
+    dismissed: payload.dismissed as boolean,
     recipeIds: payload.recipe_ids as string[],
   };
 }

@@ -54,6 +54,7 @@ export async function PATCH(request: NextRequest) {
       category: body.category,
       store: body.store,
       checked: body.checked,
+      dismissed: body.dismissed,
     });
 
     return NextResponse.json({ success: true });

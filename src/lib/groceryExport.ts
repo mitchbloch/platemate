@@ -33,7 +33,7 @@ function formatQty(quantity: number | null, unit: string | null): string {
  */
 export function formatForClipboard(items: GroceryListItem[]): string {
   // Only include unchecked items
-  const unchecked = items.filter((i) => !i.checked);
+  const unchecked = items.filter((i) => !i.checked && !i.dismissed);
   if (unchecked.length === 0) return "All items checked off!";
 
   const tjItems = unchecked.filter((i) => i.store === "trader-joes");

@@ -102,6 +102,7 @@ export interface GroceryListItem {
   category: IngredientCategory;
   store: StoreName;
   checked: boolean;
+  dismissed: boolean;
   recipeIds: string[]; // which recipes need this item
 }
 
@@ -126,6 +127,12 @@ export interface PinnedGroceryItem {
   store: StoreName;
   quantity: number | null;
   unit: string | null;
+  createdAt: string;
+}
+
+export interface PantryItem {
+  id: string;
+  name: string;
   createdAt: string;
 }
 

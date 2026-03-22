@@ -6,6 +6,7 @@ import {
   saveGroceryList,
 } from "@/lib/groceryList";
 import { getPinnedItems } from "@/lib/pinnedItems";
+import { getPantryItems } from "@/lib/pantryItems";
 import type { MergedIngredient } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -83,7 +84,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const result = await saveGroceryList(plan.id, mergedItems);
+    // Build pantry names set for auto-dismissal
+    const pantryItems = await getPantryItems();
+    const pantryNames = new Set(pantryItems.map((p) => p.name.toLowerCase().trim()));
+
+    const result = await saveGroceryList(plan.id, mergedItems, pantryNames);
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
