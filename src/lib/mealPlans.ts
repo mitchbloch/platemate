@@ -49,12 +49,10 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
 
 // ── Helpers ──
 
-/** Returns the Monday of the given date's week as an ISO date string (YYYY-MM-DD) */
+/** Returns the Sunday of the given date's week as an ISO date string (YYYY-MM-DD) */
 export function getWeekStart(date: Date = new Date()): string {
   const d = new Date(date);
-  const day = d.getDay(); // 0=Sun, 1=Mon, ...
-  const diff = day === 0 ? -6 : 1 - day; // Monday offset
-  d.setDate(d.getDate() + diff);
+  d.setDate(d.getDate() - d.getDay()); // Sunday offset (getDay() 0=Sun)
   return d.toISOString().split("T")[0];
 }
 

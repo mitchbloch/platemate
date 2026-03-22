@@ -31,12 +31,10 @@ function shiftWeek(weekStart: string, weeks: number): string {
   return date.toISOString().split("T")[0];
 }
 
-/** Get Monday of current week */
+/** Get Sunday of current week */
 function getCurrentWeekStart(): string {
   const d = new Date();
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
+  d.setDate(d.getDate() - d.getDay());
   return d.toISOString().split("T")[0];
 }
 
