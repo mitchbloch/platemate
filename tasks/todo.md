@@ -31,10 +31,16 @@
 - [x] Build + lint passing
 
 ## Phase 3: Meal Planning
-- [ ] Recommendation engine (variety, recency, season, nutrition balance, effort mix)
-- [ ] Weekly planner UI (suggestions → pick 3-4 → assign to days)
-- [ ] Live weekly nutrition summary
-- [ ] Recipe history tracking
+- [x] Meal plan DAL (`src/lib/mealPlans.ts`) — CRUD, getWeekStart, getMealPlanWithRecipes (joined query)
+- [x] Recipe history DAL (`src/lib/recipeHistory.ts`) — logCookedRecipes (idempotent), getLastCookedDates
+- [x] Recommendation engine (`src/lib/recommendations.ts`) — recency scoring + cuisine variety penalty
+- [x] API routes: GET/POST meal-plans, POST add recipe (auto-creates plan), DELETE remove, POST complete (log history), GET recipe-history
+- [x] WeeklyNutritionSummary component — reuses `weeklyNutritionSummary()`, color-coded flags
+- [x] WeeklyPlanner component — week navigation, meal cards grouped by type, recipe picker with cuisine/type filters, suggestion banner, optimistic add/remove
+- [x] Plan page server component — parallel data fetch, passes to WeeklyPlanner
+- [x] Auto-log with override: incomplete week banner prompts to confirm which meals were cooked
+- [x] Build + lint passing
+- [ ] Live verification: test full flow on deployed app
 
 ## Phase 4: Grocery List
 - [ ] Ingredient deduplication + quantity merging

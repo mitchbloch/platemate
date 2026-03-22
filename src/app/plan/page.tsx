@@ -1,14 +1,31 @@
 import Nav from "@/components/Nav";
+import WeeklyPlanner from "@/components/WeeklyPlanner";
+import { listRecipes } from "@/lib/recipes";
+import { getMealPlanWithRecipes, getWeekStart } from "@/lib/mealPlans";
+import { getLastCookedDates } from "@/lib/recipeHistory";
 
-export default function PlanPage() {
+export const dynamic = "force-dynamic";
+
+export default async function PlanPage() {
+  const weekStart = getWeekStart();
+
+  const [recipes, { plan, meals }, lastCookedDates] = await Promise.all([
+    listRecipes(),
+    getMealPlanWithRecipes(weekStart),
+    getLastCookedDates(),
+  ]);
+
   return (
     <>
       <Nav />
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900">Meal Plan</h1>
-        <p className="text-gray-600">
-          Weekly meal planning coming in Phase 3.
-        </p>
+        <WeeklyPlanner
+          initialRecipes={recipes}
+          initialPlan={plan}
+          initialMeals={meals}
+          initialWeekStart={weekStart}
+          lastCookedDates={lastCookedDates}
+        />
       </main>
     </>
   );
