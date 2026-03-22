@@ -76,6 +76,21 @@
 - [x] GroceryListView realtime integration (UPDATE/INSERT/DELETE events)
 - [ ] **Manual step**: Enable Realtime on `grocery_list_items` table in Supabase dashboard
 
+### 4F: Edit/Shop Mode + Pantry Staples ✅
+- [x] Migration: `dismissed` column on `grocery_list_items`, `pantry_items` table (004_pantry_and_dismissed.sql)
+- [x] Types: `PantryItem` interface, `dismissed` field on `GroceryListItem`
+- [x] Pantry items DAL (`pantryItems.ts`): get, add (normalized upsert), remove
+- [x] API route: GET/POST/DELETE pantry-items
+- [x] DAL updates: `saveGroceryList` accepts `pantryNames` for auto-dismiss, `updateGroceryListItem` accepts `dismissed`
+- [x] Generation route: fetches pantry items, passes to saveGroceryList for auto-dismiss
+- [x] Export: filters out dismissed items
+- [x] Realtime: `dismissed` field syncs
+- [x] GroceryListView refactor: Edit mode (dismiss/restore/store change/remove) + Shop mode (checkboxes/copy)
+- [x] Collapsed "Excluded" section with restore + pantry staple labeling
+- [x] Grocery page: fetches pantry items, passes `initialPantryItems` to GroceryListView
+- [x] Build + lint + 43 tests passing
+- [ ] **Manual testing**: Verify Edit/Shop flow, dismiss/restore, pantry staples, regeneration auto-dismiss
+
 ## Phase 5: Polish
 - [ ] PWA (service worker, offline grocery list, home screen install)
 - [ ] Recipe ratings feeding into recommendations

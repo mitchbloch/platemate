@@ -42,12 +42,13 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/lib/groceryList.ts` — Grocery list DAL (generate, save, CRUD) (Phase 4)
 - `src/lib/groceryExport.ts` — Clipboard export formatter for Apple Notes (Phase 4)
 - `src/lib/pinnedItems.ts` — Pinned grocery staples DAL (Phase 4)
+- `src/lib/pantryItems.ts` — Pantry staples DAL: auto-exclude items you always have (Phase 4)
 - `src/lib/supabase/` — Client (browser), server, middleware, auth helpers
 - `src/components/RecipeDetail.tsx` — Recipe view/edit/delete (client component)
 - `src/components/RecipeForm.tsx` — Recipe import flow (URL or text → parse → review → save)
 - `src/components/WeeklyPlanner.tsx` — Meal planner (week nav, picker with filters, suggestions, optimistic add/remove)
 - `src/components/WeeklyNutritionSummary.tsx` — Aggregated weekly nutrition with color-coded flags
-- `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields, 003 pinned items)
+- `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields, 003 pinned items, 004 pantry + dismissed)
 
 ## Auth
 - Two users (created manually in Supabase dashboard)
@@ -58,7 +59,7 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 1. **Foundation** — Scaffolding, auth, navigation, DB schema ✅
 2. **Recipe Management** — Import, parse, CRUD, library UI ✅
 3. **Meal Planning** — Weekly planner, smart suggestions, nutrition summary, history tracking ✅
-4. **Grocery List** — Dedup, store tagging, real-time shared list
+4. **Grocery List** — Dedup, store tagging, real-time shared list, Edit/Shop modes, pantry staples ✅
 5. **Polish** — PWA, ratings, improved normalization
 
 ## Commands

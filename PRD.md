@@ -34,6 +34,8 @@ Two accounts (the couple). Shared data — no multi-tenancy needed.
 - **Export**: Clipboard copy formatted for Apple Notes (checkbox format, grouped by category then store). Evaluated Apple Shortcuts URL scheme and Web Share API — clipboard has best friction-to-setup ratio for once-a-week use.
 - **In-store UX**: Couple currently uses shared iCloud Note. Platemate generates the smart list, they paste into Notes. Transition path: PWA with real-time shared checking (Phase 5 for installability).
 - **Real-time**: Supabase realtime subscriptions for shared item checking between both users.
+- **Edit/Shop modes**: Two distinct modes — Edit (Sunday planning: dismiss items, change stores, add/remove) and Shop (in-store: checkboxes, copy to Notes). Solves checkbox ambiguity.
+- **Pantry staples**: Persistent auto-exclude list for items always at home (salt, olive oil). Auto-dismissed on generation, restorable per-week when you run out. Separate from per-week dismiss which resets on regeneration.
 
 ## Success Metrics
 - Can import a recipe from any major cooking site in <10 seconds
