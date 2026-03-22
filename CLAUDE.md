@@ -13,12 +13,15 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 ## Architecture
 - **Hybrid**: Pure TypeScript modules in `src/lib/`, thin App Router UI on top
 - **Server components** by default (read-heavy pages)
-- **Client components** only when needed (`"use client"` for forms, auth state)
+- **Client components** only when needed (`"use client"` for forms, auth state, interactive planner)
 - **JSONB ingredients** in recipes table (no normalization until Phase 4)
 - **Single Claude API call** per recipe import (extraction + nutrition in one pass)
 - **Dual input mode**: URL scraping for recipe sites, freeform text for video/non-scrapable sources
 - **Video auto-extraction**: TikTok (oEmbed), YouTube (oEmbed + meta tags), Instagram (Brave Search cross-post lookup)
 - **Graceful degradation**: auto-extract → manual text paste fallback for all video platforms
+- **Unordered meal sets**: weekly planner uses sets (not day-assigned grids) — matches actual workflow
+- **Weeks start Sunday**: grocery shopping + first cook is Sunday
+- **Optimistic UI**: meal add/remove updates state immediately, reverts on API failure
 
 ## Conventions
 - `@/*` path alias for `src/`
@@ -31,9 +34,14 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/lib/recipeParser.ts` — URL → HTML → Claude → ParsedRecipe (also text → Claude for video recipes)
 - `src/lib/nutrition.ts` — Health flags, weekly summaries
 - `src/lib/recipes.ts` — Supabase CRUD (snake_case ↔ camelCase conversion)
+- `src/lib/mealPlans.ts` — Meal plan DAL (CRUD, getWeekStart, joined recipe queries)
+- `src/lib/recipeHistory.ts` — Recipe history DAL (idempotent batch logging, last-cooked dates)
+- `src/lib/recommendations.ts` — Suggestion engine (recency scoring + cuisine variety penalty)
 - `src/lib/supabase/` — Client (browser), server, middleware, auth helpers
 - `src/components/RecipeDetail.tsx` — Recipe view/edit/delete (client component)
 - `src/components/RecipeForm.tsx` — Recipe import flow (URL or text → parse → review → save)
+- `src/components/WeeklyPlanner.tsx` — Meal planner (week nav, picker with filters, suggestions, optimistic add/remove)
+- `src/components/WeeklyNutritionSummary.tsx` — Aggregated weekly nutrition with color-coded flags
 - `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields)
 
 ## Auth
@@ -44,7 +52,7 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 ## Phases
 1. **Foundation** — Scaffolding, auth, navigation, DB schema ✅
 2. **Recipe Management** — Import, parse, CRUD, library UI ✅
-3. **Meal Planning** — Recommendations, weekly planner, nutrition summary
+3. **Meal Planning** — Weekly planner, smart suggestions, nutrition summary, history tracking ✅
 4. **Grocery List** — Dedup, store tagging, real-time shared list
 5. **Polish** — PWA, ratings, improved normalization
 

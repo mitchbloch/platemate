@@ -30,7 +30,7 @@
 - [x] Video-aware spinner messages in RecipeForm
 - [x] Build + lint passing
 
-## Phase 3: Meal Planning
+## Phase 3: Meal Planning ✅
 - [x] Meal plan DAL (`src/lib/mealPlans.ts`) — CRUD, getWeekStart, getMealPlanWithRecipes (joined query)
 - [x] Recipe history DAL (`src/lib/recipeHistory.ts`) — logCookedRecipes (idempotent), getLastCookedDates
 - [x] Recommendation engine (`src/lib/recommendations.ts`) — recency scoring + cuisine variety penalty
@@ -39,8 +39,9 @@
 - [x] WeeklyPlanner component — week navigation, meal cards grouped by type, recipe picker with cuisine/type filters, suggestion banner, optimistic add/remove
 - [x] Plan page server component — parallel data fetch, passes to WeeklyPlanner
 - [x] Auto-log with override: incomplete week banner prompts to confirm which meals were cooked
+- [x] Weeks start on Sunday (matches grocery shopping + first cook of the week)
 - [x] Build + lint passing
-- [ ] Live verification: test full flow on deployed app
+- [x] Verified: added meals on deployed app, nutrition summary displayed correctly
 
 ## Phase 4: Grocery List
 - [ ] Ingredient deduplication + quantity merging
