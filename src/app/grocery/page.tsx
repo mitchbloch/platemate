@@ -1,14 +1,47 @@
 import Nav from "@/components/Nav";
+import GroceryListView from "@/components/GroceryListView";
+import PinnedItemsManager from "@/components/PinnedItemsManager";
+import { getWeekStart, getMealPlanWithRecipes } from "@/lib/mealPlans";
+import { getGroceryListByMealPlan } from "@/lib/groceryList";
+import { getPinnedItems, getFrequentItems } from "@/lib/pinnedItems";
 
-export default function GroceryPage() {
+export const dynamic = "force-dynamic";
+
+export default async function GroceryPage() {
+  const weekStart = getWeekStart();
+
+  const [{ plan, meals }, pinnedItems, frequentItems] = await Promise.all([
+    getMealPlanWithRecipes(weekStart),
+    getPinnedItems(),
+    getFrequentItems(),
+  ]);
+
+  let groceryData: { list: null; items: [] } | Awaited<ReturnType<typeof getGroceryListByMealPlan>> = {
+    list: null,
+    items: [],
+  };
+
+  if (plan) {
+    const result = await getGroceryListByMealPlan(plan.id);
+    if (result) groceryData = result;
+  }
+
   return (
     <>
       <Nav />
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900">Grocery List</h1>
-        <p className="text-gray-600">
-          Auto-generated grocery lists coming in Phase 4.
-        </p>
+        <GroceryListView
+          initialList={groceryData.list}
+          initialItems={groceryData.items}
+          initialWeekStart={weekStart}
+          hasMeals={meals.length > 0}
+        />
+        <div className="mt-8">
+          <PinnedItemsManager
+            initialPinned={pinnedItems}
+            initialFrequent={frequentItems}
+          />
+        </div>
       </main>
     </>
   );

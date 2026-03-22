@@ -21,16 +21,25 @@ Two accounts (the couple). Shared data — no multi-tenancy needed.
 - Weekly nutrition summary showing cumulative cholesterol/sat fat across planned meals
 - Flag weeks where planned meals exceed recommended limits
 
-## Non-Goals (Phase 1-2)
+## Non-Goals (Phase 1-3)
 - Recipe creation from scratch (import-only for now)
-- Ingredient catalog / normalization (Phase 4)
-- Store-specific availability tagging (Phase 4)
-- Real-time shared grocery list (Phase 4)
 - PWA / offline support (Phase 5)
+
+## Phase 4: Grocery List — Design Decisions
+- **Generation**: Auto-dedup + quantity merge from meal plan ingredients using TypeScript heuristics (not Claude API). Explicit "Generate List" button, not auto-generated on page load.
+- **Categories**: 5 display categories — Protein (meat + seafood), Produce, Dairy, Snacks (manual-add only), Other (grains, canned, spices, condiments, etc.). Mapped from 11 `IngredientCategory` values.
+- **Store tagging**: TJ's default, tag exceptions only — Target (preferred), HMart, Whole Foods.
+- **Pinned items**: Staples (bananas, milk, yogurt) auto-added every week. Separate DB table from grocery list items.
+- **Frequent suggestions**: Items appearing 3+ weeks get suggested for pinning.
+- **Export**: Clipboard copy formatted for Apple Notes (checkbox format, grouped by category then store). Evaluated Apple Shortcuts URL scheme and Web Share API — clipboard has best friction-to-setup ratio for once-a-week use.
+- **In-store UX**: Couple currently uses shared iCloud Note. Platemate generates the smart list, they paste into Notes. Transition path: PWA with real-time shared checking (Phase 5 for installability).
+- **Real-time**: Supabase realtime subscriptions for shared item checking between both users.
 
 ## Success Metrics
 - Can import a recipe from any major cooking site in <10 seconds
 - Video recipe links (TikTok, Instagram, YouTube) detected and gracefully redirected to text input
 - Nutrition flags correctly identify high-cholesterol recipes
 - Weekly planning takes <5 minutes (vs 30+ manual)
+- Grocery list generation from meal plan in <2 seconds
+- Clipboard export matches existing Apple Notes format (paste-ready)
 - Grocery list is usable in-store on mobile

@@ -43,12 +43,38 @@
 - [x] Build + lint passing
 - [x] Verified: added meals on deployed app, nutrition summary displayed correctly
 
-## Phase 4: Grocery List
-- [ ] Ingredient deduplication + quantity merging
-- [ ] Store tagging (TJ's default, exceptions for WF/HMart/Target)
-- [ ] Checkable list grouped by store, then by category
-- [ ] Mobile-optimized view
-- [ ] Supabase real-time for shared checking
+## Phase 4: Grocery List ✅
+
+### 4A: Core Generation Engine ✅
+- [x] Add types: `GroceryDisplayCategory`, `MergedIngredient`, `PinnedGroceryItem`, `GroceryListWithItems`
+- [x] Category mapping (`categoryMap.ts`): IngredientCategory → GroceryDisplayCategory (protein, produce, dairy, snacks, other)
+- [x] Ingredient normalization (`ingredientMerge.ts`): name normalization, unit normalization, dedup + quantity merge
+- [x] Unit tests for merge/dedup edge cases (30 tests)
+- [x] Unit tests for category mapping (7 tests)
+- [x] Vitest setup (vitest.config.ts, npm test script)
+
+### 4B: API Routes + Grocery Page UI ✅
+- [x] Grocery list DAL (`groceryList.ts`): generate, save, get, update, delete, add items
+- [x] API routes: POST/GET grocery-lists, POST/PATCH/DELETE items, DELETE list
+- [x] GroceryListView component: week nav, generate button, category sections, inline add, check/uncheck, store tagging
+- [x] Grocery page server component (replace placeholder)
+
+### 4C: Clipboard Export ✅
+- [x] Export formatter (`groceryExport.ts`): unchecked items, grouped by category then store
+- [x] "Copy to Notes" button with clipboard API + "Copied!" feedback
+- [x] Unit tests for export format (6 tests)
+
+### 4D: Pinned Items + Frequent Suggestions ✅
+- [x] Migration: `pinned_grocery_items` table (003_pinned_items.sql)
+- [x] Pinned items DAL (`pinnedItems.ts`) + API routes
+- [x] Include pinned items in list generation (dedup against recipe items)
+- [x] Frequent item suggestions (3+ weeks → suggest for pinning)
+- [x] PinnedItemsManager component (pin/unpin, add form, frequent suggestions banner)
+
+### 4E: Real-Time Shared Checking ✅
+- [x] Supabase realtime subscription utility (`supabase/realtime.ts`)
+- [x] GroceryListView realtime integration (UPDATE/INSERT/DELETE events)
+- [ ] **Manual step**: Enable Realtime on `grocery_list_items` table in Supabase dashboard
 
 ## Phase 5: Polish
 - [ ] PWA (service worker, offline grocery list, home screen install)

@@ -107,6 +107,33 @@ export interface GroceryListItem {
 
 export type StoreName = "trader-joes" | "whole-foods" | "hmart" | "target" | "other";
 
+export type GroceryDisplayCategory = "protein" | "produce" | "dairy" | "snacks" | "other";
+
+export interface MergedIngredient {
+  name: string; // normalized name (lowercase, trimmed)
+  displayName: string; // human-readable name for UI
+  quantity: number | null;
+  unit: string | null;
+  category: GroceryDisplayCategory;
+  store: StoreName;
+  recipeIds: string[]; // which recipes need this item
+}
+
+export interface PinnedGroceryItem {
+  id: string;
+  name: string;
+  category: GroceryDisplayCategory;
+  store: StoreName;
+  quantity: number | null;
+  unit: string | null;
+  createdAt: string;
+}
+
+export interface GroceryListWithItems {
+  list: GroceryList;
+  items: GroceryListItem[];
+}
+
 export interface RecipeHistory {
   id: string;
   recipeId: string;

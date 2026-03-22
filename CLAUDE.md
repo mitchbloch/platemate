@@ -37,12 +37,17 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/lib/mealPlans.ts` — Meal plan DAL (CRUD, getWeekStart, joined recipe queries)
 - `src/lib/recipeHistory.ts` — Recipe history DAL (idempotent batch logging, last-cooked dates)
 - `src/lib/recommendations.ts` — Suggestion engine (recency scoring + cuisine variety penalty)
+- `src/lib/ingredientMerge.ts` — Ingredient normalization, dedup, quantity merging (Phase 4)
+- `src/lib/categoryMap.ts` — IngredientCategory → GroceryDisplayCategory mapping (Phase 4)
+- `src/lib/groceryList.ts` — Grocery list DAL (generate, save, CRUD) (Phase 4)
+- `src/lib/groceryExport.ts` — Clipboard export formatter for Apple Notes (Phase 4)
+- `src/lib/pinnedItems.ts` — Pinned grocery staples DAL (Phase 4)
 - `src/lib/supabase/` — Client (browser), server, middleware, auth helpers
 - `src/components/RecipeDetail.tsx` — Recipe view/edit/delete (client component)
 - `src/components/RecipeForm.tsx` — Recipe import flow (URL or text → parse → review → save)
 - `src/components/WeeklyPlanner.tsx` — Meal planner (week nav, picker with filters, suggestions, optimistic add/remove)
 - `src/components/WeeklyNutritionSummary.tsx` — Aggregated weekly nutrition with color-coded flags
-- `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields)
+- `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields, 003 pinned items)
 
 ## Auth
 - Two users (created manually in Supabase dashboard)
