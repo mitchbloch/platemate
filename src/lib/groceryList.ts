@@ -45,6 +45,7 @@ function rowToGroceryListItem(row: Record<string, unknown>): GroceryListItem {
     dismissed: row.dismissed as boolean,
     recipeIds: row.recipe_ids as string[],
     isManual: row.is_manual as boolean,
+    sortOrder: (row.sort_order as number) ?? 0,
   };
 }
 
@@ -58,8 +59,7 @@ async function fetchListItems(
     .from("grocery_list_items")
     .select("*")
     .eq("grocery_list_id", listId)
-    .order("category")
-    .order("name");
+    .order("sort_order");
   if (error) throw error;
   return (data ?? []).map(rowToGroceryListItem);
 }
@@ -108,18 +108,26 @@ export async function getOrCreateGroceryListByWeek(
   );
 
   if (pinnedItems.length > 0) {
-    const rows = pinnedItems.map((pinned) => ({
-      grocery_list_id: list.id,
-      name: pinned.name,
-      quantity: pinned.quantity,
-      unit: pinned.unit,
-      category: categoryToDb(pinned.category),
-      store: pinned.store,
-      checked: false,
-      dismissed: pantryNames.has(pinned.name.toLowerCase().trim()),
-      recipe_ids: [],
-      is_manual: true,
-    }));
+    // Assign sort_order per group for seeded items
+    const groupCounters = new Map<string, number>();
+    const rows = pinnedItems.map((pinned) => {
+      const key = `${pinned.store}|${categoryToDb(pinned.category)}`;
+      const count = (groupCounters.get(key) ?? 0) + 1;
+      groupCounters.set(key, count);
+      return {
+        grocery_list_id: list.id,
+        name: pinned.name,
+        quantity: pinned.quantity,
+        unit: pinned.unit,
+        category: categoryToDb(pinned.category),
+        store: pinned.store,
+        checked: false,
+        dismissed: pantryNames.has(pinned.name.toLowerCase().trim()),
+        recipe_ids: [],
+        is_manual: true,
+        sort_order: count * 1000,
+      };
+    });
     const { error: insertError } = await supabase
       .from("grocery_list_items")
       .insert(rows);
@@ -232,7 +240,7 @@ export async function mergeRecipeItemsIntoList(
         })
         .eq("id", matchingManual.id);
     } else {
-      // Insert new recipe-derived item
+      // Insert new recipe-derived item (sort_order assigned below)
       toInsert.push({
         grocery_list_id: listId,
         name: recipeItem.displayName,
@@ -244,11 +252,30 @@ export async function mergeRecipeItemsIntoList(
         dismissed: pantryNames.has(normalizedName),
         recipe_ids: recipeItem.recipeIds,
         is_manual: false,
+        sort_order: 0, // placeholder, assigned below
       });
     }
   }
 
   if (toInsert.length > 0) {
+    // Compute max sort_order per group from remaining manual items
+    const groupMaxes = new Map<string, number>();
+    for (const item of manualItems) {
+      const key = `${item.store}|${item.category}`;
+      const current = groupMaxes.get(key) ?? 0;
+      if (item.sortOrder > current) groupMaxes.set(key, item.sortOrder);
+    }
+
+    // Assign sort_order to new recipe items
+    const groupCounters = new Map<string, number>();
+    for (const row of toInsert) {
+      const key = `${row.store}|${row.category}`;
+      const base = groupMaxes.get(key) ?? 0;
+      const count = (groupCounters.get(key) ?? 0) + 1;
+      groupCounters.set(key, count);
+      row.sort_order = base + count * 1000;
+    }
+
     const { error: insertError } = await supabase
       .from("grocery_list_items")
       .insert(toInsert);
@@ -310,6 +337,18 @@ export async function addGroceryListItem(
 ): Promise<GroceryListItem> {
   const supabase = await createClient();
 
+  // Place new item at end of its group
+  const { data: maxData } = await supabase
+    .from("grocery_list_items")
+    .select("sort_order")
+    .eq("grocery_list_id", groceryListId)
+    .eq("store", item.store)
+    .eq("category", item.category)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSortOrder = ((maxData?.sort_order as number) ?? 0) + 1000;
+
   const { data, error } = await supabase
     .from("grocery_list_items")
     .insert({
@@ -323,6 +362,7 @@ export async function addGroceryListItem(
       dismissed: false,
       recipe_ids: [],
       is_manual: true,
+      sort_order: nextSortOrder,
     })
     .select()
     .single();
@@ -341,6 +381,7 @@ export async function updateGroceryListItem(
     store: StoreName;
     checked: boolean;
     dismissed: boolean;
+    sortOrder: number;
   }>,
 ): Promise<void> {
   const supabase = await createClient();
@@ -353,6 +394,7 @@ export async function updateGroceryListItem(
   if (updates.store !== undefined) row.store = updates.store;
   if (updates.checked !== undefined) row.checked = updates.checked;
   if (updates.dismissed !== undefined) row.dismissed = updates.dismissed;
+  if (updates.sortOrder !== undefined) row.sort_order = updates.sortOrder;
 
   const { error } = await supabase
     .from("grocery_list_items")
@@ -360,6 +402,19 @@ export async function updateGroceryListItem(
     .eq("id", itemId);
 
   if (error) throw error;
+}
+
+export async function bulkUpdateSortOrder(
+  items: Array<{ id: string; sortOrder: number }>,
+): Promise<void> {
+  const supabase = await createClient();
+  for (const item of items) {
+    const { error } = await supabase
+      .from("grocery_list_items")
+      .update({ sort_order: item.sortOrder })
+      .eq("id", item.id);
+    if (error) throw error;
+  }
 }
 
 export async function deleteGroceryListItem(itemId: string): Promise<void> {

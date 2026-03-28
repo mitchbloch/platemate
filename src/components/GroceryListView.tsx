@@ -10,6 +10,23 @@ import { createClient } from "@/lib/supabase/client";
 import { subscribeToGroceryList } from "@/lib/supabase/realtime";
 import { useToast, ToastContainer } from "@/components/Toast";
 import CompletionModal from "@/components/CompletionModal";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
+import { CSS } from "@dnd-kit/utilities";
 
 interface FrequentItem {
   name: string;
@@ -186,13 +203,17 @@ export default function GroceryListView({
   const groupedByCategory = GROCERY_CATEGORY_ORDER.map((cat) => ({
     category: cat,
     label: GROCERY_CATEGORY_LABELS[cat],
-    items: tjItems.filter((i) => toDisplayCategory(i.category) === cat),
+    items: tjItems
+      .filter((i) => toDisplayCategory(i.category) === cat)
+      .sort((a, b) => a.sortOrder - b.sortOrder),
   })).filter((g) => g.items.length > 0);
 
   const groupedByStore = NON_TJ_STORES.map((store) => ({
     store,
     label: STORE_LABELS[store],
-    items: nonTjItems.filter((i) => i.store === store),
+    items: nonTjItems
+      .filter((i) => i.store === store)
+      .sort((a, b) => a.sortOrder - b.sortOrder),
   })).filter((g) => g.items.length > 0);
 
   // Pantry name set for checking if a dismissed item is a pantry staple
@@ -613,6 +634,43 @@ export default function GroceryListView({
     }
   }
 
+  // ── Reorder (Edit mode) ──
+
+  async function handleReorder(groupItems: GroceryListItem[], activeId: string, overId: string) {
+    const oldIndex = groupItems.findIndex((i) => i.id === activeId);
+    const newIndex = groupItems.findIndex((i) => i.id === overId);
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+    const reordered = arrayMove(groupItems, oldIndex, newIndex);
+
+    // Assign new sort_order values (1000, 2000, 3000...)
+    const updates = reordered.map((item, idx) => ({
+      id: item.id,
+      sortOrder: (idx + 1) * 1000,
+    }));
+
+    // Optimistic update
+    const prevItems = [...items];
+    setItems((prev) =>
+      prev.map((item) => {
+        const update = updates.find((u) => u.id === item.id);
+        return update ? { ...item, sortOrder: update.sortOrder } : item;
+      }),
+    );
+
+    try {
+      const res = await fetch(`/api/grocery-lists/${list!.id}/items/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: updates }),
+      });
+      if (!res.ok) throw new Error("Failed to reorder");
+    } catch {
+      setItems(prevItems);
+      showToast("Failed to save new order");
+    }
+  }
+
   // ── Copy to Clipboard (Shop mode) ──
 
   async function copyToClipboard() {
@@ -836,25 +894,30 @@ export default function GroceryListView({
                   <h2 className="mb-2 text-sm font-medium text-text-muted">
                     {group.label}
                   </h2>
-                  <div className="space-y-1">
+                  <SortableItemGroup
+                    items={group.items}
+                    enabled={mode === "edit" && !isCompleted}
+                    onReorder={handleReorder}
+                  >
                     {group.items.map((item) => (
-                      <GroceryItemRow
-                        key={item.id}
-                        item={item}
-                        mode={mode}
-                        isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
-                        isCompleted={!!isCompleted}
-                        closeKey={closeKey}
-                        onToggle={() => toggleCheck(item)}
-                        onDismiss={() => dismissItem(item)}
-                        onMarkPantry={() => markAsPantryStaple(item)}
-                        onMoveToWeekly={() => moveToWeeklyStaples(item)}
-                        onRemoveWeekly={() => removeWeeklyStaple(item.name)}
-                        onRemove={() => removeItem(item)}
-                        onChangeStore={(store) => changeStore(item, store)}
-                      />
+                      <SortableItemWrapper key={item.id} id={item.id} enabled={mode === "edit" && !isCompleted}>
+                        <GroceryItemRow
+                          item={item}
+                          mode={mode}
+                          isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                          isCompleted={!!isCompleted}
+                          closeKey={closeKey}
+                          onToggle={() => toggleCheck(item)}
+                          onDismiss={() => dismissItem(item)}
+                          onMarkPantry={() => markAsPantryStaple(item)}
+                          onMoveToWeekly={() => moveToWeeklyStaples(item)}
+                          onRemoveWeekly={() => removeWeeklyStaple(item.name)}
+                          onRemove={() => removeItem(item)}
+                          onChangeStore={(store) => changeStore(item, store)}
+                        />
+                      </SortableItemWrapper>
                     ))}
-                  </div>
+                  </SortableItemGroup>
                   {/* Inline add (edit mode only) */}
                   {mode === "edit" && !isCompleted && (
                     <>
@@ -907,25 +970,30 @@ export default function GroceryListView({
                   <h2 className="mb-2 text-sm font-medium text-gold">
                     {group.label}
                   </h2>
-                  <div className="space-y-1">
+                  <SortableItemGroup
+                    items={group.items}
+                    enabled={mode === "edit" && !isCompleted}
+                    onReorder={handleReorder}
+                  >
                     {group.items.map((item) => (
-                      <GroceryItemRow
-                        key={item.id}
-                        item={item}
-                        mode={mode}
-                        isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
-                        isCompleted={!!isCompleted}
-                        closeKey={closeKey}
-                        onToggle={() => toggleCheck(item)}
-                        onDismiss={() => dismissItem(item)}
-                        onMarkPantry={() => markAsPantryStaple(item)}
-                        onMoveToWeekly={() => moveToWeeklyStaples(item)}
-                        onRemoveWeekly={() => removeWeeklyStaple(item.name)}
-                        onRemove={() => removeItem(item)}
-                        onChangeStore={(store) => changeStore(item, store)}
-                      />
+                      <SortableItemWrapper key={item.id} id={item.id} enabled={mode === "edit" && !isCompleted}>
+                        <GroceryItemRow
+                          item={item}
+                          mode={mode}
+                          isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                          isCompleted={!!isCompleted}
+                          closeKey={closeKey}
+                          onToggle={() => toggleCheck(item)}
+                          onDismiss={() => dismissItem(item)}
+                          onMarkPantry={() => markAsPantryStaple(item)}
+                          onMoveToWeekly={() => moveToWeeklyStaples(item)}
+                          onRemoveWeekly={() => removeWeeklyStaple(item.name)}
+                          onRemove={() => removeItem(item)}
+                          onChangeStore={(store) => changeStore(item, store)}
+                        />
+                      </SortableItemWrapper>
                     ))}
-                  </div>
+                  </SortableItemGroup>
                 </div>
               ))}
 
@@ -1296,5 +1364,103 @@ function MoreIcon() {
       <circle cx="12" cy="12" r="2" />
       <circle cx="12" cy="19" r="2" />
     </svg>
+  );
+}
+
+function GripIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="text-text-muted">
+      <circle cx="4" cy="2" r="1" />
+      <circle cx="8" cy="2" r="1" />
+      <circle cx="4" cy="6" r="1" />
+      <circle cx="8" cy="6" r="1" />
+      <circle cx="4" cy="10" r="1" />
+      <circle cx="8" cy="10" r="1" />
+    </svg>
+  );
+}
+
+// ── Drag-and-Drop ──
+
+function SortableItemGroup({
+  items,
+  enabled,
+  onReorder,
+  children,
+}: {
+  items: GroceryListItem[];
+  enabled: boolean;
+  onReorder: (groupItems: GroceryListItem[], activeId: string, overId: string) => void;
+  children: React.ReactNode;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      onReorder(items, active.id as string, over.id as string);
+    }
+  }
+
+  if (!enabled) {
+    return <div className="space-y-1">{children}</div>;
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-1">{children}</div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableItemWrapper({
+  id,
+  enabled,
+  children,
+}: {
+  id: string;
+  enabled: boolean;
+  children: React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled: !enabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : undefined,
+    opacity: isDragging ? 0.8 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-1">
+      {enabled && (
+        <button
+          {...attributes}
+          {...listeners}
+          className="shrink-0 cursor-grab touch-none rounded p-1 text-text-muted transition-colors hover:bg-border-light hover:text-text-secondary active:cursor-grabbing"
+          aria-label="Drag to reorder"
+        >
+          <GripIcon />
+        </button>
+      )}
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }
