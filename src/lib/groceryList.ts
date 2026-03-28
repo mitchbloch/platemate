@@ -9,6 +9,7 @@ import { getPantryItems } from "./pantryItems";
 import type {
   GroceryList,
   GroceryListItem,
+  GroceryListStatus,
   GroceryListWithItems,
   IngredientCategory,
   MealPlanRecipe,
@@ -24,6 +25,8 @@ function rowToGroceryList(row: Record<string, unknown>): GroceryList {
     id: row.id as string,
     weekStart: row.week_start as string,
     mealPlanId: (row.meal_plan_id as string) ?? null,
+    status: (row.status as GroceryListStatus) ?? "edit",
+    completedAt: (row.completed_at as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -379,6 +382,52 @@ export async function deleteGroceryList(listId: string): Promise<void> {
     .eq("id", listId);
 
   if (error) throw error;
+}
+
+// ── List-level Updates ──
+
+export async function updateGroceryList(
+  listId: string,
+  updates: Partial<{ status: GroceryListStatus; completedAt: string | null }>,
+): Promise<void> {
+  const supabase = await createClient();
+  const row: Record<string, unknown> = {};
+  if (updates.status !== undefined) row.status = updates.status;
+  if (updates.completedAt !== undefined) row.completed_at = updates.completedAt;
+
+  const { error } = await supabase
+    .from("grocery_lists")
+    .update(row)
+    .eq("id", listId);
+
+  if (error) throw error;
+}
+
+/**
+ * Smart week defaulting: if the current calendar week's list is completed,
+ * return next week instead. Single-hop only.
+ */
+export async function getSmartWeekStart(
+  currentWeekStart: string,
+): Promise<string> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("grocery_lists")
+    .select("week_start")
+    .eq("status", "completed")
+    .eq("week_start", currentWeekStart)
+    .maybeSingle();
+
+  if (data) {
+    const d = new Date(currentWeekStart + "T00:00:00");
+    d.setDate(d.getDate() + 7);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  return currentWeekStart;
 }
 
 // ── Helpers ──

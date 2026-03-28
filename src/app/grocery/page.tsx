@@ -1,14 +1,14 @@
 import Nav from "@/components/Nav";
 import GroceryListView from "@/components/GroceryListView";
 import { getWeekStart, getMealPlanWithRecipes } from "@/lib/mealPlans";
-import { getOrCreateGroceryListByWeek } from "@/lib/groceryList";
+import { getOrCreateGroceryListByWeek, getSmartWeekStart } from "@/lib/groceryList";
 import { getPinnedItems, getFrequentItems } from "@/lib/pinnedItems";
 import { getPantryItems } from "@/lib/pantryItems";
 
 export const dynamic = "force-dynamic";
 
 export default async function GroceryPage() {
-  const weekStart = getWeekStart();
+  const weekStart = await getSmartWeekStart(getWeekStart());
 
   const [groceryData, { meals }, pinnedItems, frequentItems, pantryItems] = await Promise.all([
     getOrCreateGroceryListByWeek(weekStart),
