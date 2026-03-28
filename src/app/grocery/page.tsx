@@ -1,6 +1,5 @@
 import Nav from "@/components/Nav";
 import GroceryListView from "@/components/GroceryListView";
-import PinnedItemsManager from "@/components/PinnedItemsManager";
 import { getWeekStart, getMealPlanWithRecipes } from "@/lib/mealPlans";
 import { getGroceryListByMealPlan } from "@/lib/groceryList";
 import { getPinnedItems, getFrequentItems } from "@/lib/pinnedItems";
@@ -39,13 +38,8 @@ export default async function GroceryPage() {
           hasMeals={meals.length > 0}
           initialPantryItems={pantryItems}
           initialPinnedItems={pinnedItems}
+          initialFrequentItems={frequentItems}
         />
-        <div className="mt-8">
-          <PinnedItemsManager
-            initialPinned={pinnedItems}
-            initialFrequent={frequentItems}
-          />
-        </div>
       </main>
     </>
   );

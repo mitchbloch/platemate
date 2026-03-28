@@ -2,13 +2,20 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useClickOutside } from "@/hooks/useClickOutside";
-import type { GroceryList, GroceryListItem, IngredientCategory, PantryItem, PinnedGroceryItem, StoreName } from "@/lib/types";
+import type { GroceryList, GroceryListItem, GroceryDisplayCategory, IngredientCategory, PantryItem, PinnedGroceryItem, StoreName } from "@/lib/types";
 import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER } from "@/lib/categoryMap";
 import { STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToGroceryList } from "@/lib/supabase/realtime";
 import { useToast, ToastContainer } from "@/components/Toast";
+
+interface FrequentItem {
+  name: string;
+  count: number;
+  category: IngredientCategory;
+  store: StoreName;
+}
 
 interface GroceryListViewProps {
   initialList: GroceryList | null;
@@ -17,6 +24,7 @@ interface GroceryListViewProps {
   hasMeals: boolean;
   initialPantryItems: PantryItem[];
   initialPinnedItems: PinnedGroceryItem[];
+  initialFrequentItems: FrequentItem[];
 }
 
 /** Format a week start date as "Week of Mar 23" */
@@ -60,6 +68,17 @@ function toDisplayCategory(category: IngredientCategory) {
   return INGREDIENT_TO_GROCERY_CATEGORY[category] ?? "other";
 }
 
+/** Store badge color classes */
+function storeBadgeClasses(store: StoreName): string {
+  switch (store) {
+    case "trader-joes": return "bg-border-light text-text-muted";
+    case "target": return "bg-danger-light text-danger";
+    case "whole-foods": return "bg-accent-light text-accent";
+    case "hmart": return "bg-primary-light text-primary";
+    case "other": return "bg-gold-light text-gold";
+  }
+}
+
 const NON_TJ_STORES: StoreName[] = ["target", "whole-foods", "hmart", "other"];
 
 export default function GroceryListView({
@@ -69,6 +88,7 @@ export default function GroceryListView({
   hasMeals: initialHasMeals,
   initialPantryItems,
   initialPinnedItems,
+  initialFrequentItems,
 }: GroceryListViewProps) {
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [list, setList] = useState<GroceryList | null>(initialList);
@@ -78,12 +98,17 @@ export default function GroceryListView({
   const [generating, setGenerating] = useState(false);
   const [addingItem, setAddingItem] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
+  const [newItemCategory, setNewItemCategory] = useState<GroceryDisplayCategory>("other");
+  const [newItemStore, setNewItemStore] = useState<StoreName>("trader-joes");
+  const [newItemIsWeekly, setNewItemIsWeekly] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"edit" | "shop">("edit");
   const [pantryItems, setPantryItems] = useState<PantryItem[]>(initialPantryItems);
   const [excludedExpanded, setExcludedExpanded] = useState(false);
   const [pantryExpanded, setPantryExpanded] = useState(false);
   const [pinnedItems, setPinnedItems] = useState<PinnedGroceryItem[]>(initialPinnedItems);
+  const [frequentItems, setFrequentItems] = useState<FrequentItem[]>(initialFrequentItems);
+  const [closeKey, setCloseKey] = useState(0);
   const { toasts, showToast } = useToast();
 
   const supabaseRef = useRef(createClient());
@@ -142,7 +167,7 @@ export default function GroceryListView({
   // Pantry name set for checking if a dismissed item is a pantry staple
   const pantryNameSet = new Set(pantryItems.map((p) => p.name.toLowerCase().trim()));
 
-  // Pinned name set for identifying pinned staples in the list
+  // Weekly staple name set for identifying weekly staples in the list
   const pinnedNameSet = new Set(pinnedItems.map((p) => p.name.toLowerCase().trim()));
 
   // Split dismissed items into pantry staples vs other excluded
@@ -152,6 +177,11 @@ export default function GroceryListView({
   const otherDismissedItems = dismissedItems.filter((i) =>
     !pantryNameSet.has(i.name.toLowerCase().trim()),
   );
+
+  // ── Close dropdowns on mode/week change ──
+  function bumpCloseKey() {
+    setCloseKey((k) => k + 1);
+  }
 
   // ── Data Fetching ──
 
@@ -186,6 +216,8 @@ export default function GroceryListView({
     setMode("edit");
     setExcludedExpanded(false);
     setPantryExpanded(false);
+    setAddingItem(null);
+    bumpCloseKey();
     await fetchWeekData(newWeek);
   }
 
@@ -194,7 +226,15 @@ export default function GroceryListView({
     setMode("edit");
     setExcludedExpanded(false);
     setPantryExpanded(false);
+    setAddingItem(null);
+    bumpCloseKey();
     await fetchWeekData(currentWeekStart);
+  }
+
+  function switchMode(newMode: "edit" | "shop") {
+    setMode(newMode);
+    setAddingItem(null);
+    bumpCloseKey();
   }
 
   // ── Generate List ──
@@ -216,6 +256,7 @@ export default function GroceryListView({
       setList(data.list);
       setItems(data.items);
       setMode("edit");
+      bumpCloseKey();
     } catch {
       alert("Failed to generate grocery list");
     } finally {
@@ -307,7 +348,7 @@ export default function GroceryListView({
     }
   }
 
-  async function moveToPinnedStaples(item: GroceryListItem) {
+  async function moveToWeeklyStaples(item: GroceryListItem) {
     try {
       const res = await fetch("/api/pinned-items", {
         method: "POST",
@@ -323,25 +364,54 @@ export default function GroceryListView({
       if (res.ok) {
         const newPinned = await res.json();
         setPinnedItems((prev) => [...prev, newPinned]);
-        showToast(`"${item.name}" added to pinned staples`, "success");
+        showToast(`"${item.name}" added to weekly staples`, "success");
       } else {
-        showToast("Failed to add to pinned staples");
+        showToast("Failed to add to weekly staples");
       }
     } catch {
-      showToast("Failed to add to pinned staples");
+      showToast("Failed to add to weekly staples");
     }
   }
 
-  // ── Add Item (Edit mode) ──
+  async function removeWeeklyStaple(name: string) {
+    const item = pinnedItems.find((p) => p.name.toLowerCase().trim() === name.toLowerCase().trim());
+    if (!item) return;
 
-  async function addItem(category: IngredientCategory, store: StoreName = "trader-joes") {
+    setPinnedItems((prev) => prev.filter((p) => p.id !== item.id));
+    try {
+      const res = await fetch("/api/pinned-items", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id }),
+      });
+      if (!res.ok) {
+        setPinnedItems((prev) => [...prev, item]);
+        showToast("Failed to remove weekly staple");
+      }
+    } catch {
+      setPinnedItems((prev) => [...prev, item]);
+    }
+  }
+
+  // ── Add Item (Edit mode) — unified flow ──
+
+  async function addItem() {
     if (!newItemName.trim() || !list) return;
 
     const name = newItemName.trim();
+    const category = newItemCategory;
+    const store = newItemStore;
+    const isWeekly = newItemIsWeekly;
+
+    // Reset form
     setNewItemName("");
+    setNewItemCategory("other");
+    setNewItemStore("trader-joes");
+    setNewItemIsWeekly(false);
     setAddingItem(null);
 
     try {
+      // Add to grocery list
       const res = await fetch(`/api/grocery-lists/${list.id}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -350,8 +420,46 @@ export default function GroceryListView({
       if (!res.ok) throw new Error("Failed to add");
       const newItem = await res.json();
       setItems((prev) => [...prev, newItem]);
+
+      // Also pin as weekly staple if toggled
+      if (isWeekly) {
+        const pinRes = await fetch("/api/pinned-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, category, store }),
+        });
+        if (pinRes.ok) {
+          const pinned = await pinRes.json();
+          setPinnedItems((prev) => [...prev, pinned]);
+          setFrequentItems((prev) => prev.filter((f) => f.name.toLowerCase() !== name.toLowerCase()));
+          showToast(`"${name}" added as weekly staple`, "success");
+        }
+      }
     } catch {
       alert("Failed to add item");
+    }
+  }
+
+  // Quick-add frequent item as weekly staple
+  async function quickAddFrequent(freq: FrequentItem) {
+    try {
+      const res = await fetch("/api/pinned-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: freq.name,
+          category: "other",
+          store: freq.store,
+        }),
+      });
+      if (res.ok) {
+        const pinned = await res.json();
+        setPinnedItems((prev) => [...prev, pinned]);
+        setFrequentItems((prev) => prev.filter((f) => f.name.toLowerCase() !== freq.name.toLowerCase()));
+        showToast(`"${freq.name}" added as weekly staple`, "success");
+      }
+    } catch {
+      showToast("Failed to add weekly staple");
     }
   }
 
@@ -410,6 +518,80 @@ export default function GroceryListView({
     } catch {
       alert("Failed to copy — try again");
     }
+  }
+
+  // ── Add Item Form (unified) ──
+
+  function renderAddItemForm(defaultCategory: IngredientCategory | null) {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (defaultCategory && newItemCategory === "other") {
+            setNewItemCategory(toDisplayCategory(defaultCategory) as GroceryDisplayCategory);
+          }
+          addItem();
+        }}
+        className="mt-2 space-y-2 rounded-xl border border-border bg-surface p-3"
+      >
+        <input
+          autoFocus
+          value={newItemName}
+          onChange={(e) => setNewItemName(e.target.value)}
+          placeholder="Item name..."
+          className="w-full rounded-lg border border-border bg-bg px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          onBlur={() => {
+            if (!newItemName.trim()) {
+              setTimeout(() => setAddingItem(null), 150);
+            }
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={newItemCategory}
+            onChange={(e) => setNewItemCategory(e.target.value as GroceryDisplayCategory)}
+            className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          >
+            {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+          <select
+            value={newItemStore}
+            onChange={(e) => setNewItemStore(e.target.value as StoreName)}
+            className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          >
+            {Object.entries(STORE_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1.5 rounded-lg border border-border bg-bg px-2 py-1 text-xs text-text-secondary">
+            <input
+              type="checkbox"
+              checked={newItemIsWeekly}
+              onChange={(e) => setNewItemIsWeekly(e.target.checked)}
+              className="h-3 w-3 rounded border-border text-primary focus:ring-primary"
+            />
+            Weekly staple
+          </label>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddingItem(null)}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    );
   }
 
   // ── Render ──
@@ -506,7 +688,7 @@ export default function GroceryListView({
                   {mode === "edit" ? (
                     <>
                       <button
-                        onClick={() => setMode("shop")}
+                        onClick={() => switchMode("shop")}
                         className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
                       >
                         Ready to Shop
@@ -528,7 +710,7 @@ export default function GroceryListView({
                         {copied ? "Copied!" : "Copy to Notes"}
                       </button>
                       <button
-                        onClick={() => setMode("edit")}
+                        onClick={() => switchMode("edit")}
                         className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
                       >
                         Back to Edit
@@ -551,10 +733,12 @@ export default function GroceryListView({
                         item={item}
                         mode={mode}
                         isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                        closeKey={closeKey}
                         onToggle={() => toggleCheck(item)}
                         onDismiss={() => dismissItem(item)}
                         onMarkPantry={() => markAsPantryStaple(item)}
-                        onMoveToPinned={() => moveToPinnedStaples(item)}
+                        onMoveToWeekly={() => moveToWeeklyStaples(item)}
+                        onRemoveWeekly={() => removeWeeklyStaple(item.name)}
                         onRemove={() => removeItem(item)}
                         onChangeStore={(store) => changeStore(item, store)}
                       />
@@ -564,36 +748,15 @@ export default function GroceryListView({
                   {mode === "edit" && (
                     <>
                       {addingItem === group.category ? (
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            const dbCat = group.items[0]?.category ?? "other";
-                            addItem(dbCat);
-                          }}
-                          className="mt-1 flex gap-2"
-                        >
-                          <input
-                            autoFocus
-                            value={newItemName}
-                            onChange={(e) => setNewItemName(e.target.value)}
-                            placeholder="Add item..."
-                            className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-                            onBlur={() => {
-                              if (!newItemName.trim()) setAddingItem(null);
-                            }}
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
-                          >
-                            Add
-                          </button>
-                        </form>
+                        renderAddItemForm(group.items[0]?.category ?? null)
                       ) : (
                         <button
                           onClick={() => {
                             setAddingItem(group.category);
                             setNewItemName("");
+                            setNewItemCategory(toDisplayCategory(group.items[0]?.category ?? "other") as GroceryDisplayCategory);
+                            setNewItemStore("trader-joes");
+                            setNewItemIsWeekly(false);
                           }}
                           className="mt-1 w-full rounded-lg border border-dashed border-border py-1.5 text-xs text-text-muted transition-colors hover:border-primary hover:text-primary"
                         >
@@ -609,35 +772,15 @@ export default function GroceryListView({
               {mode === "edit" && activeItems.length > 0 && (
                 <div>
                   {addingItem === "__new__" ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        addItem("other");
-                      }}
-                      className="flex gap-2"
-                    >
-                      <input
-                        autoFocus
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                        placeholder="Add item..."
-                        className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-                        onBlur={() => {
-                          if (!newItemName.trim()) setAddingItem(null);
-                        }}
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
-                      >
-                        Add
-                      </button>
-                    </form>
+                    renderAddItemForm(null)
                   ) : (
                     <button
                       onClick={() => {
                         setAddingItem("__new__");
                         setNewItemName("");
+                        setNewItemCategory("other");
+                        setNewItemStore("trader-joes");
+                        setNewItemIsWeekly(false);
                       }}
                       className="w-full rounded-lg border border-dashed border-border py-2 text-sm text-text-muted transition-colors hover:border-primary hover:text-primary"
                     >
@@ -660,10 +803,12 @@ export default function GroceryListView({
                         item={item}
                         mode={mode}
                         isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                        closeKey={closeKey}
                         onToggle={() => toggleCheck(item)}
                         onDismiss={() => dismissItem(item)}
                         onMarkPantry={() => markAsPantryStaple(item)}
-                        onMoveToPinned={() => moveToPinnedStaples(item)}
+                        onMoveToWeekly={() => moveToWeeklyStaples(item)}
+                        onRemoveWeekly={() => removeWeeklyStaple(item.name)}
                         onRemove={() => removeItem(item)}
                         onChangeStore={(store) => changeStore(item, store)}
                       />
@@ -671,6 +816,63 @@ export default function GroceryListView({
                   </div>
                 </div>
               ))}
+
+              {/* Frequent items — quick-add as weekly staples */}
+              {mode === "edit" && frequentItems.length > 0 && (
+                <div className="rounded-xl bg-primary-light/50 p-3">
+                  <h3 className="mb-1.5 text-xs font-medium text-primary">
+                    Frequently bought
+                  </h3>
+                  <p className="mb-2 text-xs text-text-muted">
+                    These appeared in 3+ recent lists. Add as weekly staples?
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {frequentItems.map((item) => (
+                      <button
+                        key={item.name}
+                        onClick={() => quickAddFrequent(item)}
+                        className="rounded-full border border-primary/20 bg-surface px-2.5 py-1 text-xs text-text-secondary transition-colors hover:border-primary hover:bg-primary-light/50"
+                      >
+                        {item.name}
+                        <span className="ml-1 text-text-muted">({item.count}x)</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Weekly staples management (edit mode) */}
+              {mode === "edit" && pinnedItems.length > 0 && (
+                <div className="rounded-2xl border border-border bg-surface p-4 shadow-warm">
+                  <h2 className="mb-2 font-display text-sm font-semibold text-text">
+                    Weekly Staples
+                  </h2>
+                  <p className="mb-3 text-xs text-text-muted">
+                    Auto-added to every grocery list.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pinnedItems.map((item) => (
+                      <span
+                        key={item.id}
+                        className="group flex items-center gap-1 rounded-full border border-primary/20 bg-primary-light/30 px-2.5 py-1 text-xs text-primary"
+                      >
+                        {item.name}
+                        {item.store !== "trader-joes" && (
+                          <span className={`ml-0.5 rounded px-1 py-0.5 text-[10px] ${storeBadgeClasses(item.store)}`}>
+                            {STORE_LABELS[item.store]}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => removeWeeklyStaple(item.name)}
+                          className="ml-0.5 text-primary/40 transition-colors hover:text-danger"
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Pantry staples section (edit mode only) */}
               {mode === "edit" && pantryDismissedItems.length > 0 && (
@@ -765,20 +967,24 @@ function GroceryItemRow({
   item,
   mode,
   isPinned,
+  closeKey,
   onToggle,
   onDismiss,
   onMarkPantry,
-  onMoveToPinned,
+  onMoveToWeekly,
+  onRemoveWeekly,
   onRemove,
   onChangeStore,
 }: {
   item: GroceryListItem;
   mode: "edit" | "shop";
   isPinned: boolean;
+  closeKey: number;
   onToggle: () => void;
   onDismiss: () => void;
   onMarkPantry: () => void;
-  onMoveToPinned: () => void;
+  onMoveToWeekly: () => void;
+  onRemoveWeekly: () => void;
   onRemove: () => void;
   onChangeStore: (store: StoreName) => void;
 }) {
@@ -790,13 +996,19 @@ function GroceryItemRow({
   useClickOutside(actionsRef, () => setShowActions(false));
   const qty = formatQuantity(item.quantity, item.unit);
 
+  // Close menus when closeKey changes (mode switch, week nav, etc.)
+  useEffect(() => {
+    setShowStoreMenu(false);
+    setShowActions(false);
+  }, [closeKey]);
+
   if (mode === "shop") {
-    // Shop mode: checkbox + name + qty, minimal controls
+    // Shop mode: click entire row to toggle
     return (
       <div
         onClick={onToggle}
         role="button"
-        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition-colors ${
+        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
           item.checked ? "opacity-50" : "hover:bg-border-light"
         }`}
       >
@@ -814,53 +1026,45 @@ function GroceryItemRow({
           {item.name}
         </span>
         {isPinned && (
-          <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-xs text-primary">
-            <PinIcon /> pinned
+          <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            weekly
           </span>
         )}
         {qty && (
           <span className="shrink-0 text-xs text-text-muted">{qty}</span>
         )}
-        {item.store !== "trader-joes" && (
-          <span className="shrink-0 rounded-md bg-gold-light px-1.5 py-0.5 text-xs text-gold">
-            {STORE_LABELS[item.store]}
-          </span>
-        )}
+        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${storeBadgeClasses(item.store)}`}>
+          {STORE_LABELS[item.store]}
+        </span>
       </div>
     );
   }
 
   // Edit mode: dismiss, store change, remove, mark pantry
   return (
-    <div className="group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-border-light">
+    <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors hover:bg-border-light">
       <span className="flex-1 text-sm text-text">{item.name}</span>
       {isPinned && (
-        <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-xs text-primary">
-          <PinIcon /> pinned
+        <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-[10px] font-medium text-primary">
+          weekly
         </span>
       )}
       {qty && (
         <span className="shrink-0 text-xs text-text-muted">{qty}</span>
       )}
 
-      {/* Store tag */}
+      {/* Store badge — always visible, clickable to change */}
       <div className="relative" ref={storeMenuRef}>
         <button
           onClick={() => setShowStoreMenu(!showStoreMenu)}
-          className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs transition-colors ${
-            item.store !== "trader-joes"
-              ? "bg-gold-light text-gold"
-              : "text-text-muted hover:text-text-secondary"
-          }`}
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors ${storeBadgeClasses(item.store)} hover:opacity-80`}
           title="Change store"
         >
-          {item.store !== "trader-joes"
-            ? STORE_LABELS[item.store]
-            : "Store"}
+          {STORE_LABELS[item.store]}
         </button>
         {showStoreMenu && (
           <div className="absolute right-0 top-full z-10 mt-1 rounded-xl border border-border bg-surface py-1 shadow-warm-lg">
-            {(["trader-joes", "target", "whole-foods", "hmart"] as StoreName[]).map(
+            {(["trader-joes", "target", "whole-foods", "hmart", "other"] as StoreName[]).map(
               (store) => (
                 <button
                   key={store}
@@ -882,23 +1086,23 @@ function GroceryItemRow({
         )}
       </div>
 
-      {/* Actions menu */}
+      {/* Actions menu — more visible */}
       <div className="relative" ref={actionsRef}>
         <button
           onClick={() => setShowActions(!showActions)}
-          className="shrink-0 rounded p-1 text-text-muted transition-colors hover:text-text-secondary"
+          className="shrink-0 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-border-light hover:text-text"
           title="Actions"
         >
-          &middot;&middot;&middot;
+          <MoreIcon />
         </button>
         {showActions && (
-          <div className="absolute right-0 top-full z-10 mt-1 rounded-xl border border-border bg-surface py-1 shadow-warm-lg">
+          <div className="absolute right-0 top-full z-10 mt-1 min-w-[180px] rounded-xl border border-border bg-surface py-1 shadow-warm-lg">
             <button
               onClick={() => {
                 onDismiss();
                 setShowActions(false);
               }}
-              className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
+              className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
             >
               Have this already
             </button>
@@ -907,19 +1111,29 @@ function GroceryItemRow({
                 onMarkPantry();
                 setShowActions(false);
               }}
-              className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
+              className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
             >
               Move to pantry staples
             </button>
-            {!isPinned && (
+            {!isPinned ? (
               <button
                 onClick={() => {
-                  onMoveToPinned();
+                  onMoveToWeekly();
                   setShowActions(false);
                 }}
-                className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
+                className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-primary transition-colors hover:bg-border-light"
               >
-                Move to pinned staples
+                Add as weekly staple
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  onRemoveWeekly();
+                  setShowActions(false);
+                }}
+                className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-muted transition-colors hover:bg-border-light"
+              >
+                Remove weekly staple
               </button>
             )}
             <button
@@ -927,7 +1141,7 @@ function GroceryItemRow({
                 onRemove();
                 setShowActions(false);
               }}
-              className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-danger transition-colors hover:bg-border-light"
+              className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-danger transition-colors hover:bg-border-light"
             >
               Remove from list
             </button>
@@ -938,14 +1152,12 @@ function GroceryItemRow({
   );
 }
 
-function PinIcon() {
+function MoreIcon() {
   return (
-    <svg
-      className="mr-0.5 inline-block h-3 w-3"
-      viewBox="0 0 16 16"
-      fill="currentColor"
-    >
-      <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.5 3.5 0 0 1-1.399.948l-.046.016-1.415 5.66a.5.5 0 0 1-.848.26L4.5 13.55l-3.896 3.896a.5.5 0 0 1-.708-.707l3.897-3.897-2.329-2.328a.5.5 0 0 1 .26-.849l5.66-1.415.015-.046a3.5 3.5 0 0 1 .947-1.398l3.18-3.18-.71-.71a.5.5 0 0 1 .147-.354z" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="5" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="12" cy="19" r="2" />
     </svg>
   );
 }
