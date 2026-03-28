@@ -110,6 +110,7 @@ export interface GroceryListItem {
   dismissed: boolean;
   recipeIds: string[]; // which recipes need this item
   isManual: boolean;
+  sortOrder: number;
 }
 
 export type StoreName = "trader-joes" | "whole-foods" | "hmart" | "target" | "other";

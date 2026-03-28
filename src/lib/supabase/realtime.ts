@@ -16,6 +16,7 @@ function payloadToGroceryListItem(
     dismissed: payload.dismissed as boolean,
     recipeIds: payload.recipe_ids as string[],
     isManual: payload.is_manual as boolean,
+    sortOrder: (payload.sort_order as number) ?? 0,
   };
 }
 
