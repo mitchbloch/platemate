@@ -2,9 +2,9 @@ import type { NutritionInfo } from "@/lib/types";
 import { weeklyNutritionSummary } from "@/lib/nutrition";
 
 const FLAG_STYLES = {
-  ok: "bg-green-50 text-green-700",
-  warning: "bg-amber-50 text-amber-700",
-  danger: "bg-red-50 text-red-700",
+  ok: "bg-accent-light text-accent",
+  warning: "bg-gold-light text-gold",
+  danger: "bg-danger-light text-danger",
 } as const;
 
 export default function WeeklyNutritionSummary({
@@ -29,11 +29,11 @@ export default function WeeklyNutritionSummary({
   );
 
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <h3 className="mb-3 text-sm font-medium text-gray-500">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-warm">
+      <h3 className="mb-3 text-sm font-medium text-text-muted">
         Weekly Nutrition Summary
         {mealsWithNutrition.length < meals.length && (
-          <span className="ml-2 text-xs text-gray-400">
+          <span className="ml-2 text-xs text-text-muted">
             ({mealsWithNutrition.length} of {meals.length} meals have nutrition data)
           </span>
         )}
@@ -41,24 +41,24 @@ export default function WeeklyNutritionSummary({
 
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
         <div>
-          <div className="font-semibold text-gray-900">{totalCalories}</div>
-          <div className="text-gray-500">total cal</div>
+          <div className="font-semibold text-text">{totalCalories}</div>
+          <div className="text-text-muted">total cal</div>
         </div>
         <div>
-          <div className="font-semibold text-gray-900">{totalProtein}g</div>
-          <div className="text-gray-500">total protein</div>
+          <div className="font-semibold text-text">{totalProtein}g</div>
+          <div className="text-text-muted">total protein</div>
         </div>
         <div>
-          <div className="font-semibold text-gray-900">{summary.totalCholesterol}mg</div>
-          <div className="text-gray-500">cholesterol</div>
+          <div className="font-semibold text-text">{summary.totalCholesterol}mg</div>
+          <div className="text-text-muted">cholesterol</div>
         </div>
         <div>
-          <div className="font-semibold text-gray-900">{summary.totalSaturatedFat}g</div>
-          <div className="text-gray-500">sat fat</div>
+          <div className="font-semibold text-text">{summary.totalSaturatedFat}g</div>
+          <div className="text-text-muted">sat fat</div>
         </div>
         <div>
-          <div className="font-semibold text-gray-900">{summary.totalSodium}mg</div>
-          <div className="text-gray-500">sodium</div>
+          <div className="font-semibold text-text">{summary.totalSodium}mg</div>
+          <div className="text-text-muted">sodium</div>
         </div>
       </div>
 
@@ -67,7 +67,7 @@ export default function WeeklyNutritionSummary({
           {summary.flags.map((flag, i) => (
             <span
               key={i}
-              className={`rounded px-2 py-1 text-xs font-medium ${FLAG_STYLES[flag.level]}`}
+              className={`rounded-md px-2 py-1 text-xs font-medium ${FLAG_STYLES[flag.level]}`}
             >
               {flag.message}
             </span>

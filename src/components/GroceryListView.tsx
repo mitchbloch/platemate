@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { GroceryList, GroceryListItem, IngredientCategory, PantryItem, StoreName } from "@/lib/types";
+import { useClickOutside } from "@/hooks/useClickOutside";
+import type { GroceryList, GroceryListItem, IngredientCategory, PantryItem, PinnedGroceryItem, StoreName } from "@/lib/types";
 import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER } from "@/lib/categoryMap";
 import { STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToGroceryList } from "@/lib/supabase/realtime";
+import { useToast, ToastContainer } from "@/components/Toast";
 
 interface GroceryListViewProps {
   initialList: GroceryList | null;
@@ -14,6 +16,7 @@ interface GroceryListViewProps {
   initialWeekStart: string;
   hasMeals: boolean;
   initialPantryItems: PantryItem[];
+  initialPinnedItems: PinnedGroceryItem[];
 }
 
 /** Format a week start date as "Week of Mar 23" */
@@ -22,18 +25,26 @@ function formatWeekLabel(weekStart: string): string {
   return `Week of ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
+/** Format a Date as YYYY-MM-DD using local time (avoids UTC shift from toISOString) */
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Shift a week start by N weeks */
 function shiftWeek(weekStart: string, weeks: number): string {
   const date = new Date(weekStart + "T00:00:00");
   date.setDate(date.getDate() + weeks * 7);
-  return date.toISOString().split("T")[0];
+  return toLocalDateString(date);
 }
 
 /** Get Sunday of current week */
 function getCurrentWeekStart(): string {
   const d = new Date();
   d.setDate(d.getDate() - d.getDay());
-  return d.toISOString().split("T")[0];
+  return toLocalDateString(d);
 }
 
 /** Format quantity for display */
@@ -57,6 +68,7 @@ export default function GroceryListView({
   initialWeekStart,
   hasMeals: initialHasMeals,
   initialPantryItems,
+  initialPinnedItems,
 }: GroceryListViewProps) {
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [list, setList] = useState<GroceryList | null>(initialList);
@@ -70,6 +82,9 @@ export default function GroceryListView({
   const [mode, setMode] = useState<"edit" | "shop">("edit");
   const [pantryItems, setPantryItems] = useState<PantryItem[]>(initialPantryItems);
   const [excludedExpanded, setExcludedExpanded] = useState(false);
+  const [pantryExpanded, setPantryExpanded] = useState(false);
+  const [pinnedItems, setPinnedItems] = useState<PinnedGroceryItem[]>(initialPinnedItems);
+  const { toasts, showToast } = useToast();
 
   const supabaseRef = useRef(createClient());
 
@@ -127,6 +142,17 @@ export default function GroceryListView({
   // Pantry name set for checking if a dismissed item is a pantry staple
   const pantryNameSet = new Set(pantryItems.map((p) => p.name.toLowerCase().trim()));
 
+  // Pinned name set for identifying pinned staples in the list
+  const pinnedNameSet = new Set(pinnedItems.map((p) => p.name.toLowerCase().trim()));
+
+  // Split dismissed items into pantry staples vs other excluded
+  const pantryDismissedItems = dismissedItems.filter((i) =>
+    pantryNameSet.has(i.name.toLowerCase().trim()),
+  );
+  const otherDismissedItems = dismissedItems.filter((i) =>
+    !pantryNameSet.has(i.name.toLowerCase().trim()),
+  );
+
   // ── Data Fetching ──
 
   const fetchWeekData = useCallback(async (week: string) => {
@@ -158,12 +184,16 @@ export default function GroceryListView({
     const newWeek = shiftWeek(weekStart, direction);
     setWeekStart(newWeek);
     setMode("edit");
+    setExcludedExpanded(false);
+    setPantryExpanded(false);
     await fetchWeekData(newWeek);
   }
 
   async function goToCurrentWeek() {
     setWeekStart(currentWeekStart);
     setMode("edit");
+    setExcludedExpanded(false);
+    setPantryExpanded(false);
     await fetchWeekData(currentWeekStart);
   }
 
@@ -269,9 +299,36 @@ export default function GroceryListView({
       if (res.ok) {
         const newPantry = await res.json();
         setPantryItems((prev) => [...prev, newPantry]);
+      } else {
+        showToast("Failed to save as pantry staple");
       }
     } catch {
-      // Item is already dismissed — pantry add is best-effort
+      showToast("Failed to save as pantry staple");
+    }
+  }
+
+  async function moveToPinnedStaples(item: GroceryListItem) {
+    try {
+      const res = await fetch("/api/pinned-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: item.name,
+          category: toDisplayCategory(item.category),
+          store: item.store,
+          quantity: item.quantity,
+          unit: item.unit,
+        }),
+      });
+      if (res.ok) {
+        const newPinned = await res.json();
+        setPinnedItems((prev) => [...prev, newPinned]);
+        showToast(`"${item.name}" added to pinned staples`, "success");
+      } else {
+        showToast("Failed to add to pinned staples");
+      }
+    } catch {
+      showToast("Failed to add to pinned staples");
     }
   }
 
@@ -301,6 +358,7 @@ export default function GroceryListView({
   // ── Remove Item (Edit mode) ──
 
   async function removeItem(item: GroceryListItem) {
+    const index = items.findIndex((i) => i.id === item.id);
     setItems((prev) => prev.filter((i) => i.id !== item.id));
 
     try {
@@ -311,7 +369,11 @@ export default function GroceryListView({
       });
       if (!res.ok) throw new Error("Failed to delete");
     } catch {
-      setItems((prev) => [...prev, item]);
+      setItems((prev) => {
+        const restored = [...prev];
+        restored.splice(index, 0, item);
+        return restored;
+      });
     }
   }
 
@@ -357,22 +419,23 @@ export default function GroceryListView({
 
   return (
     <div className="space-y-6">
+      <ToastContainer toasts={toasts} />
       {/* Week Header */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigateWeek(-1)}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
         >
           &larr; Prev
         </button>
         <div className="text-center">
-          <h1 className="text-xl font-bold text-gray-900">
+          <h1 className="font-display text-xl font-semibold tracking-tight text-text">
             {formatWeekLabel(weekStart)}
           </h1>
           {!isCurrentWeek && (
             <button
               onClick={goToCurrentWeek}
-              className="mt-1 text-xs text-primary hover:text-primary-dark"
+              className="mt-1 text-xs text-primary hover:text-primary-dark transition-colors"
             >
               Go to this week
             </button>
@@ -380,25 +443,28 @@ export default function GroceryListView({
         </div>
         <button
           onClick={() => navigateWeek(1)}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
         >
           Next &rarr;
         </button>
       </div>
 
       {loading && (
-        <div className="py-8 text-center text-gray-500">Loading...</div>
+        <div className="py-8 text-center text-text-muted">
+          <div className="spinner mx-auto mb-3 h-6 w-6" />
+          Loading...
+        </div>
       )}
 
       {!loading && (
         <>
           {/* No meal plan state */}
           {!hasMeals && !list && (
-            <div className="rounded-lg border-2 border-dashed border-gray-200 py-12 text-center">
-              <p className="mb-2 text-gray-500">No meals planned for this week</p>
+            <div className="rounded-2xl border-2 border-dashed border-border py-12 text-center">
+              <p className="mb-2 text-text-muted">No meals planned for this week</p>
               <a
                 href="/plan"
-                className="text-sm font-medium text-primary hover:text-primary-dark"
+                className="text-sm font-medium text-primary hover:text-primary-dark transition-colors"
               >
                 Plan some meals first
               </a>
@@ -407,14 +473,14 @@ export default function GroceryListView({
 
           {/* Has meals but no list generated */}
           {hasMeals && !list && (
-            <div className="rounded-lg border-2 border-dashed border-gray-200 py-12 text-center">
-              <p className="mb-3 text-gray-500">
+            <div className="rounded-2xl border-2 border-dashed border-border py-12 text-center">
+              <p className="mb-3 text-text-muted">
                 Ready to generate your grocery list from this week&apos;s meals
               </p>
               <button
                 onClick={generateList}
                 disabled={generating}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-50"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark disabled:opacity-50"
               >
                 {generating ? "Generating..." : "Generate Grocery List"}
               </button>
@@ -426,12 +492,12 @@ export default function GroceryListView({
             <>
               {/* Summary + Actions */}
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-text-muted">
                   {mode === "shop"
                     ? `${checkedCount}/${activeCount} items checked`
                     : `${activeCount} items`}
                   {dismissedItems.length > 0 && (
-                    <span className="ml-1 text-gray-400">
+                    <span className="ml-1 text-text-muted">
                       ({dismissedItems.length} excluded)
                     </span>
                   )}
@@ -441,14 +507,14 @@ export default function GroceryListView({
                     <>
                       <button
                         onClick={() => setMode("shop")}
-                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
                       >
                         Ready to Shop
                       </button>
                       <button
                         onClick={generateList}
                         disabled={generating}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light disabled:opacity-50"
                       >
                         {generating ? "..." : "Regenerate"}
                       </button>
@@ -457,13 +523,13 @@ export default function GroceryListView({
                     <>
                       <button
                         onClick={copyToClipboard}
-                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
                       >
                         {copied ? "Copied!" : "Copy to Notes"}
                       </button>
                       <button
                         onClick={() => setMode("edit")}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
                       >
                         Back to Edit
                       </button>
@@ -475,7 +541,7 @@ export default function GroceryListView({
               {/* TJ's items grouped by category */}
               {groupedByCategory.map((group) => (
                 <div key={group.category}>
-                  <h2 className="mb-2 text-sm font-medium text-gray-500">
+                  <h2 className="mb-2 text-sm font-medium text-text-muted">
                     {group.label}
                   </h2>
                   <div className="space-y-1">
@@ -484,9 +550,11 @@ export default function GroceryListView({
                         key={item.id}
                         item={item}
                         mode={mode}
+                        isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
                         onToggle={() => toggleCheck(item)}
                         onDismiss={() => dismissItem(item)}
                         onMarkPantry={() => markAsPantryStaple(item)}
+                        onMoveToPinned={() => moveToPinnedStaples(item)}
                         onRemove={() => removeItem(item)}
                         onChangeStore={(store) => changeStore(item, store)}
                       />
@@ -509,14 +577,14 @@ export default function GroceryListView({
                             value={newItemName}
                             onChange={(e) => setNewItemName(e.target.value)}
                             placeholder="Add item..."
-                            className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                            className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
                             onBlur={() => {
                               if (!newItemName.trim()) setAddingItem(null);
                             }}
                           />
                           <button
                             type="submit"
-                            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+                            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
                           >
                             Add
                           </button>
@@ -527,7 +595,7 @@ export default function GroceryListView({
                             setAddingItem(group.category);
                             setNewItemName("");
                           }}
-                          className="mt-1 w-full rounded-lg border border-dashed border-gray-200 py-1.5 text-xs text-gray-400 hover:border-primary hover:text-primary"
+                          className="mt-1 w-full rounded-lg border border-dashed border-border py-1.5 text-xs text-text-muted transition-colors hover:border-primary hover:text-primary"
                         >
                           + Add item
                         </button>
@@ -553,14 +621,14 @@ export default function GroceryListView({
                         value={newItemName}
                         onChange={(e) => setNewItemName(e.target.value)}
                         placeholder="Add item..."
-                        className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
                         onBlur={() => {
                           if (!newItemName.trim()) setAddingItem(null);
                         }}
                       />
                       <button
                         type="submit"
-                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+                        className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
                       >
                         Add
                       </button>
@@ -571,7 +639,7 @@ export default function GroceryListView({
                         setAddingItem("__new__");
                         setNewItemName("");
                       }}
-                      className="w-full rounded-lg border border-dashed border-gray-200 py-2 text-sm text-gray-400 hover:border-primary hover:text-primary"
+                      className="w-full rounded-lg border border-dashed border-border py-2 text-sm text-text-muted transition-colors hover:border-primary hover:text-primary"
                     >
                       + Add item to list
                     </button>
@@ -581,8 +649,8 @@ export default function GroceryListView({
 
               {/* Non-TJ's store sections */}
               {groupedByStore.map((group) => (
-                <div key={group.store} className="rounded-lg border border-amber-100 bg-amber-50/50 p-4">
-                  <h2 className="mb-2 text-sm font-medium text-amber-800">
+                <div key={group.store} className="rounded-2xl border border-gold-light bg-gold-light/30 p-4">
+                  <h2 className="mb-2 text-sm font-medium text-gold">
                     {group.label}
                   </h2>
                   <div className="space-y-1">
@@ -591,9 +659,11 @@ export default function GroceryListView({
                         key={item.id}
                         item={item}
                         mode={mode}
+                        isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
                         onToggle={() => toggleCheck(item)}
                         onDismiss={() => dismissItem(item)}
                         onMarkPantry={() => markAsPantryStaple(item)}
+                        onMoveToPinned={() => moveToPinnedStaples(item)}
                         onRemove={() => removeItem(item)}
                         onChangeStore={(store) => changeStore(item, store)}
                       />
@@ -602,41 +672,76 @@ export default function GroceryListView({
                 </div>
               ))}
 
-              {/* Excluded/dismissed items section (edit mode only) */}
-              {mode === "edit" && dismissedItems.length > 0 && (
+              {/* Pantry staples section (edit mode only) */}
+              {mode === "edit" && pantryDismissedItems.length > 0 && (
                 <div className="mt-2">
                   <button
-                    onClick={() => setExcludedExpanded(!excludedExpanded)}
-                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+                    onClick={() => setPantryExpanded(!pantryExpanded)}
+                    className="flex items-center gap-2 text-sm text-accent hover:text-accent/80 transition-colors"
                   >
-                    <span className="text-xs">{excludedExpanded ? "\u25BE" : "\u25B8"}</span>
-                    Excluded ({dismissedItems.length})
+                    <span className="text-xs">{pantryExpanded ? "\u25BE" : "\u25B8"}</span>
+                    Pantry Staples ({pantryDismissedItems.length})
                   </button>
-                  {excludedExpanded && (
-                    <div className="mt-2 space-y-1 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                      {dismissedItems.map((item) => (
+                  {pantryExpanded && (
+                    <div className="mt-2 space-y-1 rounded-2xl border border-accent-light bg-accent-light/30 p-3">
+                      {pantryDismissedItems.map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between py-1.5"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-400">
+                            <span className="text-sm text-text-muted">
                               {item.name}
                             </span>
                             {formatQuantity(item.quantity, item.unit) && (
-                              <span className="text-xs text-gray-300">
+                              <span className="text-xs text-text-muted">
                                 {formatQuantity(item.quantity, item.unit)}
-                              </span>
-                            )}
-                            {pantryNameSet.has(item.name.toLowerCase().trim()) && (
-                              <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500">
-                                pantry
                               </span>
                             )}
                           </div>
                           <button
                             onClick={() => restoreItem(item)}
-                            className="text-xs font-medium text-primary hover:text-primary-dark"
+                            className="text-xs font-medium text-primary hover:text-primary-dark transition-colors"
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Other excluded items section (edit mode only) */}
+              {mode === "edit" && otherDismissedItems.length > 0 && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setExcludedExpanded(!excludedExpanded)}
+                    className="flex items-center gap-2 text-sm text-text-muted hover:text-text-secondary transition-colors"
+                  >
+                    <span className="text-xs">{excludedExpanded ? "\u25BE" : "\u25B8"}</span>
+                    Excluded ({otherDismissedItems.length})
+                  </button>
+                  {excludedExpanded && (
+                    <div className="mt-2 space-y-1 rounded-2xl border border-border-light bg-border-light/50 p-3">
+                      {otherDismissedItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between py-1.5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-text-muted">
+                              {item.name}
+                            </span>
+                            {formatQuantity(item.quantity, item.unit) && (
+                              <span className="text-xs text-text-muted">
+                                {formatQuantity(item.quantity, item.unit)}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => restoreItem(item)}
+                            className="text-xs font-medium text-primary hover:text-primary-dark transition-colors"
                           >
                             Restore
                           </button>
@@ -659,50 +764,65 @@ export default function GroceryListView({
 function GroceryItemRow({
   item,
   mode,
+  isPinned,
   onToggle,
   onDismiss,
   onMarkPantry,
+  onMoveToPinned,
   onRemove,
   onChangeStore,
 }: {
   item: GroceryListItem;
   mode: "edit" | "shop";
+  isPinned: boolean;
   onToggle: () => void;
   onDismiss: () => void;
   onMarkPantry: () => void;
+  onMoveToPinned: () => void;
   onRemove: () => void;
   onChangeStore: (store: StoreName) => void;
 }) {
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const storeMenuRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  useClickOutside(storeMenuRef, () => setShowStoreMenu(false));
+  useClickOutside(actionsRef, () => setShowActions(false));
   const qty = formatQuantity(item.quantity, item.unit);
 
   if (mode === "shop") {
     // Shop mode: checkbox + name + qty, minimal controls
     return (
       <div
-        className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
-          item.checked ? "opacity-50" : "hover:bg-gray-50"
+        onClick={onToggle}
+        role="button"
+        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition-colors ${
+          item.checked ? "opacity-50" : "hover:bg-border-light"
         }`}
       >
         <input
           type="checkbox"
           checked={item.checked}
-          onChange={onToggle}
-          className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary"
+          readOnly
+          className="pointer-events-none h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
         />
         <span
           className={`flex-1 text-sm ${
-            item.checked ? "text-gray-400 line-through" : "text-gray-900"
+            item.checked ? "text-text-muted line-through" : "text-text"
           }`}
         >
           {item.name}
         </span>
+        {isPinned && (
+          <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-xs text-primary">
+            <PinIcon /> pinned
+          </span>
+        )}
         {qty && (
-          <span className="shrink-0 text-xs text-gray-400">{qty}</span>
+          <span className="shrink-0 text-xs text-text-muted">{qty}</span>
         )}
         {item.store !== "trader-joes" && (
-          <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+          <span className="shrink-0 rounded-md bg-gold-light px-1.5 py-0.5 text-xs text-gold">
             {STORE_LABELS[item.store]}
           </span>
         )}
@@ -712,20 +832,25 @@ function GroceryItemRow({
 
   // Edit mode: dismiss, store change, remove, mark pantry
   return (
-    <div className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-50">
-      <span className="flex-1 text-sm text-gray-900">{item.name}</span>
+    <div className="group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-border-light">
+      <span className="flex-1 text-sm text-text">{item.name}</span>
+      {isPinned && (
+        <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-xs text-primary">
+          <PinIcon /> pinned
+        </span>
+      )}
       {qty && (
-        <span className="shrink-0 text-xs text-gray-400">{qty}</span>
+        <span className="shrink-0 text-xs text-text-muted">{qty}</span>
       )}
 
       {/* Store tag */}
-      <div className="relative">
+      <div className="relative" ref={storeMenuRef}>
         <button
           onClick={() => setShowStoreMenu(!showStoreMenu)}
-          className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs transition-colors ${
             item.store !== "trader-joes"
-              ? "bg-amber-100 text-amber-700"
-              : "text-gray-300 opacity-0 group-hover:opacity-100"
+              ? "bg-gold-light text-gold"
+              : "text-text-muted hover:text-text-secondary"
           }`}
           title="Change store"
         >
@@ -734,7 +859,7 @@ function GroceryItemRow({
             : "Store"}
         </button>
         {showStoreMenu && (
-          <div className="absolute right-0 top-full z-10 mt-1 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+          <div className="absolute right-0 top-full z-10 mt-1 rounded-xl border border-border bg-surface py-1 shadow-warm-lg">
             {(["trader-joes", "target", "whole-foods", "hmart"] as StoreName[]).map(
               (store) => (
                 <button
@@ -743,10 +868,10 @@ function GroceryItemRow({
                     onChangeStore(store);
                     setShowStoreMenu(false);
                   }}
-                  className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${
+                  className={`block w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-border-light ${
                     item.store === store
                       ? "font-medium text-primary"
-                      : "text-gray-700"
+                      : "text-text-secondary"
                   }`}
                 >
                   {STORE_LABELS[store]}
@@ -758,22 +883,22 @@ function GroceryItemRow({
       </div>
 
       {/* Actions menu */}
-      <div className="relative">
+      <div className="relative" ref={actionsRef}>
         <button
           onClick={() => setShowActions(!showActions)}
-          className="shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-gray-500 group-hover:opacity-100"
+          className="shrink-0 rounded p-1 text-text-muted transition-colors hover:text-text-secondary"
           title="Actions"
         >
           &middot;&middot;&middot;
         </button>
         {showActions && (
-          <div className="absolute right-0 top-full z-10 mt-1 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+          <div className="absolute right-0 top-full z-10 mt-1 rounded-xl border border-border bg-surface py-1 shadow-warm-lg">
             <button
               onClick={() => {
                 onDismiss();
                 setShowActions(false);
               }}
-              className="block w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+              className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
             >
               Have this already
             </button>
@@ -782,16 +907,27 @@ function GroceryItemRow({
                 onMarkPantry();
                 setShowActions(false);
               }}
-              className="block w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+              className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
             >
-              Always have (pantry staple)
+              Move to pantry staples
             </button>
+            {!isPinned && (
+              <button
+                onClick={() => {
+                  onMoveToPinned();
+                  setShowActions(false);
+                }}
+                className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
+              >
+                Move to pinned staples
+              </button>
+            )}
             <button
               onClick={() => {
                 onRemove();
                 setShowActions(false);
               }}
-              className="block w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-gray-50"
+              className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs text-danger transition-colors hover:bg-border-light"
             >
               Remove from list
             </button>
@@ -799,5 +935,17 @@ function GroceryItemRow({
         )}
       </div>
     </div>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg
+      className="mr-0.5 inline-block h-3 w-3"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+    >
+      <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.5 3.5 0 0 1-1.399.948l-.046.016-1.415 5.66a.5.5 0 0 1-.848.26L4.5 13.55l-3.896 3.896a.5.5 0 0 1-.708-.707l3.897-3.897-2.329-2.328a.5.5 0 0 1 .26-.849l5.66-1.415.015-.046a3.5 3.5 0 0 1 .947-1.398l3.18-3.18-.71-.71a.5.5 0 0 1 .147-.354z" />
+    </svg>
   );
 }

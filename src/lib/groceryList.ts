@@ -163,6 +163,7 @@ export async function addGroceryListItem(
       category: item.category,
       store: item.store,
       checked: false,
+      dismissed: false,
       recipe_ids: [],
     })
     .select()

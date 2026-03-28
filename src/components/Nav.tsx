@@ -15,9 +15,9 @@ export default function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-b border-gray-200 bg-white">
+    <nav className="border-b border-border bg-surface/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <Link href="/" className="text-xl font-bold text-primary">
+        <Link href="/" className="font-display text-xl font-semibold tracking-tight text-primary">
           Platemate
         </Link>
         <div className="flex gap-1">
@@ -32,8 +32,8 @@ export default function Nav() {
                 href={href}
                 className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                    ? "bg-primary-light text-primary"
+                    : "text-text-secondary hover:bg-border-light hover:text-text"
                 }`}
               >
                 {label}

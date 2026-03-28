@@ -75,34 +75,34 @@ export default function PinnedItemsManager({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <h2 className="mb-3 text-sm font-medium text-gray-900">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-warm">
+      <h2 className="mb-3 font-display text-sm font-semibold text-text">
         Pinned Staples
       </h2>
-      <p className="mb-3 text-xs text-gray-500">
+      <p className="mb-3 text-xs text-text-muted">
         These items auto-appear on every grocery list.
       </p>
 
       {/* Pinned items list */}
       {pinned.length === 0 ? (
-        <p className="mb-3 text-xs text-gray-400">No pinned items yet.</p>
+        <p className="mb-3 text-xs text-text-muted">No pinned items yet.</p>
       ) : (
         <div className="mb-3 space-y-1">
           {pinned.map((item) => (
             <div
               key={item.id}
-              className="group flex items-center justify-between rounded-lg px-3 py-1.5 hover:bg-gray-50"
+              className="group flex items-center justify-between rounded-lg px-3 py-1.5 transition-colors hover:bg-border-light"
             >
-              <span className="text-sm text-gray-700">{item.name}</span>
+              <span className="text-sm text-text-secondary">{item.name}</span>
               <div className="flex items-center gap-2">
                 {item.store !== "trader-joes" && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+                  <span className="rounded-md bg-gold-light px-1.5 py-0.5 text-xs text-gold">
                     {STORE_LABELS[item.store]}
                   </span>
                 )}
                 <button
                   onClick={() => removePinned(item.id)}
-                  className="text-gray-300 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                  className="text-text-muted opacity-0 transition-all hover:text-danger group-hover:opacity-100"
                 >
                   &times;
                 </button>
@@ -120,13 +120,13 @@ export default function PinnedItemsManager({
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Item name"
-            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
           />
           <div className="flex gap-2">
             <select
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value as GroceryDisplayCategory)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
             >
               {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
                 <option key={val} value={val}>{label}</option>
@@ -135,7 +135,7 @@ export default function PinnedItemsManager({
             <select
               value={newStore}
               onChange={(e) => setNewStore(e.target.value as StoreName)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
             >
               {Object.entries(STORE_LABELS).map(([val, label]) => (
                 <option key={val} value={val}>{label}</option>
@@ -145,14 +145,14 @@ export default function PinnedItemsManager({
           <div className="flex gap-2">
             <button
               type="submit"
-              className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark"
+              className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
             >
               Pin
             </button>
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
             >
               Cancel
             </button>
@@ -161,7 +161,7 @@ export default function PinnedItemsManager({
       ) : (
         <button
           onClick={() => setShowAddForm(true)}
-          className="w-full rounded-lg border border-dashed border-gray-200 py-1.5 text-xs text-gray-400 hover:border-primary hover:text-primary"
+          className="w-full rounded-lg border border-dashed border-border py-1.5 text-xs text-text-muted transition-colors hover:border-primary hover:text-primary"
         >
           + Add pinned item
         </button>
@@ -169,11 +169,11 @@ export default function PinnedItemsManager({
 
       {/* Frequent item suggestions */}
       {frequent.length > 0 && (
-        <div className="mt-4 rounded-lg bg-primary/5 p-3">
+        <div className="mt-4 rounded-xl bg-primary-light/50 p-3">
           <h3 className="mb-1.5 text-xs font-medium text-primary">
             Frequently bought
           </h3>
-          <p className="mb-2 text-xs text-gray-500">
+          <p className="mb-2 text-xs text-text-muted">
             These appeared in 3+ recent lists. Pin them?
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -181,10 +181,10 @@ export default function PinnedItemsManager({
               <button
                 key={item.name}
                 onClick={() => addPinned(item.name, "other", item.store)}
-                className="rounded-full border border-primary/20 bg-white px-2.5 py-1 text-xs text-gray-700 hover:border-primary hover:bg-primary/5"
+                className="rounded-full border border-primary/20 bg-surface px-2.5 py-1 text-xs text-text-secondary transition-colors hover:border-primary hover:bg-primary-light/50"
               >
                 {item.name}
-                <span className="ml-1 text-gray-400">({item.count}x)</span>
+                <span className="ml-1 text-text-muted">({item.count}x)</span>
               </button>
             ))}
           </div>

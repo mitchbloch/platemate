@@ -76,8 +76,9 @@ npm run lint   # ESLint
 
 ## Environment Variables
 ```
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-ANTHROPIC_API_KEY
-BRAVE_SEARCH_API_KEY          # Optional — enables Instagram cross-post search
+NEXT_PUBLIC_SUPABASE_URL=https://qsqehytthikcmiudbubs.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<set in .env.local + Vercel>
+ANTHROPIC_API_KEY=<set in .env.local + Vercel>
+BRAVE_SEARCH_API_KEY=<optional, set in .env.local + Vercel>
 ```
+Supabase project ID: `qsqehytthikcmiudbubs`

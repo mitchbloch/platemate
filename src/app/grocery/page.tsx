@@ -38,6 +38,7 @@ export default async function GroceryPage() {
           initialWeekStart={weekStart}
           hasMeals={meals.length > 0}
           initialPantryItems={pantryItems}
+          initialPinnedItems={pinnedItems}
         />
         <div className="mt-8">
           <PinnedItemsManager

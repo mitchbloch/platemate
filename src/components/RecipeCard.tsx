@@ -9,20 +9,20 @@ export default function RecipeCard({ recipe }: { recipe: Recipe }) {
   return (
     <Link
       href={`/recipes/${recipe.id}`}
-      className="group rounded-xl border border-gray-200 p-5 transition-colors hover:border-primary hover:bg-primary/5"
+      className="card-hover group rounded-2xl border border-border bg-surface p-5 shadow-warm"
     >
-      <h3 className="mb-1 font-semibold text-gray-900 group-hover:text-primary">
+      <h3 className="mb-1 font-display font-semibold text-text group-hover:text-primary transition-colors">
         {recipe.title}
       </h3>
 
-      <div className="mb-3 flex flex-wrap gap-1.5 text-xs text-gray-500">
+      <div className="mb-3 flex flex-wrap gap-1.5 text-xs text-text-muted">
         {recipe.cuisine && (
-          <span className="rounded bg-gray-100 px-1.5 py-0.5">
+          <span className="rounded-md bg-accent-light px-1.5 py-0.5 text-accent">
             {CUISINE_LABELS[recipe.cuisine]}
           </span>
         )}
         {recipe.isSlowCooker && (
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
+          <span className="rounded-md bg-gold-light px-1.5 py-0.5 text-gold">
             Slow Cooker
           </span>
         )}

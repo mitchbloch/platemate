@@ -74,7 +74,8 @@
 ### 4E: Real-Time Shared Checking ✅
 - [x] Supabase realtime subscription utility (`supabase/realtime.ts`)
 - [x] GroceryListView realtime integration (UPDATE/INSERT/DELETE events)
-- [ ] **Manual step**: Enable Realtime on `grocery_list_items` table in Supabase dashboard
+- [x] **Manual step**: Enable Realtime on `grocery_list_items` table in Supabase dashboard
+- [x] Migration 005: REPLICA IDENTITY FULL for realtime DELETE filter support
 
 ### 4F: Edit/Shop Mode + Pantry Staples ✅
 - [x] Migration: `dismissed` column on `grocery_list_items`, `pantry_items` table (004_pantry_and_dismissed.sql)
@@ -90,6 +91,21 @@
 - [x] Grocery page: fetches pantry items, passes `initialPantryItems` to GroceryListView
 - [x] Build + lint + 43 tests passing
 - [ ] **Manual testing**: Verify Edit/Shop flow, dismiss/restore, pantry staples, regeneration auto-dismiss
+
+### 4G: Bug Fixes + UX Improvements (local, not yet pushed)
+- [x] Fix: realtime DELETE filter missing grocery_list_id
+- [x] Fix: removeItem rollback restores to original position
+- [x] Fix: markAsPantryStaple surfaces errors via toast
+- [x] Fix: addGroceryListItem explicit dismissed:false
+- [x] Fix: excludedExpanded/pantryExpanded reset on week nav
+- [x] Fix: timezone bug in week start (toISOString UTC → local date) in GroceryListView, WeeklyPlanner, mealPlans.ts
+- [x] UX: click-outside closes store/actions dropdowns (useClickOutside hook)
+- [x] UX: 3-dot menu + store tag always visible (not hover-only)
+- [x] UX: full row clickable to check off in shop mode
+- [x] Feature: separate Pantry Staples expandable section (emerald styling)
+- [x] Feature: Move to Pinned Staples from 3-dot menu + pin icon badge
+- [x] Feature: Toast component for error/success feedback
+- [ ] Commit + push to deploy
 
 ## Phase 5: Polish
 - [ ] PWA (service worker, offline grocery list, home screen install)

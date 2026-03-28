@@ -63,6 +63,7 @@ export function subscribeToGroceryList(
         event: "DELETE",
         schema: "public",
         table: "grocery_list_items",
+        filter: `grocery_list_id=eq.${groceryListId}`,
       },
       (payload) => {
         callbacks.onDelete({ id: (payload.old as Record<string, unknown>).id as string });

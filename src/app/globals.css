@@ -1,13 +1,171 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --color-primary: #16a34a;
-  --color-primary-dark: #15803d;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
+  --font-sans: var(--font-dm-sans);
+  --font-display: var(--font-fraunces);
+
+  /* Warm cream palette */
+  --color-bg: #FAF6F1;
+  --color-surface: #FFFCF8;
+  --color-primary: #B8462B;
+  --color-primary-dark: #943821;
+  --color-primary-light: #F3DDD7;
+  --color-accent: #6B7F5E;
+  --color-accent-light: #E4EBE0;
+  --color-gold: #C4943D;
+  --color-gold-light: #F5EBD7;
+  --color-text: #2D2319;
+  --color-text-secondary: #7A6E63;
+  --color-text-muted: #A69889;
+  --color-border: #E8DED4;
+  --color-border-light: #F0E9E1;
+  --color-warning: #D4943D;
+  --color-danger: #C44040;
+  --color-danger-light: #F5DADA;
 }
+
+/* ── Base ── */
 
 body {
   margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  position: relative;
+}
+
+/* Subtle paper grain texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.3;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ── Warm shadows ── */
+
+.shadow-warm {
+  box-shadow: 0 1px 3px rgba(45, 35, 25, 0.06), 0 4px 12px rgba(45, 35, 25, 0.04);
+}
+
+.shadow-warm-lg {
+  box-shadow: 0 4px 12px rgba(45, 35, 25, 0.08), 0 12px 28px rgba(45, 35, 25, 0.06);
+}
+
+/* ── Animations ── */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out both;
+}
+
+/* Stagger delays for lists */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+
+/* ── Form elements ── */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[type="number"],
+textarea,
+select {
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="url"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Warm checkboxes */
+input[type="checkbox"] {
+  accent-color: var(--color-primary);
+}
+
+/* ── Card hover lift ── */
+
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(45, 35, 25, 0.1), 0 8px 24px rgba(45, 35, 25, 0.06);
+}
+
+/* ── Scrollbar ── */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ── Custom spinner ── */
+
+.spinner {
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
