@@ -9,6 +9,7 @@ import { formatForClipboard } from "@/lib/groceryExport";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToGroceryList } from "@/lib/supabase/realtime";
 import { useToast, ToastContainer } from "@/components/Toast";
+import CompletionModal from "@/components/CompletionModal";
 
 interface FrequentItem {
   name: string;
@@ -105,16 +106,20 @@ export default function GroceryListView({
   const [newItemStore, setNewItemStore] = useState<StoreName>("trader-joes");
   const [newItemIsWeekly, setNewItemIsWeekly] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [mode, setMode] = useState<"edit" | "shop">("edit");
+  const [mode, setMode] = useState<"edit" | "shop">(
+    initialList?.status === "shop" ? "shop" : "edit",
+  );
   const [pantryItems, setPantryItems] = useState<PantryItem[]>(initialPantryItems);
   const [excludedExpanded, setExcludedExpanded] = useState(false);
   const [pantryExpanded, setPantryExpanded] = useState(false);
   const [pinnedItems, setPinnedItems] = useState<PinnedGroceryItem[]>(initialPinnedItems);
   const [frequentItems, setFrequentItems] = useState<FrequentItem[]>(initialFrequentItems);
   const [closeKey, setCloseKey] = useState(0);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
   const { toasts, showToast } = useToast();
 
   const supabaseRef = useRef(createClient());
+  const hasInteractedRef = useRef(false);
 
   // ── Real-time Subscription ──
   const listId = list?.id ?? null;
@@ -143,6 +148,29 @@ export default function GroceryListView({
       supabase.removeChannel(channel);
     };
   }, [listId]);
+
+  // ── Completion Detection ──
+  // checkedCount/activeCount computed early for the effect
+  const activeItemsForEffect = items.filter((i) => !i.dismissed);
+  const checkedCountForEffect = activeItemsForEffect.filter((i) => i.checked).length;
+  const activeCountForEffect = activeItemsForEffect.length;
+
+  useEffect(() => {
+    if (
+      mode === "shop" &&
+      hasInteractedRef.current &&
+      activeCountForEffect > 0 &&
+      checkedCountForEffect === activeCountForEffect
+    ) {
+      setShowCompletionModal(true);
+    }
+  }, [mode, checkedCountForEffect, activeCountForEffect]);
+
+  // Reset interaction tracking on week change
+  useEffect(() => {
+    hasInteractedRef.current = false;
+    setShowCompletionModal(false);
+  }, [weekStart]);
 
   const currentWeekStart = getCurrentWeekStart();
   const isCurrentWeek = weekStart === currentWeekStart;
@@ -202,6 +230,16 @@ export default function GroceryListView({
         ),
       );
 
+      // Restore mode from persisted status
+      const status = groceryData.list?.status;
+      if (status === "completed") {
+        setMode("edit"); // completed weeks show in read-only edit view
+      } else if (status === "shop") {
+        setMode("shop");
+      } else {
+        setMode("edit");
+      }
+
       const mealRes = await fetch(`/api/meal-plans?week=${week}`);
       if (mealRes.ok) {
         const mealData = await mealRes.json();
@@ -221,7 +259,6 @@ export default function GroceryListView({
   async function navigateWeek(direction: number) {
     const newWeek = shiftWeek(weekStart, direction);
     setWeekStart(newWeek);
-    setMode("edit");
     setExcludedExpanded(false);
     setPantryExpanded(false);
     setAddingItem(null);
@@ -231,7 +268,6 @@ export default function GroceryListView({
 
   async function goToCurrentWeek() {
     setWeekStart(currentWeekStart);
-    setMode("edit");
     setExcludedExpanded(false);
     setPantryExpanded(false);
     setAddingItem(null);
@@ -239,10 +275,70 @@ export default function GroceryListView({
     await fetchWeekData(currentWeekStart);
   }
 
-  function switchMode(newMode: "edit" | "shop") {
+  async function switchMode(newMode: "edit" | "shop") {
     setMode(newMode);
     setAddingItem(null);
     bumpCloseKey();
+
+    if (list) {
+      try {
+        await fetch(`/api/grocery-lists/${list.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newMode }),
+        });
+        setList({ ...list, status: newMode });
+      } catch {
+        // Silent fail — mode is still set locally
+      }
+    }
+  }
+
+  // ── Completion Flow ──
+
+  function dismissCompletionModal() {
+    setShowCompletionModal(false);
+  }
+
+  async function completeWeek() {
+    if (!list) return;
+    setShowCompletionModal(false);
+
+    try {
+      await fetch(`/api/grocery-lists/${list.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "completed",
+          completedAt: new Date().toISOString(),
+        }),
+      });
+      setList({ ...list, status: "completed", completedAt: new Date().toISOString() });
+    } catch {
+      showToast("Failed to mark week as complete");
+      return;
+    }
+
+    // Navigate to next week
+    const nextWeek = shiftWeek(weekStart, 1);
+    setWeekStart(nextWeek);
+    hasInteractedRef.current = false;
+    await fetchWeekData(nextWeek);
+  }
+
+  async function reopenWeek() {
+    if (!list) return;
+    try {
+      await fetch(`/api/grocery-lists/${list.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "edit", completedAt: null }),
+      });
+      setList({ ...list, status: "edit", completedAt: null });
+      setMode("edit");
+    } catch {
+      showToast("Failed to reopen week");
+    }
   }
 
   // ── Generate List ──
@@ -276,6 +372,7 @@ export default function GroceryListView({
   // ── Check/Uncheck (Shop mode) ──
 
   async function toggleCheck(item: GroceryListItem) {
+    hasInteractedRef.current = true;
     const newChecked = !item.checked;
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, checked: newChecked } : i)),
@@ -607,6 +704,7 @@ export default function GroceryListView({
 
   const checkedCount = activeItems.filter((i) => i.checked).length;
   const activeCount = activeItems.length;
+  const isCompleted = list?.status === "completed";
 
   return (
     <div className="space-y-6">
@@ -622,6 +720,11 @@ export default function GroceryListView({
         <div className="text-center">
           <h1 className="font-display text-xl font-semibold tracking-tight text-text">
             {formatWeekLabel(weekStart)}
+            {isCompleted && (
+              <span className="ml-2 inline-block rounded-full bg-accent-light px-2 py-0.5 align-middle text-xs font-medium text-accent">
+                Completed
+              </span>
+            )}
           </h1>
           {!isCurrentWeek && (
             <button
@@ -650,7 +753,7 @@ export default function GroceryListView({
       {!loading && (
         <>
           {/* Generate from meals banner */}
-          {hasMeals && !hasRecipeItems && (
+          {hasMeals && !hasRecipeItems && !isCompleted && (
             <div className="flex items-center justify-between rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-5 py-4">
               <p className="text-sm text-text-secondary">
                 Meals planned &mdash; ready to generate grocery items from recipes
@@ -671,9 +774,11 @@ export default function GroceryListView({
               {/* Summary + Actions */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-text-muted">
-                  {mode === "shop"
-                    ? `${checkedCount}/${activeCount} items checked`
-                    : `${activeCount} items`}
+                  {isCompleted
+                    ? `${activeCount} items`
+                    : mode === "shop"
+                      ? `${checkedCount}/${activeCount} items checked`
+                      : `${activeCount} items`}
                   {dismissedItems.length > 0 && (
                     <span className="ml-1 text-text-muted">
                       ({dismissedItems.length} excluded)
@@ -681,7 +786,14 @@ export default function GroceryListView({
                   )}
                 </p>
                 <div className="flex gap-2">
-                  {mode === "edit" ? (
+                  {isCompleted ? (
+                    <button
+                      onClick={reopenWeek}
+                      className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
+                    >
+                      Reopen
+                    </button>
+                  ) : mode === "edit" ? (
                     <>
                       <button
                         onClick={() => switchMode("shop")}
@@ -731,6 +843,7 @@ export default function GroceryListView({
                         item={item}
                         mode={mode}
                         isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                        isCompleted={!!isCompleted}
                         closeKey={closeKey}
                         onToggle={() => toggleCheck(item)}
                         onDismiss={() => dismissItem(item)}
@@ -743,7 +856,7 @@ export default function GroceryListView({
                     ))}
                   </div>
                   {/* Inline add (edit mode only) */}
-                  {mode === "edit" && (
+                  {mode === "edit" && !isCompleted && (
                     <>
                       {addingItem === group.category ? (
                         renderAddItemForm(group.items[0]?.category ?? null)
@@ -767,7 +880,7 @@ export default function GroceryListView({
               ))}
 
               {/* Add new item (edit mode only) */}
-              {mode === "edit" && activeItems.length > 0 && (
+              {mode === "edit" && !isCompleted && activeItems.length > 0 && (
                 <div>
                   {addingItem === "__new__" ? (
                     renderAddItemForm(null)
@@ -801,6 +914,7 @@ export default function GroceryListView({
                         item={item}
                         mode={mode}
                         isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                        isCompleted={!!isCompleted}
                         closeKey={closeKey}
                         onToggle={() => toggleCheck(item)}
                         onDismiss={() => dismissItem(item)}
@@ -816,7 +930,7 @@ export default function GroceryListView({
               ))}
 
               {/* Frequent items — quick-add as weekly staples */}
-              {mode === "edit" && frequentItems.length > 0 && (
+              {mode === "edit" && !isCompleted && frequentItems.length > 0 && (
                 <div className="rounded-xl bg-primary-light/50 p-3">
                   <h3 className="mb-1.5 text-xs font-medium text-primary">
                     Frequently bought
@@ -840,7 +954,7 @@ export default function GroceryListView({
               )}
 
               {/* Weekly staples management (edit mode) */}
-              {mode === "edit" && pinnedItems.length > 0 && (
+              {mode === "edit" && !isCompleted && pinnedItems.length > 0 && (
                 <div className="rounded-2xl border border-border bg-surface p-4 shadow-warm">
                   <h2 className="mb-2 font-display text-sm font-semibold text-text">
                     Weekly Staples
@@ -873,7 +987,7 @@ export default function GroceryListView({
               )}
 
               {/* Pantry staples section (edit mode only) */}
-              {mode === "edit" && pantryDismissedItems.length > 0 && (
+              {mode === "edit" && !isCompleted && pantryDismissedItems.length > 0 && (
                 <div className="mt-2">
                   <button
                     onClick={() => setPantryExpanded(!pantryExpanded)}
@@ -913,7 +1027,7 @@ export default function GroceryListView({
               )}
 
               {/* Other excluded items section (edit mode only) */}
-              {mode === "edit" && otherDismissedItems.length > 0 && (
+              {mode === "edit" && !isCompleted && otherDismissedItems.length > 0 && (
                 <div className="mt-2">
                   <button
                     onClick={() => setExcludedExpanded(!excludedExpanded)}
@@ -955,6 +1069,12 @@ export default function GroceryListView({
           )}
         </>
       )}
+      {showCompletionModal && (
+        <CompletionModal
+          onGoBack={dismissCompletionModal}
+          onComplete={completeWeek}
+        />
+      )}
     </div>
   );
 }
@@ -965,6 +1085,7 @@ function GroceryItemRow({
   item,
   mode,
   isPinned,
+  isCompleted,
   closeKey,
   onToggle,
   onDismiss,
@@ -977,6 +1098,7 @@ function GroceryItemRow({
   item: GroceryListItem;
   mode: "edit" | "shop";
   isPinned: boolean;
+  isCompleted: boolean;
   closeKey: number;
   onToggle: () => void;
   onDismiss: () => void;
@@ -999,6 +1121,23 @@ function GroceryItemRow({
     setShowStoreMenu(false);
     setShowActions(false);
   }, [closeKey]);
+
+  // Completed: read-only view, no actions
+  if (isCompleted) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 opacity-60">
+        <span className="flex-1 text-sm text-text-muted line-through">
+          {item.name}
+        </span>
+        {qty && (
+          <span className="shrink-0 text-xs text-text-muted">{qty}</span>
+        )}
+        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${storeBadgeClasses(item.store)}`}>
+          {STORE_LABELS[item.store]}
+        </span>
+      </div>
+    );
+  }
 
   if (mode === "shop") {
     // Shop mode: click entire row to toggle

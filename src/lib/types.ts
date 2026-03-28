@@ -86,10 +86,14 @@ export interface MealPlanRecipe {
   servingsOverride: number | null;
 }
 
+export type GroceryListStatus = "edit" | "shop" | "completed";
+
 export interface GroceryList {
   id: string;
   weekStart: string;
   mealPlanId: string | null;
+  status: GroceryListStatus;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
