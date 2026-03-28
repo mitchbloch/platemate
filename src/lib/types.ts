@@ -88,7 +88,8 @@ export interface MealPlanRecipe {
 
 export interface GroceryList {
   id: string;
-  mealPlanId: string;
+  weekStart: string;
+  mealPlanId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +105,7 @@ export interface GroceryListItem {
   checked: boolean;
   dismissed: boolean;
   recipeIds: string[]; // which recipes need this item
+  isManual: boolean;
 }
 
 export type StoreName = "trader-joes" | "whole-foods" | "hmart" | "target" | "other";

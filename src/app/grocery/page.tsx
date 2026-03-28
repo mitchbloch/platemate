@@ -1,7 +1,7 @@
 import Nav from "@/components/Nav";
 import GroceryListView from "@/components/GroceryListView";
 import { getWeekStart, getMealPlanWithRecipes } from "@/lib/mealPlans";
-import { getGroceryListByMealPlan } from "@/lib/groceryList";
+import { getOrCreateGroceryListByWeek } from "@/lib/groceryList";
 import { getPinnedItems, getFrequentItems } from "@/lib/pinnedItems";
 import { getPantryItems } from "@/lib/pantryItems";
 
@@ -10,22 +10,15 @@ export const dynamic = "force-dynamic";
 export default async function GroceryPage() {
   const weekStart = getWeekStart();
 
-  const [{ plan, meals }, pinnedItems, frequentItems, pantryItems] = await Promise.all([
+  const [groceryData, { meals }, pinnedItems, frequentItems, pantryItems] = await Promise.all([
+    getOrCreateGroceryListByWeek(weekStart),
     getMealPlanWithRecipes(weekStart),
     getPinnedItems(),
     getFrequentItems(),
     getPantryItems(),
   ]);
 
-  let groceryData: { list: null; items: [] } | Awaited<ReturnType<typeof getGroceryListByMealPlan>> = {
-    list: null,
-    items: [],
-  };
-
-  if (plan) {
-    const result = await getGroceryListByMealPlan(plan.id);
-    if (result) groceryData = result;
-  }
+  const hasRecipeItems = groceryData.items.some((i) => i.recipeIds.length > 0);
 
   return (
     <>
@@ -36,6 +29,7 @@ export default async function GroceryPage() {
           initialItems={groceryData.items}
           initialWeekStart={weekStart}
           hasMeals={meals.length > 0}
+          hasRecipeItems={hasRecipeItems}
           initialPantryItems={pantryItems}
           initialPinnedItems={pinnedItems}
           initialFrequentItems={frequentItems}

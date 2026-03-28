@@ -1,5 +1,11 @@
 import { createClient } from "./supabase/server";
-import { deduplicateIngredients } from "./ingredientMerge";
+import {
+  deduplicateIngredients,
+  normalizeIngredientName,
+  normalizeUnit,
+} from "./ingredientMerge";
+import { getPinnedItems } from "./pinnedItems";
+import { getPantryItems } from "./pantryItems";
 import type {
   GroceryList,
   GroceryListItem,
@@ -16,7 +22,8 @@ import type {
 function rowToGroceryList(row: Record<string, unknown>): GroceryList {
   return {
     id: row.id as string,
-    mealPlanId: row.meal_plan_id as string,
+    weekStart: row.week_start as string,
+    mealPlanId: (row.meal_plan_id as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -34,40 +41,90 @@ function rowToGroceryListItem(row: Record<string, unknown>): GroceryListItem {
     checked: row.checked as boolean,
     dismissed: row.dismissed as boolean,
     recipeIds: row.recipe_ids as string[],
+    isManual: row.is_manual as boolean,
   };
 }
 
 // ── Read Operations ──
 
-export async function getGroceryListByMealPlan(
-  mealPlanId: string,
-): Promise<GroceryListWithItems | null> {
+async function fetchListItems(
+  listId: string,
+): Promise<GroceryListItem[]> {
   const supabase = await createClient();
-
-  const { data: listData, error: listError } = await supabase
-    .from("grocery_lists")
-    .select("*")
-    .eq("meal_plan_id", mealPlanId)
-    .maybeSingle();
-
-  if (listError) throw listError;
-  if (!listData) return null;
-
-  const list = rowToGroceryList(listData);
-
-  const { data: itemsData, error: itemsError } = await supabase
+  const { data, error } = await supabase
     .from("grocery_list_items")
     .select("*")
-    .eq("grocery_list_id", list.id)
+    .eq("grocery_list_id", listId)
     .order("category")
     .order("name");
+  if (error) throw error;
+  return (data ?? []).map(rowToGroceryListItem);
+}
 
-  if (itemsError) throw itemsError;
+/**
+ * Get or lazily create a grocery list for the given week.
+ * On creation, pre-populates with pinned items (auto-dismissing pantry matches).
+ */
+export async function getOrCreateGroceryListByWeek(
+  weekStart: string,
+): Promise<GroceryListWithItems> {
+  const supabase = await createClient();
 
-  return {
-    list,
-    items: (itemsData ?? []).map(rowToGroceryListItem),
-  };
+  // Try to find existing list
+  const { data: existing, error: findError } = await supabase
+    .from("grocery_lists")
+    .select("*")
+    .eq("week_start", weekStart)
+    .maybeSingle();
+
+  if (findError) throw findError;
+
+  if (existing) {
+    const list = rowToGroceryList(existing);
+    const items = await fetchListItems(list.id);
+    return { list, items };
+  }
+
+  // Create new list (no meal_plan_id yet)
+  const { data: newList, error: createError } = await supabase
+    .from("grocery_lists")
+    .insert({ week_start: weekStart })
+    .select()
+    .single();
+
+  if (createError) throw createError;
+  const list = rowToGroceryList(newList);
+
+  // Pre-populate with pinned items
+  const [pinnedItems, pantryItems] = await Promise.all([
+    getPinnedItems(),
+    getPantryItems(),
+  ]);
+  const pantryNames = new Set(
+    pantryItems.map((p) => p.name.toLowerCase().trim()),
+  );
+
+  if (pinnedItems.length > 0) {
+    const rows = pinnedItems.map((pinned) => ({
+      grocery_list_id: list.id,
+      name: pinned.name,
+      quantity: pinned.quantity,
+      unit: pinned.unit,
+      category: categoryToDb(pinned.category),
+      store: pinned.store,
+      checked: false,
+      dismissed: pantryNames.has(pinned.name.toLowerCase().trim()),
+      recipe_ids: [],
+      is_manual: true,
+    }));
+    const { error: insertError } = await supabase
+      .from("grocery_list_items")
+      .insert(rows);
+    if (insertError) throw insertError;
+  }
+
+  const items = await fetchListItems(list.id);
+  return { list, items };
 }
 
 // ── Generate ──
@@ -91,54 +148,151 @@ export function generateGroceryItems(
 
 // ── Write Operations ──
 
-export async function saveGroceryList(
-  mealPlanId: string,
-  items: MergedIngredient[],
-  pantryNames: Set<string> = new Set(),
+/**
+ * Merge recipe-derived items into an existing grocery list, preserving manual items.
+ *
+ * 1. Delete items where is_manual = false (previous recipe-derived items)
+ * 2. Clear recipe_ids on remaining manual items
+ * 3. For each recipe item: name-match → merge into manual item, or insert new
+ */
+export async function mergeRecipeItemsIntoList(
+  listId: string,
+  mealPlanId: string | null,
+  recipeItems: MergedIngredient[],
+  pantryNames: Set<string>,
 ): Promise<GroceryListWithItems> {
   const supabase = await createClient();
 
-  // Delete existing list for this meal plan (regeneration)
-  await supabase
-    .from("grocery_lists")
-    .delete()
-    .eq("meal_plan_id", mealPlanId);
-
-  // Create new list
-  const { data: listData, error: listError } = await supabase
-    .from("grocery_lists")
-    .insert({ meal_plan_id: mealPlanId })
-    .select()
-    .single();
-
-  if (listError) throw listError;
-  const list = rowToGroceryList(listData);
-
-  // Insert items (auto-dismiss pantry staples)
-  const rows = items.map((item) => ({
-    grocery_list_id: list.id,
-    name: item.displayName,
-    quantity: item.quantity,
-    unit: item.unit,
-    category: categoryToDb(item.category),
-    store: item.store,
-    checked: false,
-    dismissed: pantryNames.has(item.name.toLowerCase().trim()),
-    recipe_ids: item.recipeIds,
-  }));
-
-  if (rows.length > 0) {
-    const { error: itemsError } = await supabase
-      .from("grocery_list_items")
-      .insert(rows);
-
-    if (itemsError) throw itemsError;
+  // Link meal plan if provided
+  if (mealPlanId) {
+    await supabase
+      .from("grocery_lists")
+      .update({ meal_plan_id: mealPlanId })
+      .eq("id", listId);
   }
 
-  // Re-fetch to get IDs
-  const result = await getGroceryListByMealPlan(mealPlanId);
-  if (!result) throw new Error("Failed to fetch saved grocery list");
-  return result;
+  // Fetch existing items
+  const { data: existingData, error: fetchError } = await supabase
+    .from("grocery_list_items")
+    .select("*")
+    .eq("grocery_list_id", listId);
+  if (fetchError) throw fetchError;
+
+  const existingItems = (existingData ?? []).map(rowToGroceryListItem);
+  const manualItems = existingItems.filter((i) => i.isManual);
+  const recipeDerivedItems = existingItems.filter((i) => !i.isManual);
+
+  // Delete all previous recipe-derived items
+  if (recipeDerivedItems.length > 0) {
+    const ids = recipeDerivedItems.map((i) => i.id);
+    await supabase.from("grocery_list_items").delete().in("id", ids);
+  }
+
+  // Clear recipe_ids on all manual items (will re-merge below)
+  if (manualItems.length > 0) {
+    const manualIds = manualItems.map((i) => i.id);
+    await supabase
+      .from("grocery_list_items")
+      .update({ recipe_ids: [] })
+      .in("id", manualIds);
+  }
+
+  // Build lookup of manual items by normalized name
+  const manualByName = new Map<string, GroceryListItem>();
+  for (const item of manualItems) {
+    manualByName.set(normalizeIngredientName(item.name), item);
+  }
+
+  const toInsert: Array<Record<string, unknown>> = [];
+  const mergedManualIds = new Set<string>();
+
+  for (const recipeItem of recipeItems) {
+    const normalizedName = recipeItem.name; // already normalized
+    const matchingManual = manualByName.get(normalizedName);
+
+    if (matchingManual && !mergedManualIds.has(matchingManual.id)) {
+      // Merge: update the manual item with recipe info
+      mergedManualIds.add(matchingManual.id);
+      const merged = mergeManualAndRecipeQuantity(
+        matchingManual.quantity,
+        matchingManual.unit,
+        recipeItem.quantity,
+        recipeItem.unit,
+      );
+      await supabase
+        .from("grocery_list_items")
+        .update({
+          recipe_ids: recipeItem.recipeIds,
+          quantity: merged.quantity,
+          unit: merged.unit,
+          dismissed: pantryNames.has(normalizedName),
+        })
+        .eq("id", matchingManual.id);
+    } else {
+      // Insert new recipe-derived item
+      toInsert.push({
+        grocery_list_id: listId,
+        name: recipeItem.displayName,
+        quantity: recipeItem.quantity,
+        unit: recipeItem.unit,
+        category: categoryToDb(recipeItem.category),
+        store: recipeItem.store,
+        checked: false,
+        dismissed: pantryNames.has(normalizedName),
+        recipe_ids: recipeItem.recipeIds,
+        is_manual: false,
+      });
+    }
+  }
+
+  if (toInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from("grocery_list_items")
+      .insert(toInsert);
+    if (insertError) throw insertError;
+  }
+
+  // Re-fetch the full list
+  const { data: listData, error: listError } = await supabase
+    .from("grocery_lists")
+    .select("*")
+    .eq("id", listId)
+    .single();
+  if (listError) throw listError;
+
+  const list = rowToGroceryList(listData);
+  const items = await fetchListItems(list.id);
+  return { list, items };
+}
+
+/**
+ * Merge manual and recipe quantities.
+ * Same unit → sum. Different units → keep recipe (authoritative).
+ */
+export function mergeManualAndRecipeQuantity(
+  manualQty: number | null,
+  manualUnit: string | null,
+  recipeQty: number | null,
+  recipeUnit: string | null,
+): { quantity: number | null; unit: string | null } {
+  const normManualUnit = normalizeUnit(manualUnit);
+  const normRecipeUnit = normalizeUnit(recipeUnit);
+
+  if (normManualUnit === normRecipeUnit) {
+    if (manualQty !== null && recipeQty !== null) {
+      return {
+        quantity: Math.round((manualQty + recipeQty) * 100) / 100,
+        unit: normRecipeUnit,
+      };
+    }
+    return {
+      quantity: recipeQty ?? manualQty,
+      unit: normRecipeUnit ?? normManualUnit,
+    };
+  }
+
+  // Different units: recipe is authoritative
+  return { quantity: recipeQty, unit: normRecipeUnit };
 }
 
 export async function addGroceryListItem(
@@ -165,6 +319,7 @@ export async function addGroceryListItem(
       checked: false,
       dismissed: false,
       recipe_ids: [],
+      is_manual: true,
     })
     .select()
     .single();

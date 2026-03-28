@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMealPlanWithRecipes, getMealPlanByWeek } from "@/lib/mealPlans";
+import { getMealPlanWithRecipes } from "@/lib/mealPlans";
 import {
   generateGroceryItems,
-  getGroceryListByMealPlan,
-  saveGroceryList,
+  getOrCreateGroceryListByWeek,
+  mergeRecipeItemsIntoList,
 } from "@/lib/groceryList";
-import { getPinnedItems } from "@/lib/pinnedItems";
 import { getPantryItems } from "@/lib/pantryItems";
-import type { MergedIngredient } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,13 +17,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const plan = await getMealPlanByWeek(week);
-    if (!plan) {
-      return NextResponse.json({ list: null, items: [] });
-    }
-
-    const result = await getGroceryListByMealPlan(plan.id);
-    return NextResponse.json(result ?? { list: null, items: [] });
+    const result = await getOrCreateGroceryListByWeek(week);
+    return NextResponse.json(result);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch grocery list";
@@ -45,52 +38,34 @@ export async function POST(request: NextRequest) {
     }
 
     const { plan, meals } = await getMealPlanWithRecipes(body.weekStart);
-    if (!plan) {
+    if (!plan || meals.length === 0) {
       return NextResponse.json(
-        { error: "No meal plan found for this week" },
-        { status: 404 },
-      );
-    }
-
-    if (meals.length === 0) {
-      return NextResponse.json(
-        { error: "Meal plan has no recipes. Add meals first." },
+        { error: "No meals to generate from. Add meals first." },
         { status: 400 },
       );
     }
 
-    const mergedItems = generateGroceryItems(meals);
+    // Get or create the list for this week
+    const { list } = await getOrCreateGroceryListByWeek(body.weekStart);
 
-    // Add pinned items (staples like bananas, milk, yogurt)
-    const pinnedItems = await getPinnedItems();
-    for (const pinned of pinnedItems) {
-      // Map pinned display category to a grocery display category
-      const displayCat = pinned.category;
-      // Check if already in list (by normalized name)
-      const normalizedPinnedName = pinned.name.toLowerCase().trim();
-      const alreadyInList = mergedItems.some(
-        (i) => i.name === normalizedPinnedName,
-      );
-      if (!alreadyInList) {
-        mergedItems.push({
-          name: normalizedPinnedName,
-          displayName: pinned.name,
-          quantity: pinned.quantity,
-          unit: pinned.unit,
-          category: displayCat,
-          store: pinned.store,
-          recipeIds: [],
-        } satisfies MergedIngredient);
-      }
-    }
+    // Generate recipe items from meals
+    const recipeItems = generateGroceryItems(meals);
 
     // Build pantry names set for auto-dismissal
     const pantryItems = await getPantryItems();
-    const pantryNames = new Set(pantryItems.map((p) => p.name.toLowerCase().trim()));
+    const pantryNames = new Set(
+      pantryItems.map((p) => p.name.toLowerCase().trim()),
+    );
 
-    const result = await saveGroceryList(plan.id, mergedItems, pantryNames);
+    // Merge recipe items into existing list (preserves manual items)
+    const result = await mergeRecipeItemsIntoList(
+      list.id,
+      plan.id,
+      recipeItems,
+      pantryNames,
+    );
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(result);
   } catch (error) {
     const message =
       error instanceof Error

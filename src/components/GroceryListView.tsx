@@ -22,6 +22,7 @@ interface GroceryListViewProps {
   initialItems: GroceryListItem[];
   initialWeekStart: string;
   hasMeals: boolean;
+  hasRecipeItems: boolean;
   initialPantryItems: PantryItem[];
   initialPinnedItems: PinnedGroceryItem[];
   initialFrequentItems: FrequentItem[];
@@ -86,6 +87,7 @@ export default function GroceryListView({
   initialItems,
   initialWeekStart,
   hasMeals: initialHasMeals,
+  hasRecipeItems: initialHasRecipeItems,
   initialPantryItems,
   initialPinnedItems,
   initialFrequentItems,
@@ -94,6 +96,7 @@ export default function GroceryListView({
   const [list, setList] = useState<GroceryList | null>(initialList);
   const [items, setItems] = useState<GroceryListItem[]>(initialItems);
   const [hasMeals, setHasMeals] = useState(initialHasMeals);
+  const [hasRecipeItems, setHasRecipeItems] = useState(initialHasRecipeItems);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [addingItem, setAddingItem] = useState<string | null>(null);
@@ -191,8 +194,13 @@ export default function GroceryListView({
       const groceryRes = await fetch(`/api/grocery-lists?week=${week}`);
       if (!groceryRes.ok) throw new Error("Failed to fetch");
       const groceryData = await groceryRes.json();
-      setList(groceryData.list ?? null);
+      setList(groceryData.list);
       setItems(groceryData.items ?? []);
+      setHasRecipeItems(
+        (groceryData.items ?? []).some(
+          (i: GroceryListItem) => i.recipeIds.length > 0,
+        ),
+      );
 
       const mealRes = await fetch(`/api/meal-plans?week=${week}`);
       if (mealRes.ok) {
@@ -255,6 +263,7 @@ export default function GroceryListView({
       const data = await res.json();
       setList(data.list);
       setItems(data.items);
+      setHasRecipeItems(true);
       setMode("edit");
       bumpCloseKey();
     } catch {
@@ -640,36 +649,23 @@ export default function GroceryListView({
 
       {!loading && (
         <>
-          {/* No meal plan state */}
-          {!hasMeals && !list && (
-            <div className="rounded-2xl border-2 border-dashed border-border py-12 text-center">
-              <p className="mb-2 text-text-muted">No meals planned for this week</p>
-              <a
-                href="/plan"
-                className="text-sm font-medium text-primary hover:text-primary-dark transition-colors"
-              >
-                Plan some meals first
-              </a>
-            </div>
-          )}
-
-          {/* Has meals but no list generated */}
-          {hasMeals && !list && (
-            <div className="rounded-2xl border-2 border-dashed border-border py-12 text-center">
-              <p className="mb-3 text-text-muted">
-                Ready to generate your grocery list from this week&apos;s meals
+          {/* Generate from meals banner */}
+          {hasMeals && !hasRecipeItems && (
+            <div className="flex items-center justify-between rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-5 py-4">
+              <p className="text-sm text-text-secondary">
+                Meals planned &mdash; ready to generate grocery items from recipes
               </p>
               <button
                 onClick={generateList}
                 disabled={generating}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark disabled:opacity-50"
               >
-                {generating ? "Generating..." : "Generate Grocery List"}
+                {generating ? "Generating..." : "Generate from Meals"}
               </button>
             </div>
           )}
 
-          {/* List exists */}
+          {/* List content */}
           {list && (
             <>
               {/* Summary + Actions */}
@@ -693,13 +689,15 @@ export default function GroceryListView({
                       >
                         Ready to Shop
                       </button>
-                      <button
-                        onClick={generateList}
-                        disabled={generating}
-                        className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light disabled:opacity-50"
-                      >
-                        {generating ? "..." : "Regenerate"}
-                      </button>
+                      {hasMeals && hasRecipeItems && (
+                        <button
+                          onClick={generateList}
+                          disabled={generating}
+                          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light disabled:opacity-50"
+                        >
+                          {generating ? "..." : "Regenerate"}
+                        </button>
+                      )}
                     </>
                   ) : (
                     <>

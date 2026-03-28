@@ -15,6 +15,7 @@ function payloadToGroceryListItem(
     checked: payload.checked as boolean,
     dismissed: payload.dismissed as boolean,
     recipeIds: payload.recipe_ids as string[],
+    isManual: payload.is_manual as boolean,
   };
 }
 
