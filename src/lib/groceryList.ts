@@ -378,7 +378,7 @@ export async function updateGroceryListItem(
     name: string;
     quantity: number | null;
     unit: string | null;
-    category: IngredientCategory;
+    category: string;
     store: StoreName;
     checked: boolean;
     dismissed: boolean;
@@ -391,7 +391,7 @@ export async function updateGroceryListItem(
   if (updates.name !== undefined) row.name = updates.name;
   if (updates.quantity !== undefined) row.quantity = updates.quantity;
   if (updates.unit !== undefined) row.unit = updates.unit;
-  if (updates.category !== undefined) row.category = updates.category;
+  if (updates.category !== undefined) row.category = categoryToDb(updates.category);
   if (updates.store !== undefined) row.store = updates.store;
   if (updates.checked !== undefined) row.checked = updates.checked;
   if (updates.dismissed !== undefined) row.dismissed = updates.dismissed;

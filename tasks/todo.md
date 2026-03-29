@@ -113,6 +113,10 @@
 - [x] Bug: add-item category selection ignored — fixed: categoryToDb() now called in addGroceryListItem(), passes through valid IngredientCategory values
 - [x] Feature: optional quantity field on add-item form — added qty + unit inputs, wired to existing API/DAL
 - [x] Bug: fuzzy ingredient matching — fixed: normalize hyphens, compound words (nonfat/non-fat/non fat), parentheticals, trailing commas; 4 new tests
+- [x] Feature: inline item editing — "Edit item" in 3-dot menu opens inline form (name, qty, unit, category, store)
+- [x] UX: quantity displayed more prominently before item name (text-sm font-medium)
+- [x] Bug: add-item form closing prematurely when interacting with non-name fields — moved onBlur to form level with relatedTarget check
+- [x] Bug: updateGroceryListItem now converts display categories via categoryToDb()
 
 ## Phase 5: Polish & Growth
 - [ ] iOS/mobile experience (evaluate PWA vs React Native vs Capacitor)
