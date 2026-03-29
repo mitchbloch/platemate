@@ -1102,25 +1102,32 @@ export default function GroceryListView({
                     Auto-added to every grocery list.
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    {pinnedItems.map((item) => (
-                      <span
-                        key={item.id}
-                        className="group flex items-center gap-1 rounded-full border border-primary/20 bg-primary-light/30 px-2.5 py-1 text-xs text-primary"
-                      >
-                        {item.name}
-                        {item.store !== "trader-joes" && (
-                          <span className={`ml-0.5 rounded px-1 py-0.5 text-[10px] ${storeBadgeClasses(item.store)}`}>
-                            {STORE_LABELS[item.store]}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => removeWeeklyStaple(item.name)}
-                          className="ml-0.5 text-primary/40 transition-colors hover:text-danger"
+                    {pinnedItems.map((pinned) => {
+                      const matchingItem = items.find(
+                        (i) => i.name.toLowerCase().trim() === pinned.name.toLowerCase().trim() && !i.dismissed,
+                      );
+                      if (!matchingItem) return null;
+                      return (
+                        <span
+                          key={pinned.id}
+                          className="group flex items-center gap-1 rounded-full border border-primary/20 bg-primary-light/30 px-2.5 py-1 text-xs text-primary"
                         >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
+                          {pinned.name}
+                          {pinned.store !== "trader-joes" && (
+                            <span className={`ml-0.5 rounded px-1 py-0.5 text-[10px] ${storeBadgeClasses(pinned.store)}`}>
+                              {STORE_LABELS[pinned.store]}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => dismissItem(matchingItem)}
+                            className="ml-0.5 text-primary/40 transition-colors hover:text-danger"
+                            title="Skip this week"
+                          >
+                            &times;
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1152,12 +1159,23 @@ export default function GroceryListView({
                               </span>
                             )}
                           </div>
-                          <button
-                            onClick={() => restoreItem(item)}
-                            className="text-xs font-medium text-primary hover:text-primary-dark transition-colors"
-                          >
-                            Restore
-                          </button>
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => restoreItem(item)}
+                              className="text-xs font-medium text-primary hover:text-primary-dark transition-colors"
+                            >
+                              Restore
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await restoreItem(item);
+                                setEditingItemId(item.id);
+                              }}
+                              className="text-xs font-medium text-text-secondary hover:text-text transition-colors"
+                            >
+                              Restore &amp; Edit
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1493,15 +1511,17 @@ function GroceryItemRow({
             >
               Edit item
             </button>
-            <button
-              onClick={() => {
-                onDismiss();
-                setShowActions(false);
-              }}
-              className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
-            >
-              Have this already
-            </button>
+            {!isPinned && (
+              <button
+                onClick={() => {
+                  onDismiss();
+                  setShowActions(false);
+                }}
+                className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
+              >
+                Have this already
+              </button>
+            )}
             <button
               onClick={() => {
                 onMarkPantry();
@@ -1522,15 +1542,26 @@ function GroceryItemRow({
                 Add as weekly staple
               </button>
             ) : (
-              <button
-                onClick={() => {
-                  onRemoveWeekly();
-                  setShowActions(false);
-                }}
-                className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-muted transition-colors hover:bg-border-light"
-              >
-                Remove weekly staple
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    onDismiss();
+                    setShowActions(false);
+                  }}
+                  className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-border-light"
+                >
+                  Skip this week
+                </button>
+                <button
+                  onClick={() => {
+                    onRemoveWeekly();
+                    setShowActions(false);
+                  }}
+                  className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs text-text-muted transition-colors hover:bg-border-light"
+                >
+                  Remove weekly staple
+                </button>
+              </>
             )}
             <button
               onClick={() => {
