@@ -118,6 +118,13 @@
 - [x] Bug: add-item form closing prematurely when interacting with non-name fields — moved onBlur to form level with relatedTarget check
 - [x] Bug: updateGroceryListItem now converts display categories via categoryToDb()
 
+### 4J: Staple Improvements ✅
+- [x] Feature: per-week weekly staple skip — "Skip this week" dismisses for current week only, item re-appears next week
+- [x] UX: weekly staple header chip × button now skips this week (was: global unpin)
+- [x] UX: "Have this already" hidden for weekly staples (redundant with "Skip this week")
+- [x] Feature: "Restore & Edit" in pantry staples section — restore + open inline edit to change quantity
+- [x] Build passing, 57 tests
+
 ## Phase 5: Polish & Growth
 - [ ] iOS/mobile experience (evaluate PWA vs React Native vs Capacitor)
 - [ ] Multi-household support (household entity, scoped RLS, shared data)
