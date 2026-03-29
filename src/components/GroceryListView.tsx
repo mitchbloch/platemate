@@ -133,6 +133,7 @@ export default function GroceryListView({
   const [pantryExpanded, setPantryExpanded] = useState(false);
   const [pinnedItems, setPinnedItems] = useState<PinnedGroceryItem[]>(initialPinnedItems);
   const [frequentItems, setFrequentItems] = useState<FrequentItem[]>(initialFrequentItems);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [closeKey, setCloseKey] = useState(0);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const { toasts, showToast } = useToast();
@@ -640,6 +641,44 @@ export default function GroceryListView({
     }
   }
 
+  // ── Edit Item (Edit mode) ──
+
+  async function editItem(
+    item: GroceryListItem,
+    updates: { name: string; quantity: number | null; unit: string | null; category: string; store: StoreName },
+  ) {
+    const oldItem = { ...item };
+    // Map display category to ingredient category for optimistic update
+    const DISPLAY_TO_INGREDIENT: Record<string, IngredientCategory> = {
+      protein: "meat",
+      produce: "produce",
+      dairy: "dairy",
+      snacks: "other",
+      other: "other",
+    };
+    const dbCategory = DISPLAY_TO_INGREDIENT[updates.category] ?? (updates.category as IngredientCategory);
+    // Optimistic update with typed category
+    setItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, ...updates, category: dbCategory } : i)),
+    );
+    setEditingItemId(null);
+
+    try {
+      const res = await fetch(`/api/grocery-lists/${list!.id}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id, ...updates }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+    } catch {
+      // Revert on failure
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? oldItem : i)),
+      );
+      showToast("Failed to update item", "error");
+    }
+  }
+
   // ── Reorder (Edit mode) ──
 
   async function handleReorder(groupItems: GroceryListItem[], activeId: string, overId: string) {
@@ -702,6 +741,12 @@ export default function GroceryListView({
           }
           addItem();
         }}
+        onBlur={(e) => {
+          // Close form only if focus leaves the form entirely and name is empty
+          if (!e.currentTarget.contains(e.relatedTarget) && !newItemName.trim()) {
+            setTimeout(() => setAddingItem(null), 150);
+          }
+        }}
         className="mt-2 space-y-2 rounded-xl border border-border bg-surface p-3"
       >
         <input
@@ -710,11 +755,6 @@ export default function GroceryListView({
           onChange={(e) => setNewItemName(e.target.value)}
           placeholder="Item name..."
           className="w-full rounded-lg border border-border bg-bg px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          onBlur={() => {
-            if (!newItemName.trim()) {
-              setTimeout(() => setAddingItem(null), 150);
-            }
-          }}
         />
         <div className="flex gap-2">
           <input
@@ -937,6 +977,10 @@ export default function GroceryListView({
                           onRemoveWeekly={() => removeWeeklyStaple(item.name)}
                           onRemove={() => removeItem(item)}
                           onChangeStore={(store) => changeStore(item, store)}
+                          isEditing={editingItemId === item.id}
+                          onStartEdit={() => setEditingItemId(item.id)}
+                          onSaveEdit={(updates) => editItem(item, updates)}
+                          onCancelEdit={() => setEditingItemId(null)}
                         />
                       </SortableItemWrapper>
                     ))}
@@ -1013,6 +1057,10 @@ export default function GroceryListView({
                           onRemoveWeekly={() => removeWeeklyStaple(item.name)}
                           onRemove={() => removeItem(item)}
                           onChangeStore={(store) => changeStore(item, store)}
+                          isEditing={editingItemId === item.id}
+                          onStartEdit={() => setEditingItemId(item.id)}
+                          onSaveEdit={(updates) => editItem(item, updates)}
+                          onCancelEdit={() => setEditingItemId(null)}
                         />
                       </SortableItemWrapper>
                     ))}
@@ -1185,6 +1233,10 @@ function GroceryItemRow({
   onRemoveWeekly,
   onRemove,
   onChangeStore,
+  isEditing,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
 }: {
   item: GroceryListItem;
   mode: "edit" | "shop";
@@ -1198,9 +1250,18 @@ function GroceryItemRow({
   onRemoveWeekly: () => void;
   onRemove: () => void;
   onChangeStore: (store: StoreName) => void;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onSaveEdit: (updates: { name: string; quantity: number | null; unit: string | null; category: string; store: StoreName }) => void;
+  onCancelEdit: () => void;
 }) {
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [editName, setEditName] = useState(item.name);
+  const [editQuantity, setEditQuantity] = useState(item.quantity?.toString() ?? "");
+  const [editUnit, setEditUnit] = useState(item.unit ?? "");
+  const [editCategory, setEditCategory] = useState(toDisplayCategory(item.category));
+  const [editStore, setEditStore] = useState(item.store);
   const storeMenuRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   useClickOutside(storeMenuRef, () => setShowStoreMenu(false));
@@ -1213,6 +1274,28 @@ function GroceryItemRow({
     setShowActions(false);
   }, [closeKey]);
 
+  // Reset edit form when entering edit mode
+  useEffect(() => {
+    if (isEditing) {
+      setEditName(item.name);
+      setEditQuantity(item.quantity?.toString() ?? "");
+      setEditUnit(item.unit ?? "");
+      setEditCategory(toDisplayCategory(item.category));
+      setEditStore(item.store);
+    }
+  }, [isEditing, item.name, item.quantity, item.unit, item.category, item.store]);
+
+  function handleSaveEdit() {
+    if (!editName.trim()) return;
+    onSaveEdit({
+      name: editName.trim(),
+      quantity: parseFloat(editQuantity) || null,
+      unit: editUnit.trim() || null,
+      category: editCategory,
+      store: editStore,
+    });
+  }
+
   // Completed: read-only view, no actions
   if (isCompleted) {
     return (
@@ -1221,7 +1304,7 @@ function GroceryItemRow({
           {item.name}
         </span>
         {qty && (
-          <span className="shrink-0 text-xs text-text-muted">{qty}</span>
+          <span className="shrink-0 text-xs font-medium text-text-muted">{qty}</span>
         )}
         <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${storeBadgeClasses(item.store)}`}>
           {STORE_LABELS[item.store]}
@@ -1253,13 +1336,13 @@ function GroceryItemRow({
         >
           {item.name}
         </span>
+        {qty && (
+          <span className={`shrink-0 text-xs font-medium ${item.checked ? "text-text-muted" : "text-text-secondary"}`}>{qty}</span>
+        )}
         {isPinned && (
           <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-[10px] font-medium text-primary">
             weekly
           </span>
-        )}
-        {qty && (
-          <span className="shrink-0 text-xs text-text-muted">{qty}</span>
         )}
         <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${storeBadgeClasses(item.store)}`}>
           {STORE_LABELS[item.store]}
@@ -1268,17 +1351,93 @@ function GroceryItemRow({
     );
   }
 
+  // Edit mode: inline editing form
+  if (isEditing) {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSaveEdit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancelEdit();
+        }}
+        className="space-y-2 rounded-xl border border-primary bg-surface p-3"
+      >
+        <input
+          autoFocus
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          placeholder="Item name..."
+          className="w-full rounded-lg border border-border bg-bg px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+        />
+        <div className="flex gap-2">
+          <input
+            value={editQuantity}
+            onChange={(e) => setEditQuantity(e.target.value)}
+            placeholder="Qty"
+            type="number"
+            min="0"
+            step="any"
+            className="w-16 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          />
+          <input
+            value={editUnit}
+            onChange={(e) => setEditUnit(e.target.value)}
+            placeholder="Unit (lbs, oz, pkg...)"
+            className="w-40 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={editCategory}
+            onChange={(e) => setEditCategory(e.target.value as GroceryDisplayCategory)}
+            className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          >
+            {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+          <select
+            value={editStore}
+            onChange={(e) => setEditStore(e.target.value as StoreName)}
+            className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          >
+            {Object.entries(STORE_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    );
+  }
+
   // Edit mode: dismiss, store change, remove, mark pantry
   return (
     <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors hover:bg-border-light">
       <span className="flex-1 text-sm text-text">{item.name}</span>
+      {qty && (
+        <span className="shrink-0 text-xs font-medium text-text-secondary">{qty}</span>
+      )}
       {isPinned && (
         <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-[10px] font-medium text-primary">
           weekly
         </span>
-      )}
-      {qty && (
-        <span className="shrink-0 text-xs text-text-muted">{qty}</span>
       )}
 
       {/* Store badge — always visible, clickable to change */}
@@ -1325,6 +1484,15 @@ function GroceryItemRow({
         </button>
         {showActions && (
           <div className="absolute right-0 top-full z-10 mt-1 min-w-[180px] rounded-xl border border-border bg-surface py-1 shadow-warm-lg">
+            <button
+              onClick={() => {
+                onStartEdit();
+                setShowActions(false);
+              }}
+              className="block w-full whitespace-nowrap px-3 py-2 text-left text-xs font-medium text-text transition-colors hover:bg-border-light"
+            >
+              Edit item
+            </button>
             <button
               onClick={() => {
                 onDismiss();
