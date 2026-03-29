@@ -121,6 +121,8 @@ export default function GroceryListView({
   const [newItemName, setNewItemName] = useState("");
   const [newItemCategory, setNewItemCategory] = useState<GroceryDisplayCategory>("other");
   const [newItemStore, setNewItemStore] = useState<StoreName>("trader-joes");
+  const [newItemQuantity, setNewItemQuantity] = useState("");
+  const [newItemUnit, setNewItemUnit] = useState("");
   const [newItemIsWeekly, setNewItemIsWeekly] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"edit" | "shop">(
@@ -528,10 +530,14 @@ export default function GroceryListView({
     const name = newItemName.trim();
     const category = newItemCategory;
     const store = newItemStore;
+    const quantity = parseFloat(newItemQuantity) || null;
+    const unit = newItemUnit.trim() || null;
     const isWeekly = newItemIsWeekly;
 
     // Reset form
     setNewItemName("");
+    setNewItemQuantity("");
+    setNewItemUnit("");
     setNewItemCategory("other");
     setNewItemStore("trader-joes");
     setNewItemIsWeekly(false);
@@ -542,7 +548,7 @@ export default function GroceryListView({
       const res = await fetch(`/api/grocery-lists/${list.id}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, category, store }),
+        body: JSON.stringify({ name, category, store, quantity, unit }),
       });
       if (!res.ok) throw new Error("Failed to add");
       const newItem = await res.json();
@@ -710,6 +716,23 @@ export default function GroceryListView({
             }
           }}
         />
+        <div className="flex gap-2">
+          <input
+            value={newItemQuantity}
+            onChange={(e) => setNewItemQuantity(e.target.value)}
+            placeholder="Qty"
+            type="number"
+            min="0"
+            step="any"
+            className="w-16 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          />
+          <input
+            value={newItemUnit}
+            onChange={(e) => setNewItemUnit(e.target.value)}
+            placeholder="Unit (lbs, oz, pkg...)"
+            className="w-40 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+          />
+        </div>
         <div className="flex flex-wrap gap-2">
           <select
             value={newItemCategory}

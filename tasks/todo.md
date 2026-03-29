@@ -90,25 +90,34 @@
 - [x] Collapsed "Excluded" section with restore + pantry staple labeling
 - [x] Grocery page: fetches pantry items, passes `initialPantryItems` to GroceryListView
 - [x] Build + lint + 43 tests passing
-- [ ] **Manual testing**: Verify Edit/Shop flow, dismiss/restore, pantry staples, regeneration auto-dismiss
+- [x] **Manual testing**: Edit/Shop flow, dismiss/restore, pantry staples verified
 
-### 4G: Bug Fixes + UX Improvements (local, not yet pushed)
-- [x] Fix: realtime DELETE filter missing grocery_list_id
-- [x] Fix: removeItem rollback restores to original position
-- [x] Fix: markAsPantryStaple surfaces errors via toast
-- [x] Fix: addGroceryListItem explicit dismissed:false
-- [x] Fix: excludedExpanded/pantryExpanded reset on week nav
-- [x] Fix: timezone bug in week start (toISOString UTC → local date) in GroceryListView, WeeklyPlanner, mealPlans.ts
-- [x] UX: click-outside closes store/actions dropdowns (useClickOutside hook)
-- [x] UX: 3-dot menu + store tag always visible (not hover-only)
-- [x] UX: full row clickable to check off in shop mode
-- [x] Feature: separate Pantry Staples expandable section (emerald styling)
-- [x] Feature: Move to Pinned Staples from 3-dot menu + pin icon badge
-- [x] Feature: Toast component for error/success feedback
-- [ ] Commit + push to deploy
+### 4G: Bug Fixes + UX Improvements ✅
+- [x] Fix: realtime DELETE filter, removeItem rollback, markAsPantryStaple toast, explicit dismissed:false, excludedExpanded reset
+- [x] Fix: timezone bug in week start (toISOString UTC → local date)
+- [x] UX: click-outside dropdowns, visible 3-dot menu + store tags, full-row click in shop mode
+- [x] Feature: Pantry Staples section, Move to Weekly Staples, Toast component
+- [x] UX: unified add-item flow (category/store/weekly staple), renamed Pinned → Weekly Staples
+- [x] UX: colored store badges on all items, dropdown auto-close on mode/week nav
+- [x] Commit + push to deploy
 
-## Phase 5: Polish
-- [ ] PWA (service worker, offline grocery list, home screen install)
+### 4H: Shopping Flow + Drag Reorder ✅
+- [x] Shopping mode persistence (status column on grocery_lists, survives navigation)
+- [x] Completion flow: modal on all-checked → "Complete & Next Week" or "Go Back"
+- [x] Read-only completed weeks with "Reopen" option
+- [x] Smart week defaulting: both Plan and Grocery tabs advance after completing current week
+- [x] Drag-to-reorder items within groups (edit mode only, @dnd-kit, sort_order column)
+- [x] Bulk reorder API endpoint, optimistic UI, realtime sync
+
+### 4I: Grocery List Bugs + UX ✅
+- [x] Bug: add-item category selection ignored — fixed: categoryToDb() now called in addGroceryListItem(), passes through valid IngredientCategory values
+- [x] Feature: optional quantity field on add-item form — added qty + unit inputs, wired to existing API/DAL
+- [x] Bug: fuzzy ingredient matching — fixed: normalize hyphens, compound words (nonfat/non-fat/non fat), parentheticals, trailing commas; 4 new tests
+
+## Phase 5: Polish & Growth
+- [ ] iOS/mobile experience (evaluate PWA vs React Native vs Capacitor)
+- [ ] Multi-household support (household entity, scoped RLS, shared data)
+- [ ] Self-service sign-up + onboarding tutorial
 - [ ] Recipe ratings feeding into recommendations
-- [ ] Improved ingredient normalization
+- [ ] Improved ingredient normalization (includes fuzzy matching for grocery dedup)
 - [ ] USDA API for precise nutrition (optional)

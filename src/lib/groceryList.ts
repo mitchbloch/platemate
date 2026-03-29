@@ -331,11 +331,12 @@ export async function addGroceryListItem(
     name: string;
     quantity: number | null;
     unit: string | null;
-    category: IngredientCategory;
+    category: string;
     store: StoreName;
   },
 ): Promise<GroceryListItem> {
   const supabase = await createClient();
+  const dbCategory = categoryToDb(item.category);
 
   // Place new item at end of its group
   const { data: maxData } = await supabase
@@ -343,7 +344,7 @@ export async function addGroceryListItem(
     .select("sort_order")
     .eq("grocery_list_id", groceryListId)
     .eq("store", item.store)
-    .eq("category", item.category)
+    .eq("category", dbCategory)
     .order("sort_order", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -356,7 +357,7 @@ export async function addGroceryListItem(
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,
-      category: item.category,
+      category: dbCategory,
       store: item.store,
       checked: false,
       dismissed: false,
@@ -491,7 +492,17 @@ export async function getSmartWeekStart(
  * Map GroceryDisplayCategory back to an IngredientCategory for DB storage.
  * The DB column uses IngredientCategory values.
  */
-function categoryToDb(displayCategory: string): IngredientCategory {
+const VALID_INGREDIENT_CATEGORIES = new Set<string>([
+  "produce", "meat", "seafood", "dairy", "grain",
+  "canned", "spice", "oil-vinegar", "condiment", "frozen", "other",
+]);
+
+function categoryToDb(category: string): IngredientCategory {
+  // Already a valid IngredientCategory — pass through
+  if (VALID_INGREDIENT_CATEGORIES.has(category)) {
+    return category as IngredientCategory;
+  }
+  // GroceryDisplayCategory → IngredientCategory
   const map: Record<string, IngredientCategory> = {
     protein: "meat",
     produce: "produce",
@@ -499,5 +510,5 @@ function categoryToDb(displayCategory: string): IngredientCategory {
     snacks: "other",
     other: "other",
   };
-  return map[displayCategory] ?? "other";
+  return map[category] ?? "other";
 }
