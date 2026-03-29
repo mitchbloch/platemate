@@ -1300,12 +1300,12 @@ function GroceryItemRow({
   if (isCompleted) {
     return (
       <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 opacity-60">
-        {qty && (
-          <span className="shrink-0 text-sm font-medium text-text-muted">{qty}</span>
-        )}
         <span className="flex-1 text-sm text-text-muted line-through">
           {item.name}
         </span>
+        {qty && (
+          <span className="shrink-0 text-xs font-medium text-text-muted">{qty}</span>
+        )}
         <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${storeBadgeClasses(item.store)}`}>
           {STORE_LABELS[item.store]}
         </span>
@@ -1329,9 +1329,6 @@ function GroceryItemRow({
           readOnly
           className="pointer-events-none h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
         />
-        {qty && (
-          <span className={`shrink-0 text-sm font-medium ${item.checked ? "text-text-muted" : "text-text-secondary"}`}>{qty}</span>
-        )}
         <span
           className={`flex-1 text-sm ${
             item.checked ? "text-text-muted line-through" : "text-text"
@@ -1339,6 +1336,9 @@ function GroceryItemRow({
         >
           {item.name}
         </span>
+        {qty && (
+          <span className={`shrink-0 text-xs font-medium ${item.checked ? "text-text-muted" : "text-text-secondary"}`}>{qty}</span>
+        )}
         {isPinned && (
           <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-[10px] font-medium text-primary">
             weekly
@@ -1430,10 +1430,10 @@ function GroceryItemRow({
   // Edit mode: dismiss, store change, remove, mark pantry
   return (
     <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors hover:bg-border-light">
-      {qty && (
-        <span className="shrink-0 text-sm font-medium text-text-secondary">{qty}</span>
-      )}
       <span className="flex-1 text-sm text-text">{item.name}</span>
+      {qty && (
+        <span className="shrink-0 text-xs font-medium text-text-secondary">{qty}</span>
+      )}
       {isPinned && (
         <span className="shrink-0 rounded-md bg-primary-light px-1.5 py-0.5 text-[10px] font-medium text-primary">
           weekly
