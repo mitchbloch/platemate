@@ -82,6 +82,37 @@ describe("normalizeIngredientName", () => {
   it("does not strip 's' from short words", () => {
     expect(normalizeIngredientName("gas")).toBe("gas");
   });
+
+  it("strips parentheticals", () => {
+    expect(normalizeIngredientName("tomatoes (Roma)")).toBe("tomato");
+    expect(normalizeIngredientName("cheese (shredded)")).toBe("cheese");
+  });
+
+  it("strips trailing commas", () => {
+    expect(normalizeIngredientName("garlic,")).toBe("garlic");
+    expect(normalizeIngredientName("cilantro , ")).toBe("cilantro");
+  });
+
+  it("normalizes hyphens to spaces", () => {
+    expect(normalizeIngredientName("oil-vinegar")).toBe("oil vinegar");
+  });
+
+  it("normalizes compound word variants", () => {
+    expect(normalizeIngredientName("nonfat greek yogurt")).toBe(
+      "nonfat greek yogurt",
+    );
+    expect(normalizeIngredientName("non fat greek yogurt")).toBe(
+      "nonfat greek yogurt",
+    );
+    expect(normalizeIngredientName("non-fat greek yogurt")).toBe(
+      "nonfat greek yogurt",
+    );
+    expect(normalizeIngredientName("low fat milk")).toBe("lowfat milk");
+    expect(normalizeIngredientName("low-fat milk")).toBe("lowfat milk");
+    expect(normalizeIngredientName("semi-sweet chocolate chips")).toBe(
+      "semisweet chocolate chip",
+    );
+  });
 });
 
 // ── canMerge ──

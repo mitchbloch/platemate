@@ -79,7 +79,32 @@ const PLURAL_EXCEPTIONS = new Set([
 ]);
 
 export function normalizeIngredientName(name: string): string {
-  let normalized = name.toLowerCase().trim().replace(/\s+/g, " ");
+  let normalized = name.toLowerCase().trim();
+
+  // Strip parentheticals: "tomatoes (Roma)" → "tomatoes"
+  normalized = normalized.replace(/\s*\([^)]*\)/g, "");
+
+  // Strip trailing commas and whitespace
+  normalized = normalized.replace(/[,\s]+$/, "");
+
+  // Collapse whitespace
+  normalized = normalized.replace(/\s+/g, " ");
+
+  // Normalize hyphens to spaces, then collapse again
+  normalized = normalized.replace(/-/g, " ").replace(/\s+/g, " ");
+
+  // Normalize compound word variants: "non fat" → "nonfat", "low fat" → "lowfat", etc.
+  const COMPOUND_WORDS: Record<string, string> = {
+    "non fat": "nonfat",
+    "low fat": "lowfat",
+    "full fat": "fullfat",
+    "low sodium": "lowsodium",
+    "semi sweet": "semisweet",
+    "half and half": "halfandhalf",
+  };
+  for (const [spaced, joined] of Object.entries(COMPOUND_WORDS)) {
+    normalized = normalized.replace(spaced, joined);
+  }
 
   // Strip trailing 's' for simple plurals, but not words ending in 'ss', 'us', etc.
   if (

@@ -60,7 +60,7 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 2. **Recipe Management** — Import, parse, CRUD, library UI ✅
 3. **Meal Planning** — Weekly planner, smart suggestions, nutrition summary, history tracking ✅
 4. **Grocery List** — Dedup, store tagging, real-time shared list, Edit/Shop modes, pantry staples ✅
-5. **Polish** — PWA, ratings, improved normalization
+5. **Polish & Growth** — iOS/mobile, multi-household support, sign-up + onboarding, PWA, ratings
 
 ## Commands
 ```bash
