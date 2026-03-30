@@ -75,14 +75,14 @@ export default function RecipeDetail({ recipe: initial }: { recipe: Recipe }) {
   if (editing) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Link
             href="/recipes"
             className="text-sm text-text-muted hover:text-text-secondary transition-colors"
           >
             &larr; Back to recipes
           </Link>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleCancel}
               className="rounded-lg border border-border px-4 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
@@ -104,7 +104,7 @@ export default function RecipeDetail({ recipe: initial }: { recipe: Recipe }) {
           type="text"
           value={recipe.title}
           onChange={(e) => updateField("title", e.target.value)}
-          className="w-full font-display text-3xl font-semibold text-text border-b border-border pb-2 focus:border-primary focus:outline-none bg-transparent"
+          className="w-full font-display text-2xl font-semibold text-text border-b border-border pb-2 focus:border-primary focus:outline-none bg-transparent md:text-3xl"
         />
 
         {/* Description */}
@@ -271,14 +271,14 @@ export default function RecipeDetail({ recipe: initial }: { recipe: Recipe }) {
   // ── View mode ──
   return (
     <div className="animate-fade-in">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Link
           href="/recipes"
           className="text-sm text-text-muted hover:text-text-secondary transition-colors"
         >
           &larr; Back to recipes
         </Link>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setEditing(true)}
             className="rounded-lg border border-border px-4 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
@@ -314,7 +314,7 @@ export default function RecipeDetail({ recipe: initial }: { recipe: Recipe }) {
       </div>
 
       <div className="mb-6">
-        <h1 className="mb-2 font-display text-3xl font-semibold tracking-tight text-text">
+        <h1 className="mb-2 font-display text-2xl font-semibold tracking-tight text-text md:text-3xl">
           {recipe.title}
         </h1>
         {recipe.description && (

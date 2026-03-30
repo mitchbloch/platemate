@@ -292,7 +292,7 @@ export default function WeeklyPlanner({
           &larr; Prev
         </button>
         <div className="text-center">
-          <h1 className="font-display text-xl font-semibold tracking-tight text-text">
+          <h1 className="font-display text-lg font-semibold tracking-tight text-text md:text-xl">
             {formatWeekLabel(weekStart)}
           </h1>
           {!isCurrentWeek && (
@@ -470,9 +470,9 @@ export default function WeeklyPlanner({
                     {topSuggestions.map((s) => (
                       <div
                         key={s.recipe.id}
-                        className="flex items-center justify-between text-sm"
+                        className="flex items-center justify-between gap-2 text-sm"
                       >
-                        <span className="text-text-secondary">
+                        <span className="min-w-0 truncate text-text-secondary">
                           <span className="font-medium text-text">{s.recipe.title}</span>
                           {" "}
                           <span className="text-xs text-text-muted">
@@ -615,7 +615,7 @@ function MealCard({
     <div className="card-hover group relative rounded-2xl border border-border bg-surface p-4 shadow-warm">
       <button
         onClick={onRemove}
-        className="absolute right-2 top-2 rounded p-1 text-text-muted opacity-0 transition-all hover:text-danger group-hover:opacity-100"
+        className="absolute right-2 top-2 rounded p-2 text-text-muted opacity-100 transition-all hover:text-danger md:opacity-0 md:group-hover:opacity-100"
         title="Remove"
       >
         &times;

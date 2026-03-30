@@ -33,6 +33,13 @@ body {
   position: relative;
 }
 
+/* Bottom padding for fixed mobile tab bar */
+@media (max-width: 767px) {
+  main {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Subtle paper grain texture */
 body::before {
   content: "";
@@ -92,6 +99,7 @@ body::before {
 
 /* ── Form elements ── */
 
+/* Prevent iOS Safari zoom on input focus (requires >= 16px font) */
 input[type="text"],
 input[type="email"],
 input[type="password"],
@@ -99,6 +107,7 @@ input[type="url"],
 input[type="number"],
 textarea,
 select {
+  font-size: max(16px, 1em);
   background-color: var(--color-surface);
   border-color: var(--color-border);
   color: var(--color-text);
