@@ -839,7 +839,7 @@ export default function GroceryListView({
           &larr; Prev
         </button>
         <div className="text-center">
-          <h1 className="font-display text-xl font-semibold tracking-tight text-text">
+          <h1 className="font-display text-lg font-semibold tracking-tight text-text md:text-xl">
             {formatWeekLabel(weekStart)}
             {isCompleted && (
               <span className="ml-2 inline-block rounded-full bg-accent-light px-2 py-0.5 align-middle text-xs font-medium text-accent">
@@ -875,7 +875,7 @@ export default function GroceryListView({
         <>
           {/* Generate from meals banner */}
           {hasMeals && !hasRecipeItems && !isCompleted && (
-            <div className="flex items-center justify-between rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-5 py-4">
+            <div className="flex flex-col gap-3 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-text-secondary">
                 Meals planned &mdash; ready to generate grocery items from recipes
               </p>
@@ -893,7 +893,7 @@ export default function GroceryListView({
           {list && (
             <>
               {/* Summary + Actions */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-text-muted">
                   {isCompleted
                     ? `${activeCount} items`

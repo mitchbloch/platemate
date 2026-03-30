@@ -7,7 +7,7 @@ export default function HomePage() {
       <Nav />
       <main className="mx-auto max-w-5xl px-4 py-12">
         <div className="animate-fade-in-up">
-          <h1 className="mb-2 font-display text-4xl font-semibold tracking-tight text-text">
+          <h1 className="mb-2 font-display text-3xl font-semibold tracking-tight text-text md:text-4xl">
             Welcome to Platemate
           </h1>
           <p className="mb-10 text-lg text-text-secondary">

@@ -56,7 +56,7 @@ export default function NutritionBadge({
       <h3 className="mb-3 text-sm font-medium text-text-muted">
         Nutrition (per serving, estimated)
       </h3>
-      <div className="grid grid-cols-4 gap-3 text-sm">
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div>
           <div className="font-semibold text-text">{nutrition.calories}</div>
           <div className="text-text-muted">cal</div>
