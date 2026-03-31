@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Platemate",
     description:
       "Plan dinners, track nutrition, and generate grocery lists. Health-aware meal planning for couples.",
-    start_url: "/plan",
+    start_url: "/",
     display: "standalone",
     background_color: "#FAF6F1",
     theme_color: "#B8462B",
