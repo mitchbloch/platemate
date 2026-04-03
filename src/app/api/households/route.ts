@@ -27,10 +27,12 @@ export async function POST(request: NextRequest) {
     const existingProfile = await getUserProfile(user.id);
 
     if (existingProfile) {
-      await updateUserProfile(user.id, { activeHouseholdId: household.id });
+      const updates: { activeHouseholdId: string; displayName?: string } = { activeHouseholdId: household.id };
+      if (body.displayName) updates.displayName = body.displayName;
+      await updateUserProfile(user.id, updates);
     } else {
       await createUserProfile(user.id, {
-        displayName: user.user_metadata?.full_name ?? user.email ?? undefined,
+        displayName: body.displayName ?? user.user_metadata?.full_name ?? user.email ?? undefined,
         activeHouseholdId: household.id,
       });
     }

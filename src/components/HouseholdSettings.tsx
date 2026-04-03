@@ -383,7 +383,10 @@ export default function HouseholdSettings({
                 className="flex flex-wrap items-center gap-3 rounded-lg border border-border-light p-3"
               >
                 <span className="text-sm font-medium text-text">
-                  {member.userId === currentUserId ? "You" : member.userId}
+                  {member.displayName ?? member.userId}
+                  {member.userId === currentUserId && (
+                    <span className="ml-1 text-xs text-text-muted">(you)</span>
+                  )}
                 </span>
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs font-medium ${

@@ -34,6 +34,7 @@ function rowToMember(row: Record<string, unknown>): HouseholdMember {
     householdId: row.household_id as string,
     userId: row.user_id as string,
     role: row.role as HouseholdMember["role"],
+    displayName: (row.display_name as string) ?? null,
     createdAt: row.created_at as string,
   };
 }
@@ -160,12 +161,18 @@ export async function getHouseholdMembers(householdId: string): Promise<Househol
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("household_members")
-    .select("*")
+    .select("*, user_profiles(display_name)")
     .eq("household_id", householdId)
     .order("created_at");
 
   if (error) throw error;
-  return (data ?? []).map(rowToMember);
+  return (data ?? []).map((row) => {
+    const profile = row.user_profiles as Record<string, unknown> | null;
+    return rowToMember({
+      ...row,
+      display_name: profile?.display_name ?? null,
+    });
+  });
 }
 
 export async function addHouseholdMember(

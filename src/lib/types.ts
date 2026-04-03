@@ -195,6 +195,7 @@ export interface HouseholdMember {
   householdId: string;
   userId: string;
   role: HouseholdRole;
+  displayName: string | null;
   createdAt: string;
 }
 
