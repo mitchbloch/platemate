@@ -92,7 +92,7 @@ function CustomPillInput({
   const customSelected = selected.filter((v) => !knownValues.includes(v));
 
   function add() {
-    const val = input.trim().toLowerCase();
+    const val = input.trim();
     if (!val || selected.includes(val)) return;
     onChange([...selected, val]);
     setInput("");
@@ -285,8 +285,8 @@ function SignupForm() {
       // Best-effort — preferences can be configured in Settings later
     }
 
-    router.push("/");
-    router.refresh();
+    // Hard redirect so OnboardingWrapper remounts and the tooltip tour fires
+    window.location.href = "/";
   }
 
   if (checking) {
@@ -505,7 +505,7 @@ function SignupForm() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { router.push("/"); router.refresh(); }}
+                  onClick={() => { window.location.href = "/"; }}
                   className="w-full py-2 text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
                 >
                   Skip for now
