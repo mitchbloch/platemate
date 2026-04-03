@@ -32,7 +32,7 @@ const STEPS: TourStep[] = [
     target: "[data-tour='settings']",
     title: "Settings",
     description:
-      "Configure your household's stores, dietary preferences, and nutrition tracking.",
+      "Update your grocery stores, dietary preferences, and nutrition priorities here any time.",
   },
 ];
 
