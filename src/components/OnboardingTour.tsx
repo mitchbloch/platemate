@@ -2,37 +2,45 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 
 interface TourStep {
-  target: string;
+  target: string | null;
   title: string;
   description: string;
+  href: string | null;
 }
 
 const STEPS: TourStep[] = [
   {
+    target: null,
+    title: "Welcome to Platemate!",
+    description: "You're all set up. Let's take a quick look at how everything works.",
+    href: null,
+  },
+  {
     target: "[data-tour='recipes']",
     title: "Recipe Library",
-    description:
-      "Import recipes from any URL or paste text. AI extracts ingredients and nutrition.",
+    description: "Import recipes from any URL or paste text. AI extracts ingredients and nutrition automatically.",
+    href: "/recipes",
   },
   {
     target: "[data-tour='plan']",
     title: "Meal Plan",
-    description:
-      "Plan your weekly meals with smart suggestions based on what you've cooked before.",
+    description: "Plan your weekly meals with smart suggestions based on what you've cooked before.",
+    href: "/plan",
   },
   {
     target: "[data-tour='grocery']",
     title: "Grocery List",
-    description:
-      "Auto-generated and grouped by store. Check items off in real-time with your household.",
+    description: "Auto-generated from your meal plan and grouped by store. Check items off in real-time with your household.",
+    href: "/grocery",
   },
   {
     target: "[data-tour='settings']",
     title: "Settings",
-    description:
-      "Update your grocery stores, dietary preferences, and nutrition priorities here any time.",
+    description: "Update your grocery stores, dietary preferences, and nutrition priorities here any time.",
+    href: "/settings",
   },
 ];
 
@@ -46,35 +54,39 @@ interface OnboardingTourProps {
   onSkip: () => void;
 }
 
-export default function OnboardingTour({
-  onComplete,
-  onSkip,
-}: OnboardingTourProps) {
+export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourProps) {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
-  const [tooltipPos, setTooltipPos] = useState<TooltipPosition>({
-    top: 0,
-    left: 0,
-  });
+  const [tooltipPos, setTooltipPos] = useState<TooltipPosition>({ top: 0, left: 0 });
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [mounted, setMounted] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   const step = STEPS[currentStep];
   const isLast = currentStep === STEPS.length - 1;
+  // Non-welcome steps are 1-indexed for the counter
+  const tourStepNumber = currentStep;
+  const tourStepTotal = STEPS.length - 1;
+
+  // Navigate to the page for this step when step changes
+  useEffect(() => {
+    if (step.href) {
+      router.push(step.href);
+    }
+  }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const positionTooltip = useCallback(() => {
+    if (!step.target) return;
     const el = document.querySelector(step.target);
     if (!el) return;
 
     const rect = el.getBoundingClientRect();
     setTargetRect(rect);
 
-    // Position tooltip below the target element, centered horizontally
     const tooltipWidth = 320;
     let left = rect.left + rect.width / 2 - tooltipWidth / 2;
     const top = rect.bottom + 12;
 
-    // Keep tooltip within viewport
     const padding = 16;
     if (left < padding) left = padding;
     if (left + tooltipWidth > window.innerWidth - padding) {
@@ -84,61 +96,62 @@ export default function OnboardingTour({
     setTooltipPos({ top, left });
   }, [step.target]);
 
-  // Set mounted flag for portal rendering
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
 
-  // Position on mount and step change
   useEffect(() => {
+    if (!step.target) {
+      setTargetRect(null);
+      return;
+    }
     positionTooltip();
-
-    // Reposition on scroll/resize
     window.addEventListener("resize", positionTooltip);
     window.addEventListener("scroll", positionTooltip, true);
     return () => {
       window.removeEventListener("resize", positionTooltip);
       window.removeEventListener("scroll", positionTooltip, true);
     };
-  }, [positionTooltip]);
+  }, [positionTooltip, step.target]);
 
-  // Apply highlight z-index to target element
+  // Apply highlight z-index to target nav element
   useEffect(() => {
+    if (!step.target) return;
     const el = document.querySelector(step.target) as HTMLElement | null;
     if (!el) return;
 
     const prevPosition = el.style.position;
     const prevZIndex = el.style.zIndex;
-    const prevRelative = el.style.position;
 
     el.style.position = "relative";
     el.style.zIndex = "60";
 
     return () => {
-      el.style.position = prevPosition || prevRelative;
+      el.style.position = prevPosition;
       el.style.zIndex = prevZIndex;
     };
   }, [step.target]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (isLast) {
       onComplete();
     } else {
       setCurrentStep((s) => s + 1);
     }
-  };
+  }, [isLast, onComplete]);
+
+  const handleBack = useCallback(() => {
+    setCurrentStep((s) => s - 1);
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onSkip();
       if (e.key === "ArrowRight" || e.key === "Enter") handleNext();
-      if (e.key === "ArrowLeft" && currentStep > 0) {
-        setCurrentStep((s) => s - 1);
-      }
+      if (e.key === "ArrowLeft" && currentStep > 0) handleBack();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentStep, isLast, onSkip]
+    [currentStep, onSkip, handleNext, handleBack]
   );
 
   useEffect(() => {
@@ -148,14 +161,54 @@ export default function OnboardingTour({
 
   if (!mounted) return null;
 
+  // Welcome step — centered modal, simple overlay
+  if (!step.target) {
+    return createPortal(
+      <>
+        <div
+          className="fixed inset-0 z-50 bg-black/50"
+          onClick={onSkip}
+          aria-hidden="true"
+        />
+        <div
+          ref={tooltipRef}
+          className="fixed left-1/2 top-1/2 z-[60] w-80 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-6 shadow-warm"
+          role="dialog"
+          aria-label="Welcome to Platemate"
+        >
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-2xl">
+            🍽️
+          </div>
+          <h3 className="mb-2 font-display text-lg font-semibold text-text">{step.title}</h3>
+          <p className="mb-6 text-sm leading-relaxed text-text-secondary">{step.description}</p>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onSkip}
+              className="text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
+            >
+              Skip tour
+            </button>
+            <button
+              onClick={handleNext}
+              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+            >
+              Take the tour →
+            </button>
+          </div>
+        </div>
+      </>,
+      document.body
+    );
+  }
+
+  // Regular steps — overlay with cutout + positioned tooltip
   return createPortal(
     <>
-      {/* Dark overlay with cutout */}
+      {/* Dark overlay with spotlight cutout around the target element */}
       <div
         className="fixed inset-0 z-50 transition-opacity duration-200"
         style={{
           backgroundColor: "rgba(0, 0, 0, 0.5)",
-          // Create a cutout using clip-path if we have a target rect
           ...(targetRect
             ? {
                 clipPath: `polygon(
@@ -173,7 +226,7 @@ export default function OnboardingTour({
         aria-hidden="true"
       />
 
-      {/* Highlight border around target */}
+      {/* Highlight ring around target */}
       {targetRect && (
         <div
           className="pointer-events-none fixed z-50 rounded-2xl ring-2 ring-primary ring-offset-4 ring-offset-transparent transition-all duration-300"
@@ -190,29 +243,15 @@ export default function OnboardingTour({
       <div
         ref={tooltipRef}
         className="fixed z-[60] w-80 rounded-xl border border-border bg-surface p-5 shadow-warm"
-        style={{
-          top: tooltipPos.top,
-          left: tooltipPos.left,
-        }}
+        style={{ top: tooltipPos.top, left: tooltipPos.left }}
         role="dialog"
-        aria-label={`Tour step ${currentStep + 1} of ${STEPS.length}`}
+        aria-label={`Tour step ${tourStepNumber} of ${tourStepTotal}`}
       >
-        {/* Step counter */}
         <p className="mb-2 text-xs font-medium text-text-muted">
-          {currentStep + 1} of {STEPS.length}
+          {tourStepNumber} of {tourStepTotal}
         </p>
-
-        {/* Title */}
-        <h3 className="mb-1.5 font-display text-base font-semibold text-text">
-          {step.title}
-        </h3>
-
-        {/* Description */}
-        <p className="mb-4 text-sm leading-relaxed text-text-secondary">
-          {step.description}
-        </p>
-
-        {/* Actions */}
+        <h3 className="mb-1.5 font-display text-base font-semibold text-text">{step.title}</h3>
+        <p className="mb-4 text-sm leading-relaxed text-text-secondary">{step.description}</p>
         <div className="flex items-center justify-between">
           <button
             onClick={onSkip}
@@ -221,9 +260,9 @@ export default function OnboardingTour({
             Skip tour
           </button>
           <div className="flex gap-2">
-            {currentStep > 0 && (
+            {currentStep > 1 && (
               <button
-                onClick={() => setCurrentStep((s) => s - 1)}
+                onClick={handleBack}
                 className="rounded-lg px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-border-light"
               >
                 Back
