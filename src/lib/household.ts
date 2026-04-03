@@ -65,16 +65,16 @@ export async function getHousehold(id: string): Promise<Household | null> {
   return rowToHousehold(data);
 }
 
-export async function createHousehold(name: string): Promise<Household> {
+export async function createHousehold(name: string): Promise<string> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("households")
     .insert({ name })
-    .select("*")
+    .select("id")
     .single();
 
   if (error) throw error;
-  return rowToHousehold(data);
+  return data.id as string;
 }
 
 export async function updateHouseholdPreferences(
@@ -159,20 +159,31 @@ export async function regenerateInviteCode(householdId: string): Promise<string>
 
 export async function getHouseholdMembers(householdId: string): Promise<HouseholdMember[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const { data: memberData, error: memberError } = await supabase
     .from("household_members")
-    .select("*, user_profiles(display_name)")
+    .select("*")
     .eq("household_id", householdId)
     .order("created_at");
 
-  if (error) throw error;
-  return (data ?? []).map((row) => {
-    const profile = row.user_profiles as Record<string, unknown> | null;
-    return rowToMember({
-      ...row,
-      display_name: profile?.display_name ?? null,
-    });
-  });
+  if (memberError) throw memberError;
+  const members = memberData ?? [];
+  if (members.length === 0) return [];
+
+  // Fetch display names from user_profiles
+  const userIds = members.map((m) => m.user_id);
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("id, display_name")
+    .in("id", userIds);
+
+  const nameMap = new Map<string, string>();
+  for (const p of profiles ?? []) {
+    if (p.display_name) nameMap.set(p.id, p.display_name);
+  }
+
+  return members.map((row) =>
+    rowToMember({ ...row, display_name: nameMap.get(row.user_id) ?? null })
+  );
 }
 
 export async function addHouseholdMember(
