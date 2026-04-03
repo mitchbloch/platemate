@@ -179,8 +179,8 @@ export interface Household {
   name: string;
   inviteCode: string;
   inviteCodeExpiresAt: string | null;
-  groceryStores: StoreName[];
-  defaultStore: StoreName;
+  groceryStores: string[];
+  defaultStore: string;
   mealSchedule: MealSchedule;
   defaultServings: number;
   dietaryPreferences: string[];

@@ -6,7 +6,6 @@ import type {
   MealSchedule,
   GroceryCategory,
   NutritionPriority,
-  StoreName,
 } from "./types";
 
 /** Convert Supabase row to Household */
@@ -16,8 +15,8 @@ function rowToHousehold(row: Record<string, unknown>): Household {
     name: row.name as string,
     inviteCode: row.invite_code as string,
     inviteCodeExpiresAt: row.invite_code_expires_at as string | null,
-    groceryStores: row.grocery_stores as StoreName[],
-    defaultStore: row.default_store as StoreName,
+    groceryStores: row.grocery_stores as string[],
+    defaultStore: row.default_store as string,
     mealSchedule: row.meal_schedule as MealSchedule,
     defaultServings: row.default_servings as number,
     dietaryPreferences: row.dietary_preferences as string[],
@@ -81,8 +80,8 @@ export async function updateHouseholdPreferences(
   id: string,
   preferences: {
     name?: string;
-    groceryStores?: StoreName[];
-    defaultStore?: StoreName;
+    groceryStores?: string[];
+    defaultStore?: string;
     mealSchedule?: MealSchedule;
     defaultServings?: number;
     dietaryPreferences?: string[];

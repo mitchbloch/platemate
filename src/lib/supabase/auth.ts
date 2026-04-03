@@ -1,4 +1,5 @@
 import { createClient } from "./server";
+import { redirect } from "next/navigation";
 
 export async function getUser() {
   const supabase = await createClient();
@@ -23,7 +24,7 @@ export async function getActiveHouseholdId(): Promise<string> {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    throw new Error("Not authenticated");
+    redirect("/login");
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -33,7 +34,7 @@ export async function getActiveHouseholdId(): Promise<string> {
     .single();
 
   if (profileError || !profile?.active_household_id) {
-    throw new Error("No active household");
+    redirect("/signup?step=household");
   }
 
   return profile.active_household_id as string;
