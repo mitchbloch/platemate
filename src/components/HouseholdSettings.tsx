@@ -19,6 +19,24 @@ import {
   NUTRITION_LABELS,
   CATEGORY_LABELS,
 } from "@/lib/types";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 
 // ── Constants ──
 
@@ -89,8 +107,40 @@ const btnDanger =
 const cardClass =
   "rounded-2xl border border-border bg-surface p-6 shadow-warm";
 
-const arrowBtnClass =
-  "rounded-md border border-border-light bg-surface px-2 py-0.5 text-xs text-text-secondary transition-colors hover:bg-bg disabled:opacity-30";
+// ── Drag-and-Drop Helpers ──
+
+function GripIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="text-text-muted">
+      <circle cx="4" cy="2" r="1" />
+      <circle cx="8" cy="2" r="1" />
+      <circle cx="4" cy="6" r="1" />
+      <circle cx="8" cy="6" r="1" />
+      <circle cx="4" cy="10" r="1" />
+      <circle cx="8" cy="10" r="1" />
+    </svg>
+  );
+}
+
+function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+      {children}
+    </div>
+  );
+}
+
+/** Get display label for a store — use STORE_LABELS for known stores, title-case for custom */
+function getStoreLabel(store: string): string {
+  if (store in STORE_LABELS) return STORE_LABELS[store as StoreName];
+  // Title-case custom store names
+  return store
+    .split(/[\s-]+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
 
 // ── Props ──
 
@@ -111,8 +161,17 @@ export default function HouseholdSettings({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [copied, setCopied] = useState(false);
 
+  // ── Custom Store Input ──
+  const [customStoreInput, setCustomStoreInput] = useState("");
+
   // ── Grocery Categories Editing ──
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
+
+  // ── Drag-and-Drop Sensors ──
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   // ── Autosave Timer ──
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -231,7 +290,7 @@ export default function HouseholdSettings({
 
   // ── Grocery Store Helpers ──
 
-  function toggleStore(store: StoreName) {
+  function toggleStore(store: string) {
     const stores = household.groceryStores.includes(store)
       ? household.groceryStores.filter((s) => s !== store)
       : [...household.groceryStores, store];
@@ -247,12 +306,39 @@ export default function HouseholdSettings({
     scheduleSave({ groceryStores: stores, defaultStore });
   }
 
-  function moveStore(index: number, direction: -1 | 1) {
-    const stores = [...household.groceryStores];
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= stores.length) return;
-    [stores[index], stores[targetIndex]] = [stores[targetIndex], stores[index]];
+  function addCustomStore() {
+    const name = customStoreInput.trim();
+    if (!name) return;
+    // Slugify for storage: lowercase, spaces to hyphens
+    const slug = name.toLowerCase().replace(/\s+/g, "-");
+    if (household.groceryStores.includes(slug)) {
+      setCustomStoreInput("");
+      return;
+    }
+    const stores = [...household.groceryStores, slug];
     updateHousehold("groceryStores", stores);
+    setCustomStoreInput("");
+  }
+
+  function removeCustomStore(store: string) {
+    const stores = household.groceryStores.filter((s) => s !== store);
+    let defaultStore = household.defaultStore;
+    if (!stores.includes(defaultStore)) {
+      defaultStore = stores[0] ?? "other";
+    }
+    const next = { ...latestHousehold.current, groceryStores: stores, defaultStore };
+    setHousehold(next);
+    scheduleSave({ groceryStores: stores, defaultStore });
+  }
+
+  function handleStoreDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const stores = household.groceryStores;
+    const oldIndex = stores.indexOf(active.id as string);
+    const newIndex = stores.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+    updateHousehold("groceryStores", arrayMove(stores, oldIndex, newIndex));
   }
 
   // ── Grocery Category Helpers ──
@@ -281,18 +367,20 @@ export default function HouseholdSettings({
     }
   }
 
-  function moveCategoryItem(index: number, direction: -1 | 1) {
-    const categories = [...household.groceryCategories];
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= categories.length) return;
-    [categories[index], categories[targetIndex]] = [
-      categories[targetIndex],
-      categories[index],
-    ];
-    updateHousehold("groceryCategories", categories);
+  function handleCategoryDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const categories = household.groceryCategories;
+    const oldIndex = categories.findIndex((_, i) => `cat-${i}` === active.id);
+    const newIndex = categories.findIndex((_, i) => `cat-${i}` === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove([...categories], oldIndex, newIndex);
+    updateHousehold("groceryCategories", reordered);
     // Update expanded index if it was one of the swapped items
-    if (expandedCategory === index) setExpandedCategory(targetIndex);
-    else if (expandedCategory === targetIndex) setExpandedCategory(index);
+    if (expandedCategory === oldIndex) setExpandedCategory(newIndex);
+    else if (expandedCategory !== null && expandedCategory >= Math.min(oldIndex, newIndex) && expandedCategory <= Math.max(oldIndex, newIndex)) {
+      setExpandedCategory(oldIndex < newIndex ? expandedCategory - 1 : expandedCategory + 1);
+    }
   }
 
   function toggleCategoryIngredient(
@@ -321,17 +409,17 @@ export default function HouseholdSettings({
     updateHousehold("nutritionPriorities", priorities);
   }
 
-  function moveNutrient(index: number, direction: -1 | 1) {
-    const priorities = [...household.nutritionPriorities];
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= priorities.length) return;
-    [priorities[index], priorities[targetIndex]] = [
-      priorities[targetIndex],
-      priorities[index],
-    ];
+  function handleNutrientDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const priorities = household.nutritionPriorities;
+    const oldIndex = priorities.findIndex((p) => p.nutrient === active.id);
+    const newIndex = priorities.findIndex((p) => p.nutrient === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove([...priorities], oldIndex, newIndex);
     // Re-rank
-    priorities.forEach((p, i) => (p.rank = i + 1));
-    updateHousehold("nutritionPriorities", priorities);
+    reordered.forEach((p, i) => (p.rank = i + 1));
+    updateHousehold("nutritionPriorities", reordered);
   }
 
   // ── Render ──
@@ -451,7 +539,7 @@ export default function HouseholdSettings({
           Grocery Stores
         </h2>
 
-        {/* Store checkboxes */}
+        {/* Default store checkboxes */}
         <div className="mb-4 flex flex-wrap gap-3">
           {ALL_STORES.map((store) => (
             <label
@@ -469,38 +557,73 @@ export default function HouseholdSettings({
           ))}
         </div>
 
-        {/* Selected store order */}
+        {/* Custom store checkboxes (non-default stores) */}
+        {household.groceryStores.filter((s) => !(ALL_STORES as string[]).includes(s)).length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-3">
+            {household.groceryStores
+              .filter((s) => !(ALL_STORES as string[]).includes(s))
+              .map((store) => (
+                <span
+                  key={store}
+                  className="flex items-center gap-1.5 rounded-full border border-border-light bg-bg px-3 py-1 text-sm text-text"
+                >
+                  {getStoreLabel(store)}
+                  <button
+                    onClick={() => removeCustomStore(store)}
+                    className="ml-0.5 text-xs text-text-muted transition-colors hover:text-red-600"
+                    aria-label={`Remove ${getStoreLabel(store)}`}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+          </div>
+        )}
+
+        {/* Add custom store */}
+        <div className="mb-4 flex items-center gap-2">
+          <input
+            type="text"
+            value={customStoreInput}
+            onChange={(e) => setCustomStoreInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomStore(); } }}
+            placeholder="Add custom store"
+            className={`${inputClass} w-full max-w-xs text-sm`}
+          />
+          <button
+            onClick={addCustomStore}
+            disabled={!customStoreInput.trim()}
+            className={btnSecondary}
+          >
+            Add
+          </button>
+        </div>
+
+        {/* Selected store order (drag-to-reorder) */}
         {household.groceryStores.length > 0 && (
           <div className="mb-4">
             <p className="mb-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
               Store Order
             </p>
-            <ul className="space-y-1">
-              {household.groceryStores.map((store, i) => (
-                <li
-                  key={store}
-                  className="flex items-center gap-2 rounded-lg border border-border-light px-3 py-1.5 text-sm text-text"
-                >
-                  <span className="flex-1">{STORE_LABELS[store]}</span>
-                  <button
-                    onClick={() => moveStore(i, -1)}
-                    disabled={i === 0}
-                    className={arrowBtnClass}
-                    aria-label="Move up"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    onClick={() => moveStore(i, 1)}
-                    disabled={i === household.groceryStores.length - 1}
-                    className={arrowBtnClass}
-                    aria-label="Move down"
-                  >
-                    ▼
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={[restrictToVerticalAxis]}
+              onDragEnd={handleStoreDragEnd}
+            >
+              <SortableContext items={household.groceryStores} strategy={verticalListSortingStrategy}>
+                <ul className="space-y-1">
+                  {household.groceryStores.map((store) => (
+                    <SortableItem key={store} id={store}>
+                      <li className="flex items-center gap-2 rounded-lg border border-border-light px-3 py-1.5 text-sm text-text">
+                        <span className="flex-shrink-0"><GripIcon /></span>
+                        <span className="flex-1">{getStoreLabel(store)}</span>
+                      </li>
+                    </SortableItem>
+                  ))}
+                </ul>
+              </SortableContext>
+            </DndContext>
           </div>
         )}
 
@@ -512,13 +635,13 @@ export default function HouseholdSettings({
           <select
             value={household.defaultStore}
             onChange={(e) =>
-              updateHousehold("defaultStore", e.target.value as StoreName)
+              updateHousehold("defaultStore", e.target.value)
             }
             className={`${inputClass} w-full max-w-xs`}
           >
             {household.groceryStores.map((store) => (
               <option key={store} value={store}>
-                {STORE_LABELS[store]}
+                {getStoreLabel(store)}
               </option>
             ))}
           </select>
@@ -531,7 +654,7 @@ export default function HouseholdSettings({
           Meal Schedule
         </h2>
         <p className="mb-3 text-sm text-text-muted">
-          Meals per week for each type.
+          How many of each meal type do you plan per week? Set to 0 to hide a meal type from your planner.
         </p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {ALL_MEAL_TYPES.map((meal) => (
@@ -614,93 +737,89 @@ export default function HouseholdSettings({
           ingredient types to each.
         </p>
 
-        <ul className="space-y-2">
-          {household.groceryCategories.map((cat, i) => {
-            const isExpanded = expandedCategory === i;
-            return (
-              <li
-                key={i}
-                className="rounded-lg border border-border-light"
-              >
-                {/* Header */}
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <button
-                    onClick={() =>
-                      setExpandedCategory(isExpanded ? null : i)
-                    }
-                    className="flex-1 text-left text-sm font-medium text-text"
-                  >
-                    <span>{cat.name}</span>
-                    <span className="ml-2 text-xs text-text-muted">
-                      ({cat.ingredientTypes.length} types)
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => moveCategoryItem(i, -1)}
-                    disabled={i === 0}
-                    className={arrowBtnClass}
-                    aria-label="Move up"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    onClick={() => moveCategoryItem(i, 1)}
-                    disabled={i === household.groceryCategories.length - 1}
-                    className={arrowBtnClass}
-                    aria-label="Move down"
-                  >
-                    ▼
-                  </button>
-                  <button
-                    onClick={() => removeCategory(i)}
-                    className="rounded-md px-2 py-0.5 text-xs text-red-600 transition-colors hover:bg-red-50"
-                    aria-label="Remove category"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Expanded edit panel */}
-                {isExpanded && (
-                  <div className="border-t border-border-light px-3 py-3">
-                    <label className="mb-2 block text-xs font-medium text-text-secondary uppercase tracking-wide">
-                      Category Name
-                    </label>
-                    <input
-                      type="text"
-                      value={cat.name}
-                      onChange={(e) =>
-                        updateCategory(i, { name: e.target.value })
-                      }
-                      className={`${inputClass} mb-3 w-full max-w-xs`}
-                    />
-                    <label className="mb-2 block text-xs font-medium text-text-secondary uppercase tracking-wide">
-                      Ingredient Types
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {ALL_INGREDIENT_CATEGORIES.map((ingCat) => (
-                        <label
-                          key={ingCat}
-                          className="flex items-center gap-1.5 text-xs text-text"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={handleCategoryDragEnd}
+        >
+          <SortableContext
+            items={household.groceryCategories.map((_, i) => `cat-${i}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-2">
+              {household.groceryCategories.map((cat, i) => {
+                const isExpanded = expandedCategory === i;
+                return (
+                  <SortableItem key={`cat-${i}`} id={`cat-${i}`}>
+                    <li className="rounded-lg border border-border-light">
+                      {/* Header */}
+                      <div className="flex items-center gap-2 px-3 py-2">
+                        <span className="flex-shrink-0"><GripIcon /></span>
+                        <button
+                          onClick={() =>
+                            setExpandedCategory(isExpanded ? null : i)
+                          }
+                          className="flex-1 text-left text-sm font-medium text-text"
                         >
+                          <span>{cat.name}</span>
+                          <span className="ml-2 text-xs text-text-muted">
+                            ({cat.ingredientTypes.length} types)
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => removeCategory(i)}
+                          className="rounded-md px-2 py-0.5 text-xs text-red-600 transition-colors hover:bg-red-50"
+                          aria-label="Remove category"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Expanded edit panel */}
+                      {isExpanded && (
+                        <div className="border-t border-border-light px-3 py-3">
+                          <label className="mb-2 block text-xs font-medium text-text-secondary uppercase tracking-wide">
+                            Category Name
+                          </label>
                           <input
-                            type="checkbox"
-                            checked={cat.ingredientTypes.includes(ingCat)}
-                            onChange={() =>
-                              toggleCategoryIngredient(i, ingCat)
+                            type="text"
+                            value={cat.name}
+                            onChange={(e) =>
+                              updateCategory(i, { name: e.target.value })
                             }
-                            className="rounded border-border text-primary focus:ring-primary-light"
+                            className={`${inputClass} mb-3 w-full max-w-xs`}
                           />
-                          {CATEGORY_LABELS[ingCat]}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                          <label className="mb-2 block text-xs font-medium text-text-secondary uppercase tracking-wide">
+                            Ingredient Types
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {ALL_INGREDIENT_CATEGORIES.map((ingCat) => (
+                              <label
+                                key={ingCat}
+                                className="flex items-center gap-1.5 text-xs text-text"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={cat.ingredientTypes.includes(ingCat)}
+                                  onChange={() =>
+                                    toggleCategoryIngredient(i, ingCat)
+                                  }
+                                  className="rounded border-border text-primary focus:ring-primary-light"
+                                />
+                                {CATEGORY_LABELS[ingCat]}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  </SortableItem>
+                );
+              })}
+            </ul>
+          </SortableContext>
+        </DndContext>
 
         <button onClick={addCategory} className={`${btnSecondary} mt-3`}>
           + Add Category
@@ -739,45 +858,39 @@ export default function HouseholdSettings({
           })}
         </div>
 
-        {/* Priority order list */}
+        {/* Priority order list (drag-to-reorder) */}
         {household.nutritionPriorities.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
               Display Order
             </p>
-            <ul className="space-y-1">
-              {household.nutritionPriorities.map((priority, i) => (
-                <li
-                  key={priority.nutrient}
-                  className="flex items-center gap-2 rounded-lg border border-border-light px-3 py-1.5 text-sm text-text"
-                >
-                  <span className="w-6 text-center text-xs font-medium text-text-muted">
-                    {i + 1}
-                  </span>
-                  <span className="flex-1">
-                    {NUTRITION_LABELS[priority.nutrient]}
-                  </span>
-                  <button
-                    onClick={() => moveNutrient(i, -1)}
-                    disabled={i === 0}
-                    className={arrowBtnClass}
-                    aria-label="Move up"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    onClick={() => moveNutrient(i, 1)}
-                    disabled={
-                      i === household.nutritionPriorities.length - 1
-                    }
-                    className={arrowBtnClass}
-                    aria-label="Move down"
-                  >
-                    ▼
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={[restrictToVerticalAxis]}
+              onDragEnd={handleNutrientDragEnd}
+            >
+              <SortableContext
+                items={household.nutritionPriorities.map((p) => p.nutrient)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ul className="space-y-1">
+                  {household.nutritionPriorities.map((priority, i) => (
+                    <SortableItem key={priority.nutrient} id={priority.nutrient}>
+                      <li className="flex items-center gap-2 rounded-lg border border-border-light px-3 py-1.5 text-sm text-text">
+                        <span className="flex-shrink-0"><GripIcon /></span>
+                        <span className="w-6 text-center text-xs font-medium text-text-muted">
+                          {i + 1}
+                        </span>
+                        <span className="flex-1">
+                          {NUTRITION_LABELS[priority.nutrient]}
+                        </span>
+                      </li>
+                    </SortableItem>
+                  ))}
+                </ul>
+              </SortableContext>
+            </DndContext>
           </div>
         )}
       </section>
