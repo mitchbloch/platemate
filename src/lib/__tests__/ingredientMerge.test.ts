@@ -216,6 +216,7 @@ describe("deduplicateIngredients", () => {
     servings = 4,
   ): Recipe => ({
     id,
+    householdId: "hh-1",
     title: `Recipe ${id}`,
     sourceUrl: null,
     sourceName: null,
@@ -228,6 +229,7 @@ describe("deduplicateIngredients", () => {
     ingredients,
     instructions: [],
     nutrition: null,
+    dietaryFlags: [],
     tags: [],
     imageUrl: null,
     isSlowCooker: false,
@@ -241,6 +243,7 @@ describe("deduplicateIngredients", () => {
   ): { meal: MealPlanRecipe; recipe: Recipe } => ({
     meal: {
       id: `meal-${recipe.id}`,
+      householdId: "hh-1",
       mealPlanId: "plan-1",
       recipeId: recipe.id,
       dayOfWeek: 0,
@@ -295,7 +298,7 @@ describe("deduplicateIngredients", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].quantity).toBe(2);
-    expect(result[0].category).toBe("protein"); // meat → protein
+    expect(result[0].category).toBe("Protein"); // meat → Protein
   });
 
   it("handles null quantities (salt + salt = salt with null qty)", () => {
@@ -326,13 +329,13 @@ describe("deduplicateIngredients", () => {
     const result = deduplicateIngredients([makeMeal(r1)]);
 
     const byName = (n: string) => result.find((i) => i.name === normalizeIngredientName(n));
-    expect(byName("chicken breast")?.category).toBe("protein");
-    expect(byName("shrimp")?.category).toBe("protein");
-    expect(byName("bell pepper")?.category).toBe("produce");
-    expect(byName("milk")?.category).toBe("dairy");
-    expect(byName("rice")?.category).toBe("other");
-    expect(byName("olive oil")?.category).toBe("other");
-    expect(byName("tomato sauce")?.category).toBe("other");
+    expect(byName("chicken breast")?.category).toBe("Protein");
+    expect(byName("shrimp")?.category).toBe("Protein");
+    expect(byName("bell pepper")?.category).toBe("Produce");
+    expect(byName("milk")?.category).toBe("Dairy");
+    expect(byName("rice")?.category).toBe("Pantry");
+    expect(byName("olive oil")?.category).toBe("Pantry");
+    expect(byName("tomato sauce")?.category).toBe("Pantry");
   });
 
   it("sorts by category order then alphabetically", () => {
@@ -347,7 +350,7 @@ describe("deduplicateIngredients", () => {
     const result = deduplicateIngredients([makeMeal(r1)]);
     const names = result.map((i) => i.displayName);
 
-    // protein first, then produce (alpha), then dairy, then other
+    // Protein first, then Produce (alpha), then Dairy, then Pantry
     expect(names).toEqual(["Chicken", "Apple", "Garlic", "Yogurt", "Rice"]);
   });
 

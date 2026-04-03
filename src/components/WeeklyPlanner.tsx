@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import type { Recipe, MealPlan, MealPlanRecipe, CuisineType, MealType } from "@/lib/types";
-import { CUISINE_LABELS } from "@/lib/types";
+import { CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
 import { suggestRecipes } from "@/lib/recommendations";
 import NutritionBadge from "./NutritionBadge";
 import WeeklyNutritionSummary from "./WeeklyNutritionSummary";
@@ -77,8 +77,12 @@ export default function WeeklyPlanner({
   const isPastWeek = weekStart < currentWeekStart;
 
   // Group meals by type
-  const dinners = meals.filter((m) => m.mealType === "dinner");
-  const slowCookerLunches = meals.filter((m) => m.mealType === "slow-cooker-lunch");
+  const mealGroups = [
+    { type: "breakfast" as MealType, label: "Breakfasts", items: meals.filter((m) => m.mealType === "breakfast") },
+    { type: "lunch" as MealType, label: "Lunches", items: meals.filter((m) => m.mealType === "lunch") },
+    { type: "dinner" as MealType, label: "Dinners", items: meals.filter((m) => m.mealType === "dinner") },
+    { type: "snacks" as MealType, label: "Snacks", items: meals.filter((m) => m.mealType === "snacks") },
+  ];
   const currentPlanRecipeIds = useMemo(
     () => new Set(meals.map((m) => m.recipeId)),
     [meals],
@@ -192,6 +196,7 @@ export default function WeeklyPlanner({
       if (!plan) {
         setPlan({
           id: data.planId,
+          householdId: "",
           weekStart,
           notes: null,
           createdAt: new Date().toISOString(),
@@ -202,6 +207,7 @@ export default function WeeklyPlanner({
         ...prev,
         {
           id: data.id,
+          householdId: "",
           mealPlanId: data.planId,
           recipeId: recipe.id,
           dayOfWeek: 0,
@@ -292,7 +298,7 @@ export default function WeeklyPlanner({
           &larr; Prev
         </button>
         <div className="text-center">
-          <h1 className="font-display text-lg font-semibold tracking-tight text-text md:text-xl">
+          <h1 className="font-display text-xl font-semibold tracking-tight text-text">
             {formatWeekLabel(weekStart)}
           </h1>
           {!isCurrentWeek && (
@@ -374,40 +380,23 @@ export default function WeeklyPlanner({
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Dinners */}
-              {dinners.length > 0 && (
-                <div>
-                  <h2 className="mb-2 text-sm font-medium text-text-muted">
-                    Dinners ({dinners.length})
-                  </h2>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {dinners.map((meal) => (
-                      <MealCard
-                        key={meal.id}
-                        meal={meal}
-                        onRemove={() => removeMeal(meal)}
-                      />
-                    ))}
+              {mealGroups.map((group) =>
+                group.items.length > 0 ? (
+                  <div key={group.type}>
+                    <h2 className="mb-2 text-sm font-medium text-text-muted">
+                      {group.label} ({group.items.length})
+                    </h2>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {group.items.map((meal) => (
+                        <MealCard
+                          key={meal.id}
+                          meal={meal}
+                          onRemove={() => removeMeal(meal)}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {/* Slow Cooker Lunches */}
-              {slowCookerLunches.length > 0 && (
-                <div>
-                  <h2 className="mb-2 text-sm font-medium text-text-muted">
-                    Slow Cooker Lunch ({slowCookerLunches.length})
-                  </h2>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {slowCookerLunches.map((meal) => (
-                      <MealCard
-                        key={meal.id}
-                        meal={meal}
-                        onRemove={() => removeMeal(meal)}
-                      />
-                    ))}
-                  </div>
-                </div>
+                ) : null,
               )}
             </div>
           )}
@@ -455,8 +444,9 @@ export default function WeeklyPlanner({
                   className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
                 >
                   <option value="all">All Types</option>
-                  <option value="dinner">Dinner</option>
-                  <option value="slow-cooker-lunch">Slow Cooker Lunch</option>
+                  {Object.entries(MEAL_TYPE_LABELS).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -470,9 +460,9 @@ export default function WeeklyPlanner({
                     {topSuggestions.map((s) => (
                       <div
                         key={s.recipe.id}
-                        className="flex items-center justify-between gap-2 text-sm"
+                        className="flex items-center justify-between text-sm"
                       >
-                        <span className="min-w-0 truncate text-text-secondary">
+                        <span className="text-text-secondary">
                           <span className="font-medium text-text">{s.recipe.title}</span>
                           {" "}
                           <span className="text-xs text-text-muted">
@@ -615,7 +605,7 @@ function MealCard({
     <div className="card-hover group relative rounded-2xl border border-border bg-surface p-4 shadow-warm">
       <button
         onClick={onRemove}
-        className="absolute right-2 top-2 rounded p-2 text-text-muted opacity-100 transition-all hover:text-danger md:opacity-0 md:group-hover:opacity-100"
+        className="absolute right-2 top-2 rounded p-1 text-text-muted opacity-0 transition-all hover:text-danger group-hover:opacity-100"
         title="Remove"
       >
         &times;

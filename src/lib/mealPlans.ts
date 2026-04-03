@@ -1,4 +1,5 @@
 import { createClient } from "./supabase/server";
+import { getActiveHouseholdId } from "./supabase/auth";
 import type { MealPlan, MealPlanRecipe, Recipe, MealType } from "./types";
 
 // ── Row Converters ──
@@ -6,6 +7,7 @@ import type { MealPlan, MealPlanRecipe, Recipe, MealType } from "./types";
 function rowToMealPlan(row: Record<string, unknown>): MealPlan {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     weekStart: row.week_start as string,
     notes: row.notes as string | null,
     createdAt: row.created_at as string,
@@ -16,6 +18,7 @@ function rowToMealPlan(row: Record<string, unknown>): MealPlan {
 function rowToMealPlanRecipe(row: Record<string, unknown>): MealPlanRecipe {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     mealPlanId: row.meal_plan_id as string,
     recipeId: row.recipe_id as string,
     dayOfWeek: row.day_of_week as number,
@@ -27,6 +30,7 @@ function rowToMealPlanRecipe(row: Record<string, unknown>): MealPlanRecipe {
 function rowToRecipe(row: Record<string, unknown>): Recipe {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     title: row.title as string,
     sourceUrl: row.source_url as string | null,
     sourceName: row.source_name as string | null,
@@ -39,6 +43,7 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
     ingredients: row.ingredients as Recipe["ingredients"],
     instructions: row.instructions as string[],
     nutrition: row.nutrition as Recipe["nutrition"],
+    dietaryFlags: (row.dietary_flags as Recipe["dietaryFlags"]) ?? [],
     tags: row.tags as string[],
     imageUrl: row.image_url as string | null,
     isSlowCooker: row.is_slow_cooker as boolean,
@@ -75,9 +80,10 @@ export async function getMealPlanByWeek(weekStart: string): Promise<MealPlan | n
 
 export async function createMealPlan(weekStart: string, notes?: string): Promise<string> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("meal_plans")
-    .insert({ week_start: weekStart, notes: notes ?? null })
+    .insert({ week_start: weekStart, notes: notes ?? null, household_id: householdId })
     .select("id")
     .single();
 
@@ -130,9 +136,11 @@ export async function addRecipeToMealPlan(
   mealType: MealType,
 ): Promise<string> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("meal_plan_recipes")
     .insert({
+      household_id: householdId,
       meal_plan_id: mealPlanId,
       recipe_id: recipeId,
       day_of_week: 0, // unassigned — Phase 3 uses unordered sets

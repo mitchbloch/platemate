@@ -1,4 +1,4 @@
-import { INGREDIENT_TO_GROCERY_CATEGORY } from "./categoryMap";
+import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_ORDER } from "./categoryMap";
 import type {
   Ingredient,
   MealPlanRecipe,
@@ -231,7 +231,7 @@ export function deduplicateIngredients(
   }
 
   // Sort by category order, then alphabetically within category
-  const categoryOrder = ["protein", "produce", "dairy", "snacks", "other"];
+  const categoryOrder = GROCERY_CATEGORY_ORDER;
   merged.sort((a, b) => {
     const catDiff = categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category);
     if (catDiff !== 0) return catDiff;

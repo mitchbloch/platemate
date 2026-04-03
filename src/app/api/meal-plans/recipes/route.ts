@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     let plan = await getMealPlanByWeek(body.weekStart);
     if (!plan) {
       const planId = await createMealPlan(body.weekStart);
-      plan = { id: planId, weekStart: body.weekStart, notes: null, createdAt: "", updatedAt: "" };
+      plan = { id: planId, householdId: "", weekStart: body.weekStart, notes: null, createdAt: "", updatedAt: "" };
     }
 
     const id = await addRecipeToMealPlan(plan.id, body.recipeId, body.mealType);

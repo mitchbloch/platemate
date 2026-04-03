@@ -1,9 +1,11 @@
 import { createClient } from "./supabase/server";
+import { getActiveHouseholdId } from "./supabase/auth";
 import type { RecipeHistory } from "./types";
 
 function rowToRecipeHistory(row: Record<string, unknown>): RecipeHistory {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     recipeId: row.recipe_id as string,
     cookedAt: row.cooked_at as string,
     rating: row.rating as number | null,
@@ -36,8 +38,10 @@ export async function logCookedRecipes(
 
   if (newEntries.length === 0) return 0;
 
+  const householdId = await getActiveHouseholdId();
   const { error } = await supabase.from("recipe_history").insert(
     newEntries.map((e) => ({
+      household_id: householdId,
       recipe_id: e.recipeId,
       cooked_at: e.cookedAt,
     })),

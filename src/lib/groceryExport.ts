@@ -1,11 +1,10 @@
-import type { GroceryListItem, StoreName } from "./types";
+import type { GroceryListItem, StoreName, IngredientCategory } from "./types";
 import {
   INGREDIENT_TO_GROCERY_CATEGORY,
   GROCERY_CATEGORY_LABELS,
   GROCERY_CATEGORY_ORDER,
 } from "./categoryMap";
 import { STORE_LABELS } from "./types";
-import type { GroceryDisplayCategory, IngredientCategory } from "./types";
 
 /** Format quantity for clipboard display */
 function formatQty(quantity: number | null, unit: string | null): string {
@@ -49,7 +48,7 @@ export function formatForClipboard(items: GroceryListItem[]): string {
     );
     if (catItems.length === 0) continue;
 
-    const label = GROCERY_CATEGORY_LABELS[cat as GroceryDisplayCategory];
+    const label = GROCERY_CATEGORY_LABELS[cat];
     const lines = catItems.map((i) => `- [ ] ${i.name}${formatQty(i.quantity, i.unit)}`);
     sections.push(`${label}\n${lines.join("\n")}`);
   }
