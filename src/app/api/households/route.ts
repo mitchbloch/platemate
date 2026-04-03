@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHousehold, addHouseholdMember, getHousehold } from "@/lib/household";
-import { createUserProfile, updateUserProfile } from "@/lib/userProfile";
+import { getHousehold } from "@/lib/household";
+import { createClient } from "@/lib/supabase/server";
 import { getUser } from "@/lib/supabase/auth";
 
 /** POST /api/households — Create a new household and add the current user as admin */
@@ -16,29 +16,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Household name is required" }, { status: 400 });
     }
 
-    // Create household (returns id only — user can't SELECT until they're a member)
-    const householdId = await createHousehold(body.name.trim());
+    const displayName: string | null =
+      body.displayName?.trim() ||
+      user.user_metadata?.full_name ||
+      user.email ||
+      null;
 
-    // Add user as admin
-    await addHouseholdMember(householdId, user.id, "admin");
+    // Atomic: create household + member + profile in one transaction via SECURITY DEFINER RPC
+    const supabase = await createClient();
+    const { data: householdId, error: rpcError } = await supabase.rpc(
+      "create_household_with_member",
+      {
+        household_name: body.name.trim(),
+        p_display_name: displayName,
+      },
+    );
 
-    // Create or update user profile with this household as active
-    const { getUserProfile } = await import("@/lib/userProfile");
-    const existingProfile = await getUserProfile(user.id);
-
-    if (existingProfile) {
-      const updates: { activeHouseholdId: string; displayName?: string } = { activeHouseholdId: householdId };
-      if (body.displayName) updates.displayName = body.displayName;
-      await updateUserProfile(user.id, updates);
-    } else {
-      await createUserProfile(user.id, {
-        displayName: body.displayName ?? user.user_metadata?.full_name ?? user.email ?? undefined,
-        activeHouseholdId: householdId,
-      });
+    if (rpcError) {
+      console.error("[POST /api/households] RPC error:", rpcError);
+      throw rpcError;
     }
 
-    // Now that user is a member, fetch the full household
-    const household = await getHousehold(householdId);
+    // Fetch the full household for the response
+    const household = await getHousehold(householdId as string);
     return NextResponse.json({ household }, { status: 201 });
   } catch (error) {
     console.error("[POST /api/households] Error:", error);

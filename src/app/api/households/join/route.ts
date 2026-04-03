@@ -25,11 +25,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add user as member (will error on duplicate, which is fine)
+    // Add user as member — only swallow duplicate-key errors (already a member)
     try {
       await addHouseholdMember(household.id, user.id, "member");
-    } catch {
-      // Already a member — that's ok
+    } catch (err) {
+      const pgErr = err as { code?: string };
+      if (pgErr?.code !== "23505") throw err;
     }
 
     // Create or update user profile with this household as active

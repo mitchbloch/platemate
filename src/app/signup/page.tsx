@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
 
 type Step = "account" | "household";
@@ -18,11 +18,43 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   // Household step state
   const [householdMode, setHouseholdMode] = useState<"create" | "join">("create");
   const [householdName, setHouseholdName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+
+  // On mount: check if user is already authenticated
+  useEffect(() => {
+    async function checkAuth() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setChecking(false);
+        return;
+      }
+
+      // User is authenticated — check if they already have a household
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("active_household_id, display_name")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.active_household_id) {
+        // Already set up — redirect home
+        router.replace("/");
+        return;
+      }
+
+      // Authenticated but no household — skip to household step
+      if (profile?.display_name) setDisplayName(profile.display_name);
+      setStep("household");
+      setChecking(false);
+    }
+    checkAuth();
+  }, [router]);
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -34,7 +66,7 @@ function SignupForm() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/signup?step=household`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/signup?step=household')}`,
       },
     });
 
@@ -94,6 +126,14 @@ function SignupForm() {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
     }
+  }
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
   }
 
   return (
@@ -214,6 +254,23 @@ function SignupForm() {
             </div>
 
             <form onSubmit={handleHousehold} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="display-name"
+                  className="mb-1 block text-sm font-medium text-text-secondary"
+                >
+                  Your name
+                </label>
+                <input
+                  id="display-name"
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="First name or nickname"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+                />
+              </div>
+
               {householdMode === "create" ? (
                 <div>
                   <label
