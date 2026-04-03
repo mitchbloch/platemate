@@ -21,6 +21,7 @@ export async function PATCH(
     const updated = await getHousehold(id);
     return NextResponse.json(updated);
   } catch (error) {
+    console.error("[PATCH /api/households/preferences] Error:", error);
     const message = error instanceof Error ? error.message : "Failed to update preferences";
     return NextResponse.json({ error: message }, { status: 500 });
   }

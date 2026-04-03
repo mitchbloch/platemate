@@ -17,6 +17,7 @@ export async function DELETE(
     await removeMember(id, userId);
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("[DELETE /api/households/members] Error:", error);
     const message = error instanceof Error ? error.message : "Failed to remove member";
     return NextResponse.json({ error: message }, { status: 500 });
   }
