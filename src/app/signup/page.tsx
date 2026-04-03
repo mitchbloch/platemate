@@ -13,6 +13,7 @@ function SignupForm() {
   const initialStep = searchParams.get("step") === "household" ? "household" : "account";
 
   const [step, setStep] = useState<Step>(initialStep);
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +67,7 @@ function SignupForm() {
         const res = await fetch("/api/households", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: householdName }),
+          body: JSON.stringify({ name: householdName, displayName: displayName.trim() || undefined }),
         });
         if (!res.ok) {
           const data = await res.json();
@@ -76,7 +77,7 @@ function SignupForm() {
         const res = await fetch("/api/households/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inviteCode }),
+          body: JSON.stringify({ inviteCode, displayName: displayName.trim() || undefined }),
         });
         if (!res.ok) {
           const data = await res.json();
@@ -106,6 +107,24 @@ function SignupForm() {
             </p>
 
             <form onSubmit={handleSignup} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="name"
+                  className="mb-1 block text-sm font-medium text-text-secondary"
+                >
+                  Your name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required
+                  placeholder="First name or nickname"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+                />
+              </div>
+
               <div>
                 <label
                   htmlFor="email"
