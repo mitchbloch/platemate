@@ -1,10 +1,12 @@
 import { createClient } from "./supabase/server";
+import { getActiveHouseholdId } from "./supabase/auth";
 import type { Recipe, ParsedRecipe } from "./types";
 
 /** Convert Supabase row (snake_case) to Recipe (camelCase) */
 function rowToRecipe(row: Record<string, unknown>): Recipe {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     title: row.title as string,
     sourceUrl: row.source_url as string | null,
     sourceName: row.source_name as string | null,
@@ -17,6 +19,7 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
     ingredients: row.ingredients as Recipe["ingredients"],
     instructions: row.instructions as string[],
     nutrition: row.nutrition as Recipe["nutrition"],
+    dietaryFlags: (row.dietary_flags as Recipe["dietaryFlags"]) ?? [],
     tags: row.tags as string[],
     imageUrl: row.image_url as string | null,
     isSlowCooker: row.is_slow_cooker as boolean,
@@ -40,6 +43,7 @@ function recipeToRow(recipe: ParsedRecipe & { sourceUrl?: string | null }) {
     ingredients: recipe.ingredients,
     instructions: recipe.instructions,
     nutrition: recipe.nutrition,
+    dietary_flags: recipe.dietaryFlags,
     tags: recipe.tags,
     image_url: recipe.imageUrl,
     is_slow_cooker: recipe.isSlowCooker,
@@ -73,9 +77,10 @@ export async function createRecipe(
   recipe: ParsedRecipe & { sourceUrl?: string | null },
 ): Promise<string> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("recipes")
-    .insert(recipeToRow(recipe))
+    .insert({ ...recipeToRow(recipe), household_id: householdId })
     .select("id")
     .single();
 
@@ -102,6 +107,7 @@ export async function updateRecipe(
   if (updates.ingredients !== undefined) row.ingredients = updates.ingredients;
   if (updates.instructions !== undefined) row.instructions = updates.instructions;
   if (updates.nutrition !== undefined) row.nutrition = updates.nutrition;
+  if (updates.dietaryFlags !== undefined) row.dietary_flags = updates.dietaryFlags;
   if (updates.tags !== undefined) row.tags = updates.tags;
   if (updates.imageUrl !== undefined) row.image_url = updates.imageUrl;
   if (updates.isSlowCooker !== undefined) row.is_slow_cooker = updates.isSlowCooker;

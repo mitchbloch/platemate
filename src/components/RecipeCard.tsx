@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Recipe } from "@/lib/types";
-import { CUISINE_LABELS } from "@/lib/types";
+import { CUISINE_LABELS, DIETARY_FLAG_LABELS } from "@/lib/types";
 import NutritionBadge from "./NutritionBadge";
 
 export default function RecipeCard({ recipe }: { recipe: Recipe }) {
@@ -30,6 +30,11 @@ export default function RecipeCard({ recipe }: { recipe: Recipe }) {
           <span>{totalTime} min</span>
         )}
         <span>{recipe.servings} servings</span>
+        {recipe.dietaryFlags?.map((flag) => (
+          <span key={flag} className="rounded-md bg-accent-light px-1.5 py-0.5 text-accent">
+            {DIETARY_FLAG_LABELS[flag]}
+          </span>
+        ))}
       </div>
 
       {recipe.nutrition && (

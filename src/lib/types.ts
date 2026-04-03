@@ -11,7 +11,7 @@ export type CuisineType =
   | "french"
   | "other";
 
-export type MealType = "dinner" | "slow-cooker-lunch";
+export type MealType = "breakfast" | "lunch" | "dinner" | "snacks";
 
 export type DifficultyLevel = "easy" | "medium" | "hard";
 
@@ -50,6 +50,7 @@ export type IngredientCategory =
 
 export interface Recipe {
   id: string;
+  householdId: string;
   title: string;
   sourceUrl: string | null;
   sourceName: string | null; // "NYT Cooking", "Stealth Health", etc.
@@ -62,6 +63,7 @@ export interface Recipe {
   ingredients: Ingredient[];
   instructions: string[];
   nutrition: NutritionInfo | null;
+  dietaryFlags: DietaryFlag[];
   tags: string[];
   imageUrl: string | null;
   isSlowCooker: boolean;
@@ -71,7 +73,8 @@ export interface Recipe {
 
 export interface MealPlan {
   id: string;
-  weekStart: string; // ISO date string, always a Monday
+  householdId: string;
+  weekStart: string; // ISO date string, always a Sunday
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -79,6 +82,7 @@ export interface MealPlan {
 
 export interface MealPlanRecipe {
   id: string;
+  householdId: string;
   mealPlanId: string;
   recipeId: string;
   dayOfWeek: number; // 0=Monday ... 6=Sunday
@@ -90,6 +94,7 @@ export type GroceryListStatus = "edit" | "shop" | "completed";
 
 export interface GroceryList {
   id: string;
+  householdId: string;
   weekStart: string;
   mealPlanId: string | null;
   status: GroceryListStatus;
@@ -100,6 +105,7 @@ export interface GroceryList {
 
 export interface GroceryListItem {
   id: string;
+  householdId: string;
   groceryListId: string;
   name: string;
   quantity: number | null;
@@ -122,13 +128,14 @@ export interface MergedIngredient {
   displayName: string; // human-readable name for UI
   quantity: number | null;
   unit: string | null;
-  category: GroceryDisplayCategory;
+  category: string;
   store: StoreName;
   recipeIds: string[]; // which recipes need this item
 }
 
 export interface PinnedGroceryItem {
   id: string;
+  householdId: string;
   name: string;
   category: GroceryDisplayCategory;
   store: StoreName;
@@ -139,8 +146,76 @@ export interface PinnedGroceryItem {
 
 export interface PantryItem {
   id: string;
+  householdId: string;
   name: string;
   createdAt: string;
+}
+
+// ── Household Types ──
+
+export interface MealSchedule {
+  breakfast: number;
+  lunch: number;
+  dinner: number;
+  snacks: number;
+}
+
+export interface GroceryCategory {
+  name: string;
+  ingredientTypes: IngredientCategory[];
+}
+
+export interface NutritionPriority {
+  nutrient: keyof NutritionInfo;
+  rank: number;
+}
+
+export type HouseholdRole = "admin" | "member";
+
+export type InviteStatus = "pending" | "accepted" | "expired";
+
+export interface Household {
+  id: string;
+  name: string;
+  inviteCode: string;
+  inviteCodeExpiresAt: string | null;
+  groceryStores: StoreName[];
+  defaultStore: StoreName;
+  mealSchedule: MealSchedule;
+  defaultServings: number;
+  dietaryPreferences: string[];
+  groceryCategories: GroceryCategory[];
+  nutritionPriorities: NutritionPriority[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HouseholdMember {
+  id: string;
+  householdId: string;
+  userId: string;
+  role: HouseholdRole;
+  createdAt: string;
+}
+
+export interface HouseholdInvite {
+  id: string;
+  householdId: string;
+  email: string;
+  invitedBy: string;
+  status: InviteStatus;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface UserProfile {
+  id: string;
+  displayName: string | null;
+  onboardingCompleted: boolean;
+  onboardingSkipped: boolean;
+  activeHouseholdId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface GroceryListWithItems {
@@ -150,10 +225,39 @@ export interface GroceryListWithItems {
 
 export interface RecipeHistory {
   id: string;
+  householdId: string;
   recipeId: string;
   cookedAt: string;
   rating: number | null; // 1-5
   notes: string | null;
+}
+
+// ── Dietary Types ──
+
+export type DietaryFlag =
+  | "vegetarian"
+  | "vegan"
+  | "gluten-free"
+  | "dairy-free"
+  | "nut-free"
+  | "shellfish-free"
+  | "low-sodium"
+  | "low-cholesterol";
+
+export const DIETARY_FLAG_LABELS: Record<DietaryFlag, string> = {
+  vegetarian: "Vegetarian",
+  vegan: "Vegan",
+  "gluten-free": "Gluten-Free",
+  "dairy-free": "Dairy-Free",
+  "nut-free": "Nut-Free",
+  "shellfish-free": "Shellfish-Free",
+  "low-sodium": "Low Sodium",
+  "low-cholesterol": "Low Cholesterol",
+};
+
+export interface DietaryWarning {
+  preference: string;
+  message: string;
 }
 
 // ── AI / Parser Types ──
@@ -169,6 +273,7 @@ export interface ParsedRecipe {
   ingredients: Ingredient[];
   instructions: string[];
   nutrition: NutritionInfo;
+  dietaryFlags: DietaryFlag[];
   tags: string[];
   imageUrl: string | null;
   isSlowCooker: boolean;
@@ -220,6 +325,35 @@ export const STORE_LABELS: Record<StoreName, string> = {
   hmart: "H Mart",
   target: "Target",
   other: "Other",
+};
+
+export const MEAL_TYPE_LABELS: Record<MealType, string> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+  snacks: "Snacks",
+};
+
+export const NUTRITION_LABELS: Record<keyof NutritionInfo, string> = {
+  calories: "Calories",
+  protein: "Protein",
+  carbs: "Carbs",
+  fat: "Fat",
+  saturatedFat: "Saturated Fat",
+  cholesterol: "Cholesterol",
+  fiber: "Fiber",
+  sodium: "Sodium",
+};
+
+export const NUTRITION_UNITS: Record<keyof NutritionInfo, string> = {
+  calories: "kcal",
+  protein: "g",
+  carbs: "g",
+  fat: "g",
+  saturatedFat: "g",
+  cholesterol: "mg",
+  fiber: "g",
+  sodium: "mg",
 };
 
 export const CATEGORY_LABELS: Record<IngredientCategory, string> = {

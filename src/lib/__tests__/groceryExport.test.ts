@@ -7,13 +7,17 @@ function makeItem(
 ): GroceryListItem {
   return {
     id: Math.random().toString(),
+    householdId: "hh-1",
     groceryListId: "list-1",
     quantity: null,
     unit: null,
     category: "other",
     store: "trader-joes",
     checked: false,
+    dismissed: false,
     recipeIds: [],
+    isManual: false,
+    sortOrder: 0,
     ...overrides,
   };
 }
@@ -31,7 +35,7 @@ describe("formatForClipboard", () => {
     const result = formatForClipboard(items);
 
     expect(result).toBe(
-      `Protein\n- [ ] Chicken breast x2\n\nProduce\n- [ ] Bell peppers x2\n- [ ] Garlic\n\nDairy\n- [ ] Almond milk\n\nOther\n- [ ] Rice`,
+      `Protein\n- [ ] Chicken breast x2\n\nProduce\n- [ ] Bell peppers x2\n- [ ] Garlic\n\nDairy\n- [ ] Almond milk\n\nPantry\n- [ ] Rice`,
     );
   });
 

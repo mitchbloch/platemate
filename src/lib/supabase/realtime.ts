@@ -6,6 +6,7 @@ function payloadToGroceryListItem(
 ): GroceryListItem {
   return {
     id: payload.id as string,
+    householdId: payload.household_id as string,
     groceryListId: payload.grocery_list_id as string,
     name: payload.name as string,
     quantity: payload.quantity as number | null,

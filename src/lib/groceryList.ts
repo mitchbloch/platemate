@@ -1,4 +1,5 @@
 import { createClient } from "./supabase/server";
+import { getActiveHouseholdId } from "./supabase/auth";
 import {
   deduplicateIngredients,
   normalizeIngredientName,
@@ -23,6 +24,7 @@ import type {
 function rowToGroceryList(row: Record<string, unknown>): GroceryList {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     weekStart: row.week_start as string,
     mealPlanId: (row.meal_plan_id as string) ?? null,
     status: (row.status as GroceryListStatus) ?? "edit",
@@ -35,6 +37,7 @@ function rowToGroceryList(row: Record<string, unknown>): GroceryList {
 function rowToGroceryListItem(row: Record<string, unknown>): GroceryListItem {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     groceryListId: row.grocery_list_id as string,
     name: row.name as string,
     quantity: row.quantity as number | null,
@@ -89,9 +92,10 @@ export async function getOrCreateGroceryListByWeek(
   }
 
   // Create new list (no meal_plan_id yet)
+  const householdId = await getActiveHouseholdId();
   const { data: newList, error: createError } = await supabase
     .from("grocery_lists")
-    .insert({ week_start: weekStart })
+    .insert({ week_start: weekStart, household_id: householdId })
     .select()
     .single();
 
@@ -116,6 +120,7 @@ export async function getOrCreateGroceryListByWeek(
       groupCounters.set(key, count);
       return {
         grocery_list_id: list.id,
+        household_id: householdId,
         name: pinned.name,
         quantity: pinned.quantity,
         unit: pinned.unit,
@@ -146,6 +151,7 @@ export function generateGroceryItems(
   const mealInputs = meals.map((m) => ({
     meal: {
       id: m.id,
+      householdId: m.householdId,
       mealPlanId: m.mealPlanId,
       recipeId: m.recipeId,
       dayOfWeek: m.dayOfWeek,
@@ -173,6 +179,7 @@ export async function mergeRecipeItemsIntoList(
   pantryNames: Set<string>,
 ): Promise<GroceryListWithItems> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
 
   // Link meal plan if provided
   if (mealPlanId) {
@@ -243,6 +250,7 @@ export async function mergeRecipeItemsIntoList(
       // Insert new recipe-derived item (sort_order assigned below)
       toInsert.push({
         grocery_list_id: listId,
+        household_id: householdId,
         name: recipeItem.displayName,
         quantity: recipeItem.quantity,
         unit: recipeItem.unit,
@@ -350,10 +358,12 @@ export async function addGroceryListItem(
     .maybeSingle();
   const nextSortOrder = ((maxData?.sort_order as number) ?? 0) + 1000;
 
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("grocery_list_items")
     .insert({
       grocery_list_id: groceryListId,
+      household_id: householdId,
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,

@@ -35,20 +35,46 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users to login (except for /login itself)
-  const isLoginPage = request.nextUrl.pathname === "/login";
+  // Public routes that don't require auth
+  const pathname = request.nextUrl.pathname;
+  const isPublicRoute = pathname === "/login" || pathname === "/signup";
 
-  if (!user && !isLoginPage) {
+  if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from login page
-  if (user && isLoginPage) {
+  if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
+  }
+
+  if (user && !isPublicRoute && !pathname.startsWith("/api/")) {
+    const hasHousehold = request.cookies.get("platemate-has-household")?.value === "1";
+
+    if (!hasHousehold) {
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("active_household_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.active_household_id) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/signup";
+        url.searchParams.set("step", "household");
+        return NextResponse.redirect(url);
+      }
+
+      supabaseResponse.cookies.set("platemate-has-household", "1", {
+        path: "/",
+        maxAge: 60 * 60 * 24,
+        httpOnly: true,
+        sameSite: "lax",
+      });
+    }
   }
 
   return supabaseResponse;

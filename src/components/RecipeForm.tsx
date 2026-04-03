@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ParsedRecipe, CuisineType, MealType, DifficultyLevel, Ingredient } from "@/lib/types";
-import { CUISINE_LABELS } from "@/lib/types";
+import { CUISINE_LABELS, DIETARY_FLAG_LABELS } from "@/lib/types";
 import NutritionBadge from "./NutritionBadge";
 
 type InputMode = "url" | "text";
@@ -253,6 +253,20 @@ export default function RecipeForm() {
         Review the extracted recipe below. Edit any fields before saving.
       </div>
 
+      {/* Dietary Flags */}
+      {recipe.dietaryFlags && recipe.dietaryFlags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {recipe.dietaryFlags.map((flag) => (
+            <span
+              key={flag}
+              className="rounded-md bg-accent-light px-2 py-0.5 text-xs text-accent"
+            >
+              {DIETARY_FLAG_LABELS[flag]}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Title */}
       <div>
         <label className="mb-1 block text-sm font-medium text-text-secondary">
@@ -304,8 +318,10 @@ export default function RecipeForm() {
             onChange={(e) => updateField("mealType", e.target.value as MealType)}
             className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
           >
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
             <option value="dinner">Dinner</option>
-            <option value="slow-cooker-lunch">Slow Cooker Lunch</option>
+            <option value="snacks">Snacks</option>
           </select>
         </div>
         <div>

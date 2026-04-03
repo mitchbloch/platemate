@@ -1,4 +1,5 @@
 import { createClient } from "./supabase/server";
+import { getActiveHouseholdId } from "./supabase/auth";
 import type { PantryItem } from "./types";
 
 // ── Row Converters ──
@@ -6,6 +7,7 @@ import type { PantryItem } from "./types";
 function rowToPantryItem(row: Record<string, unknown>): PantryItem {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     name: row.name as string,
     createdAt: row.created_at as string,
   };
@@ -30,9 +32,10 @@ export async function addPantryItem(name: string): Promise<PantryItem> {
 
   const normalized = name.toLowerCase().trim();
 
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("pantry_items")
-    .upsert({ name: normalized }, { onConflict: "name" })
+    .upsert({ name: normalized, household_id: householdId }, { onConflict: "household_id,name" })
     .select()
     .single();
 

@@ -126,26 +126,9 @@
 - [x] Build passing, 57 tests
 
 ## Phase 5: Polish & Growth
-
-### 5A: PWA Installation + Mobile UX ✅
-- [x] PWA manifest (`src/app/manifest.ts`) with app name, icons, standalone display
-- [x] App icons: 192px, 512px, 512px maskable, 180px apple-touch-icon
-- [x] Apple web app meta tags + viewport config in layout.tsx
-- [x] Mobile bottom tab navigation (5 tabs with icons, fixed bottom bar)
-- [x] Mobile top logo bar (slim header replacing desktop nav on small screens)
-- [x] Bottom padding for mobile content (avoids tab bar overlap)
-- [x] iOS input zoom prevention (font-size: max(16px, 1em))
-- [x] NutritionBadge responsive grid (2-col mobile, 4-col desktop)
-- [x] WeeklyPlanner: mobile-visible remove buttons, responsive heading, truncated suggestions
-- [x] GroceryListView: stacked header/actions on mobile, responsive week label
-- [x] RecipeDetail: responsive title sizes, flex-wrap action buttons
-- [x] Home page: responsive heading
-- [x] Build + lint + 57 tests passing
-
-### 5B+: Remaining
+- [ ] iOS/mobile experience (evaluate PWA vs React Native vs Capacitor)
 - [ ] Multi-household support (household entity, scoped RLS, shared data)
 - [ ] Self-service sign-up + onboarding tutorial
 - [ ] Recipe ratings feeding into recommendations
 - [ ] Improved ingredient normalization (includes fuzzy matching for grocery dedup)
 - [ ] USDA API for precise nutrition (optional)
-- [ ] PWA offline caching with Serwist (optional, for in-store grocery use)

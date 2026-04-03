@@ -1,4 +1,5 @@
 import { createClient } from "./supabase/server";
+import { getActiveHouseholdId } from "./supabase/auth";
 import type {
   GroceryDisplayCategory,
   IngredientCategory,
@@ -11,6 +12,7 @@ import type {
 function rowToPinnedItem(row: Record<string, unknown>): PinnedGroceryItem {
   return {
     id: row.id as string,
+    householdId: row.household_id as string,
     name: row.name as string,
     category: row.category as GroceryDisplayCategory,
     store: row.store as StoreName,
@@ -43,9 +45,11 @@ export async function addPinnedItem(item: {
 }): Promise<PinnedGroceryItem> {
   const supabase = await createClient();
 
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("pinned_grocery_items")
     .insert({
+      household_id: householdId,
       name: item.name,
       category: item.category,
       store: item.store,

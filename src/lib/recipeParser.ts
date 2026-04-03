@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { ParsedRecipe, Ingredient, CuisineType, MealType, DifficultyLevel, IngredientCategory } from "./types";
+import type { ParsedRecipe, Ingredient, CuisineType, MealType, DifficultyLevel, IngredientCategory, DietaryFlag } from "./types";
 
 const anthropic = new Anthropic();
 
@@ -153,7 +153,7 @@ const RECIPE_SCHEMA = `{
   "title": string,
   "description": string | null,
   "cuisine": "american" | "italian" | "mexican" | "asian" | "mediterranean" | "indian" | "middle-eastern" | "french" | "other",
-  "mealType": "dinner" | "slow-cooker-lunch",
+  "mealType": "breakfast" | "lunch" | "dinner" | "snacks",
   "difficulty": "easy" | "medium" | "hard",
   "servings": number,
   "totalTimeMinutes": number | null,
@@ -178,6 +178,7 @@ const RECIPE_SCHEMA = `{
     "fiber": number,
     "sodium": number
   },
+  "dietaryFlags": ["vegetarian" | "vegan" | "gluten-free" | "dairy-free" | "nut-free" | "shellfish-free" | "low-sodium" | "low-cholesterol"],
   "tags": [string],
   "imageUrl": string | null,
   "isSlowCooker": boolean,
@@ -190,6 +191,8 @@ const NUTRITION_GUIDELINES = `Nutrition estimation guidelines:
 - cholesterol in mg, saturatedFat in g, sodium in mg, fiber in g
 - For cholesterol: eggs ~186mg each, shrimp ~170mg/3oz, chicken breast ~85mg/3oz, butter ~31mg/tbsp
 - Flag any recipe with >100mg cholesterol per serving as notable
+
+For dietaryFlags: include any that apply — "vegetarian", "vegan", "gluten-free", "dairy-free", "nut-free", "shellfish-free", "low-sodium" (<=600mg/serving), "low-cholesterol" (<=60mg/serving). Only include flags that are clearly true based on the ingredients.
 
 For isSlowCooker: true if the recipe uses a slow cooker, crock pot, or instant pot on slow cook mode.
 For sourceName: infer from the URL/page (e.g., "NYT Cooking", "Stealth Health", "Budget Bytes").`;
@@ -278,6 +281,7 @@ function validateParsedRecipe(data: unknown): ParsedRecipe {
       fiber: (nutrition.fiber as number) ?? 0,
       sodium: (nutrition.sodium as number) ?? 0,
     },
+    dietaryFlags: Array.isArray(d.dietaryFlags) ? (d.dietaryFlags as DietaryFlag[]) : [],
     tags: Array.isArray(d.tags) ? (d.tags as string[]) : [],
     imageUrl: (d.imageUrl as string) ?? null,
     isSlowCooker: (d.isSlowCooker as boolean) ?? false,
