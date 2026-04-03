@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ household }, { status: 200 });
   } catch (error) {
+    console.error("[POST /api/households/join] Error:", error);
     const message = error instanceof Error ? error.message : "Failed to join household";
     return NextResponse.json({ error: message }, { status: 500 });
   }

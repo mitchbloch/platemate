@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     const household = await getHousehold(householdId);
     return NextResponse.json({ household }, { status: 201 });
   } catch (error) {
+    console.error("[POST /api/households] Error:", error);
     const message = error instanceof Error ? error.message : "Failed to create household";
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -17,6 +17,7 @@ export async function GET() {
 
     return NextResponse.json(profile);
   } catch (error) {
+    console.error("[GET /api/user/profile] Error:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch profile";
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -40,6 +41,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("[PATCH /api/user/profile] Error:", error);
     const message = error instanceof Error ? error.message : "Failed to update profile";
     return NextResponse.json({ error: message }, { status: 500 });
   }

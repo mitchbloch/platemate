@@ -33,6 +33,9 @@ function SignupForm() {
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/signup?step=household`,
+      },
     });
 
     if (signUpError) {

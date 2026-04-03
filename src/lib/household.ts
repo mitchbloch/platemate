@@ -67,14 +67,14 @@ export async function getHousehold(id: string): Promise<Household | null> {
 
 export async function createHousehold(name: string): Promise<string> {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const id = crypto.randomUUID();
+
+  const { error } = await supabase
     .from("households")
-    .insert({ name })
-    .select("id")
-    .single();
+    .insert({ id, name });
 
   if (error) throw error;
-  return data.id as string;
+  return id;
 }
 
 export async function updateHouseholdPreferences(

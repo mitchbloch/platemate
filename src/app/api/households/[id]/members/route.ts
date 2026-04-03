@@ -17,6 +17,7 @@ export async function GET(
     const members = await getHouseholdMembers(id);
     return NextResponse.json(members);
   } catch (error) {
+    console.error("[GET /api/households/members] Error:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch members";
     return NextResponse.json({ error: message }, { status: 500 });
   }
