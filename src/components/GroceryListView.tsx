@@ -94,11 +94,12 @@ function storeBadgeClasses(store: StoreName): string {
     case "target": return "bg-danger-light text-danger";
     case "whole-foods": return "bg-accent-light text-accent";
     case "hmart": return "bg-primary-light text-primary";
+    case "costco": return "bg-blue-100 text-blue-700";
     case "other": return "bg-gold-light text-gold";
   }
 }
 
-const NON_TJ_STORES: StoreName[] = ["target", "whole-foods", "hmart", "other"];
+const NON_TJ_STORES: StoreName[] = ["target", "whole-foods", "hmart", "costco", "other"];
 
 export default function GroceryListView({
   initialList,

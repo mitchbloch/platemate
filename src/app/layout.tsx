@@ -58,7 +58,8 @@ export default function RootLayout({
       <body
         className={`${dmSans.variable} ${fraunces.variable} font-sans antialiased`}
       >
-        {children}
+        {/* pb-20 gives clearance for the fixed mobile bottom tab bar (incl. safe-area inset) */}
+        <div className="pb-20 sm:pb-0">{children}</div>
         <OnboardingWrapper />
         <Analytics />
         <SpeedInsights />
