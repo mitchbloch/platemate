@@ -12,7 +12,6 @@ const STORE_OPTIONS = [
   { value: "whole-foods", label: "Whole Foods" },
   { value: "target", label: "Target" },
   { value: "costco", label: "Costco" },
-  { value: "other", label: "Other" },
 ];
 
 // Absolute restrictions — allergy, ethics, religion

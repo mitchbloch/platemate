@@ -43,9 +43,8 @@ import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 const ALL_STORES: StoreName[] = [
   "trader-joes",
   "whole-foods",
-  "hmart",
   "target",
-  "other",
+  "costco",
 ];
 
 const ALL_MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner", "snacks"];

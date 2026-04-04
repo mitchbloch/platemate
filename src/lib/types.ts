@@ -119,7 +119,7 @@ export interface GroceryListItem {
   sortOrder: number;
 }
 
-export type StoreName = "trader-joes" | "whole-foods" | "hmart" | "target" | "other";
+export type StoreName = "trader-joes" | "whole-foods" | "hmart" | "target" | "costco" | "other";
 
 export type GroceryDisplayCategory = "protein" | "produce" | "dairy" | "snacks" | "other";
 
@@ -325,6 +325,7 @@ export const STORE_LABELS: Record<StoreName, string> = {
   "whole-foods": "Whole Foods",
   hmart: "H Mart",
   target: "Target",
+  costco: "Costco",
   other: "Other",
 };
 
