@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import type { GroceryList, GroceryListItem, GroceryDisplayCategory, IngredientCategory, PantryItem, PinnedGroceryItem, StoreName } from "@/lib/types";
 import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER } from "@/lib/categoryMap";
@@ -144,29 +145,55 @@ export default function GroceryListView({
 
   // ── Real-time Subscription ──
   const listId = list?.id ?? null;
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
   useEffect(() => {
     if (!listId) return;
 
     const supabase = supabaseRef.current;
-    const channel = subscribeToGroceryList(supabase, listId, {
-      onUpdate: (updatedItem) => {
-        setItems((prev) =>
-          prev.map((i) => (i.id === updatedItem.id ? updatedItem : i)),
-        );
-      },
-      onInsert: (newItem) => {
-        setItems((prev) => {
-          if (prev.some((i) => i.id === newItem.id)) return prev;
-          return [...prev, newItem];
-        });
-      },
-      onDelete: ({ id }) => {
-        setItems((prev) => prev.filter((i) => i.id !== id));
-      },
-    });
+
+    function subscribe() {
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        supabase.removeChannel(channelRef.current);
+      }
+      channelRef.current = subscribeToGroceryList(supabase, listId!, {
+        onUpdate: (updatedItem) => {
+          setItems((prev) =>
+            prev.map((i) => (i.id === updatedItem.id ? updatedItem : i)),
+          );
+        },
+        onInsert: (newItem) => {
+          setItems((prev) => {
+            if (prev.some((i) => i.id === newItem.id)) return prev;
+            return [...prev, newItem];
+          });
+        },
+        onDelete: ({ id }) => {
+          setItems((prev) => prev.filter((i) => i.id !== id));
+        },
+      });
+    }
+
+    subscribe();
+
+    // Re-subscribe when the PWA returns from background/sleep — the WebSocket
+    // connection drops silently on mobile and won't recover without this.
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        subscribe();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [listId]);
 
