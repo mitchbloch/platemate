@@ -520,5 +520,5 @@ function categoryToDb(category: string): IngredientCategory {
     snacks: "other",
     other: "other",
   };
-  return map[category] ?? "other";
+  return map[category.toLowerCase()] ?? "other";
 }
