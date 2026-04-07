@@ -681,10 +681,10 @@ export default function GroceryListView({
       protein: "meat",
       produce: "produce",
       dairy: "dairy",
-      snacks: "other",
+      pantry: "grain",
       other: "other",
     };
-    const dbCategory = DISPLAY_TO_INGREDIENT[updates.category] ?? (updates.category as IngredientCategory);
+    const dbCategory = DISPLAY_TO_INGREDIENT[updates.category.toLowerCase()] ?? (updates.category as IngredientCategory);
     // Optimistic update with typed category
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, ...updates, category: dbCategory } : i)),

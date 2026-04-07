@@ -517,7 +517,7 @@ function categoryToDb(category: string): IngredientCategory {
     protein: "meat",
     produce: "produce",
     dairy: "dairy",
-    snacks: "other",
+    pantry: "grain",
     other: "other",
   };
   return map[category.toLowerCase()] ?? "other";
