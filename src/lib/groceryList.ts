@@ -54,7 +54,7 @@ function rowToGroceryListItem(row: Record<string, unknown>): GroceryListItem {
 
 // ── Read Operations ──
 
-async function fetchListItems(
+export async function fetchListItems(
   listId: string,
 ): Promise<GroceryListItem[]> {
   const supabase = await createClient();

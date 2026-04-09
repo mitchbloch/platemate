@@ -8,7 +8,7 @@ import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGO
 import { STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
 import { createClient } from "@/lib/supabase/client";
-import { subscribeToGroceryList } from "@/lib/supabase/realtime";
+import { subscribeToGroceryList, subscribeToGroceryListRecord } from "@/lib/supabase/realtime";
 import { useToast, ToastContainer } from "@/components/Toast";
 import CompletionModal from "@/components/CompletionModal";
 import {
@@ -146,13 +146,27 @@ export default function GroceryListView({
   // ── Real-time Subscription ──
   const listId = list?.id ?? null;
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const listChannelRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
     if (!listId) return;
 
     const supabase = supabaseRef.current;
 
+    async function refreshItems() {
+      try {
+        const res = await fetch(`/api/grocery-lists/${listId}/items`);
+        if (res.ok) {
+          const freshItems: GroceryListItem[] = await res.json();
+          setItems(freshItems);
+        }
+      } catch {
+        // silently ignore — stale items are better than a crash
+      }
+    }
+
     function subscribe() {
+      // Items channel
       if (channelRef.current) {
         channelRef.current.unsubscribe();
         supabase.removeChannel(channelRef.current);
@@ -173,15 +187,29 @@ export default function GroceryListView({
           setItems((prev) => prev.filter((i) => i.id !== id));
         },
       });
+
+      // List-record channel — syncs mode (edit/shop/completed) across devices
+      if (listChannelRef.current) {
+        listChannelRef.current.unsubscribe();
+        supabase.removeChannel(listChannelRef.current);
+      }
+      listChannelRef.current = subscribeToGroceryListRecord(supabase, listId!, {
+        onUpdate: ({ status, completedAt }) => {
+          setList((prev) => (prev ? { ...prev, status, completedAt } : prev));
+          setMode(status === "shop" ? "shop" : "edit");
+        },
+      });
     }
 
     subscribe();
 
     // Re-subscribe when the PWA returns from background/sleep — the WebSocket
     // connection drops silently on mobile and won't recover without this.
+    // Also re-fetch items to catch changes that arrived while backgrounded.
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
         subscribe();
+        void refreshItems();
       }
     }
 
@@ -193,6 +221,11 @@ export default function GroceryListView({
         channelRef.current.unsubscribe();
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
+      }
+      if (listChannelRef.current) {
+        listChannelRef.current.unsubscribe();
+        supabase.removeChannel(listChannelRef.current);
+        listChannelRef.current = null;
       }
     };
   }, [listId]);

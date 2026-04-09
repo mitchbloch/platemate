@@ -1,5 +1,5 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import type { GroceryListItem, IngredientCategory, StoreName } from "../types";
+import type { GroceryListItem, GroceryListStatus, IngredientCategory, StoreName } from "../types";
 
 function payloadToGroceryListItem(
   payload: Record<string, unknown>,
@@ -70,6 +70,34 @@ export function subscribeToGroceryList(
       },
       (payload) => {
         callbacks.onDelete({ id: (payload.old as Record<string, unknown>).id as string });
+      },
+    )
+    .subscribe();
+}
+
+export function subscribeToGroceryListRecord(
+  supabase: SupabaseClient,
+  groceryListId: string,
+  callbacks: {
+    onUpdate: (patch: { status: GroceryListStatus; completedAt: string | null }) => void;
+  },
+): RealtimeChannel {
+  return supabase
+    .channel(`grocery-list-record-${groceryListId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "grocery_lists",
+        filter: `id=eq.${groceryListId}`,
+      },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        callbacks.onUpdate({
+          status: (row.status as GroceryListStatus) ?? "edit",
+          completedAt: (row.completed_at as string) ?? null,
+        });
       },
     )
     .subscribe();
