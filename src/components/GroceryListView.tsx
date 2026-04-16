@@ -8,7 +8,7 @@ import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGO
 import { STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
 import { createClient } from "@/lib/supabase/client";
-import { subscribeToGroceryList, subscribeToGroceryListRecord } from "@/lib/supabase/realtime";
+import { subscribeToGroceryList } from "@/lib/supabase/realtime";
 import { useToast, ToastContainer } from "@/components/Toast";
 import CompletionModal from "@/components/CompletionModal";
 import {
@@ -146,31 +146,36 @@ export default function GroceryListView({
   // ── Real-time Subscription ──
   const listId = list?.id ?? null;
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const listChannelRef = useRef<RealtimeChannel | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!listId) return;
 
     const supabase = supabaseRef.current;
+    let cancelled = false;
 
-    async function refreshItems() {
-      try {
-        const res = await fetch(`/api/grocery-lists/${listId}/items`);
-        if (res.ok) {
-          const freshItems: GroceryListItem[] = await res.json();
-          setItems(freshItems);
-        }
-      } catch {
-        // silently ignore — stale items are better than a crash
+    function cleanupChannel() {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
       }
-    }
-
-    function subscribe() {
-      // Items channel
       if (channelRef.current) {
         channelRef.current.unsubscribe();
         supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
       }
+    }
+
+    async function subscribe() {
+      cleanupChannel();
+      if (cancelled) return;
+
+      // Ensure a fresh auth token before subscribing — an expired JWT
+      // causes the Realtime server to silently drop the subscription.
+      await supabase.auth.getUser();
+
+      if (cancelled) return;
+
       channelRef.current = subscribeToGroceryList(supabase, listId!, {
         onUpdate: (updatedItem) => {
           setItems((prev) =>
@@ -186,17 +191,14 @@ export default function GroceryListView({
         onDelete: ({ id }) => {
           setItems((prev) => prev.filter((i) => i.id !== id));
         },
-      });
-
-      // List-record channel — syncs mode (edit/shop/completed) across devices
-      if (listChannelRef.current) {
-        listChannelRef.current.unsubscribe();
-        supabase.removeChannel(listChannelRef.current);
-      }
-      listChannelRef.current = subscribeToGroceryListRecord(supabase, listId!, {
-        onUpdate: ({ status, completedAt }) => {
-          setList((prev) => (prev ? { ...prev, status, completedAt } : prev));
-          setMode(status === "shop" ? "shop" : "edit");
+        onStatus: (status) => {
+          if (cancelled) return;
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            // Retry after a short delay
+            retryTimerRef.current = setTimeout(() => {
+              if (!cancelled) subscribe();
+            }, 3000);
+          }
         },
       });
     }
@@ -205,30 +207,29 @@ export default function GroceryListView({
 
     // Re-subscribe when the PWA returns from background/sleep — the WebSocket
     // connection drops silently on mobile and won't recover without this.
-    // Also re-fetch items to catch changes that arrived while backgrounded.
+    // Also re-fetch current items so we don't miss changes that happened while
+    // the tab was hidden (Realtime events are NOT queued).
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
         subscribe();
-        void refreshItems();
+        // Backfill any changes missed while the tab was hidden
+        fetch(`/api/grocery-lists?week=${weekStart}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (data?.items) setItems(data.items);
+          })
+          .catch(() => {});
       }
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (channelRef.current) {
-        channelRef.current.unsubscribe();
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-      if (listChannelRef.current) {
-        listChannelRef.current.unsubscribe();
-        supabase.removeChannel(listChannelRef.current);
-        listChannelRef.current = null;
-      }
+      cleanupChannel();
     };
-  }, [listId]);
+  }, [listId, weekStart]);
 
   // ── Completion Detection ──
   // checkedCount/activeCount computed early for the effect
@@ -714,10 +715,10 @@ export default function GroceryListView({
       protein: "meat",
       produce: "produce",
       dairy: "dairy",
-      pantry: "grain",
+      snacks: "other",
       other: "other",
     };
-    const dbCategory = DISPLAY_TO_INGREDIENT[updates.category.toLowerCase()] ?? (updates.category as IngredientCategory);
+    const dbCategory = DISPLAY_TO_INGREDIENT[updates.category] ?? (updates.category as IngredientCategory);
     // Optimistic update with typed category
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, ...updates, category: dbCategory } : i)),
