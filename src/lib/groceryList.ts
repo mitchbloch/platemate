@@ -54,7 +54,7 @@ function rowToGroceryListItem(row: Record<string, unknown>): GroceryListItem {
 
 // ── Read Operations ──
 
-export async function fetchListItems(
+async function fetchListItems(
   listId: string,
 ): Promise<GroceryListItem[]> {
   const supabase = await createClient();
@@ -517,8 +517,8 @@ function categoryToDb(category: string): IngredientCategory {
     protein: "meat",
     produce: "produce",
     dairy: "dairy",
-    pantry: "grain",
+    snacks: "other",
     other: "other",
   };
-  return map[category.toLowerCase()] ?? "other";
+  return map[category] ?? "other";
 }

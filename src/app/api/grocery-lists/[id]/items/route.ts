@@ -1,24 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   addGroceryListItem,
-  fetchListItems,
   updateGroceryListItem,
   deleteGroceryListItem,
 } from "@/lib/groceryList";
-
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id: groceryListId } = await params;
-    const items = await fetchListItems(groceryListId);
-    return NextResponse.json(items);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to fetch items";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
 
 export async function POST(
   request: NextRequest,
