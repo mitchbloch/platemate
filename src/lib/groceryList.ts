@@ -2,7 +2,7 @@ import { createClient } from "./supabase/server";
 import { getActiveHouseholdId } from "./supabase/auth";
 import {
   deduplicateIngredients,
-  normalizeIngredientName,
+  normalizeForMatching,
   normalizeUnit,
 } from "./ingredientMerge";
 import { getPinnedItems } from "./pinnedItems";
@@ -107,8 +107,8 @@ export async function getOrCreateGroceryListByWeek(
     getPinnedItems(),
     getPantryItems(),
   ]);
-  const pantryNames = new Set(
-    pantryItems.map((p) => p.name.toLowerCase().trim()),
+  const pantryMatchingKeys = new Set(
+    pantryItems.map((p) => normalizeForMatching(p.name)),
   );
 
   if (pinnedItems.length > 0) {
@@ -127,7 +127,7 @@ export async function getOrCreateGroceryListByWeek(
         category: categoryToDb(pinned.category),
         store: pinned.store,
         checked: false,
-        dismissed: pantryNames.has(pinned.name.toLowerCase().trim()),
+        dismissed: pantryMatchingKeys.has(normalizeForMatching(pinned.name)),
         recipe_ids: [],
         is_manual: true,
         sort_order: count * 1000,
@@ -177,7 +177,7 @@ export async function mergeRecipeItemsIntoList(
   mealPlanId: string | null,
   recipeItems: MergedIngredient[],
   pantryNames: Set<string>,
-): Promise<GroceryListWithItems> {
+): Promise<GroceryListWithItems & { pantryDismissedNames: string[] }> {
   const supabase = await createClient();
   const householdId = await getActiveHouseholdId();
 
@@ -215,18 +215,25 @@ export async function mergeRecipeItemsIntoList(
       .in("id", manualIds);
   }
 
-  // Build lookup of manual items by normalized name
-  const manualByName = new Map<string, GroceryListItem>();
+  // Build lookup of manual items by fuzzy matching key
+  const manualByMatchingKey = new Map<string, GroceryListItem>();
   for (const item of manualItems) {
-    manualByName.set(normalizeIngredientName(item.name), item);
+    manualByMatchingKey.set(normalizeForMatching(item.name), item);
   }
 
   const toInsert: Array<Record<string, unknown>> = [];
   const mergedManualIds = new Set<string>();
+  const pantryDismissedNames: string[] = [];
 
   for (const recipeItem of recipeItems) {
-    const normalizedName = recipeItem.name; // already normalized
-    const matchingManual = manualByName.get(normalizedName);
+    // recipeItem.name is already the qualifier-stripped matching key from dedup
+    const matchingKey = recipeItem.name;
+    const isPantry = pantryNames.has(matchingKey);
+    const matchingManual = manualByMatchingKey.get(matchingKey);
+
+    if (isPantry) {
+      pantryDismissedNames.push(recipeItem.displayName);
+    }
 
     if (matchingManual && !mergedManualIds.has(matchingManual.id)) {
       // Merge: update the manual item with recipe info
@@ -243,7 +250,7 @@ export async function mergeRecipeItemsIntoList(
           recipe_ids: recipeItem.recipeIds,
           quantity: merged.quantity,
           unit: merged.unit,
-          dismissed: pantryNames.has(normalizedName),
+          dismissed: isPantry,
         })
         .eq("id", matchingManual.id);
     } else {
@@ -257,7 +264,7 @@ export async function mergeRecipeItemsIntoList(
         category: categoryToDb(recipeItem.category),
         store: recipeItem.store,
         checked: false,
-        dismissed: pantryNames.has(normalizedName),
+        dismissed: isPantry,
         recipe_ids: recipeItem.recipeIds,
         is_manual: false,
         sort_order: 0, // placeholder, assigned below
@@ -300,12 +307,13 @@ export async function mergeRecipeItemsIntoList(
 
   const list = rowToGroceryList(listData);
   const items = await fetchListItems(list.id);
-  return { list, items };
+  return { list, items, pantryDismissedNames };
 }
 
 /**
  * Merge manual and recipe quantities.
  * Same unit → sum. Different units → keep recipe (authoritative).
+ * If the recipe has null quantity, keep the manual quantity (don't null it out).
  */
 export function mergeManualAndRecipeQuantity(
   manualQty: number | null,
@@ -323,13 +331,18 @@ export function mergeManualAndRecipeQuantity(
         unit: normRecipeUnit,
       };
     }
+    // If recipe has no quantity, keep the manual quantity (don't null it out)
     return {
-      quantity: recipeQty ?? manualQty,
-      unit: normRecipeUnit ?? normManualUnit,
+      quantity: manualQty ?? recipeQty,
+      unit: normManualUnit ?? normRecipeUnit,
     };
   }
 
-  // Different units: recipe is authoritative
+  // Different units: if recipe has no quantity, keep manual
+  if (recipeQty === null) {
+    return { quantity: manualQty, unit: normManualUnit };
+  }
+  // Recipe has a quantity with different unit: recipe is authoritative
   return { quantity: recipeQty, unit: normRecipeUnit };
 }
 

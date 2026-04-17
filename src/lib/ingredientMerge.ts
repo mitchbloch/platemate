@@ -134,6 +134,85 @@ export function normalizeIngredientName(name: string): string {
   return normalized;
 }
 
+// ── Fuzzy Matching: Qualifier Stripping ──
+
+// Modifier words safe to strip for matching purposes.
+// Multi-word qualifiers MUST come before single-word to avoid partial matches.
+const MULTI_WORD_QUALIFIERS = [
+  "extra virgin",
+  "flat leaf",
+];
+
+const SINGLE_WORD_QUALIFIERS = new Set([
+  "kosher", "sea", "flaky", "coarse", "fine",
+  "virgin",
+  "fresh", "dried", "dry",
+  "organic",
+  "unsalted", "salted",
+  "sweetened", "unsweetened",
+  "raw", "toasted", "roasted",
+  "curly",
+]);
+
+// "ground" is only a safe qualifier when the remaining word is a spice/seasoning.
+const GROUND_SAFE_NOUNS = new Set([
+  "pepper", "cumin", "cinnamon", "ginger", "nutmeg",
+  "coriander", "cardamom", "clove", "turmeric",
+  "allspice", "mustard", "fennel", "fenugreek",
+  "black pepper", "white pepper",
+]);
+
+/**
+ * Strip qualifier words from an already-normalized ingredient name to produce
+ * a fuzzy matching key.  Display names are preserved separately.
+ */
+export function stripQualifiers(normalizedName: string): string {
+  let result = normalizedName;
+
+  // Strip multi-word qualifiers first (longest match first)
+  for (const mw of MULTI_WORD_QUALIFIERS) {
+    result = result.replace(new RegExp(`\\b${mw}\\b`, "g"), "");
+  }
+
+  // Strip single-word qualifiers
+  const words = result.trim().replace(/\s+/g, " ").split(" ");
+  const filtered = words.filter((w) => !SINGLE_WORD_QUALIFIERS.has(w));
+
+  // Handle "ground" contextually: only strip if the rest is a spice
+  const groundIdx = filtered.indexOf("ground");
+  if (groundIdx !== -1) {
+    const withoutGround = filtered.filter((_, i) => i !== groundIdx);
+    const remainder = withoutGround.join(" ");
+    if (GROUND_SAFE_NOUNS.has(remainder)) {
+      result = remainder;
+    } else {
+      result = filtered.join(" ");
+    }
+  } else {
+    result = filtered.join(" ");
+  }
+
+  result = result.trim().replace(/\s+/g, " ");
+
+  // If stripping removed everything, fall back to the original
+  return result || normalizedName;
+}
+
+/**
+ * Full fuzzy matching pipeline: normalize name then strip qualifiers.
+ */
+export function normalizeForMatching(name: string): string {
+  return stripQualifiers(normalizeIngredientName(name));
+}
+
+/**
+ * When two items fuzzy-match and merge, keep the longer (more specific) name
+ * as the display name.  e.g., "Extra-virgin olive oil" beats "Olive oil".
+ */
+export function pickDisplayName(a: string, b: string): string {
+  return a.length >= b.length ? a : b;
+}
+
 // ── Merging Logic ──
 
 export function canMerge(
@@ -182,7 +261,8 @@ interface AccumulatorEntry {
 export function deduplicateIngredients(
   meals: MealWithRecipe[],
 ): MergedIngredient[] {
-  // Key: `${normalizedName}|${normalizedUnit}` to handle same ingredient with different units separately
+  // Key: `${matchingKey}|${normalizedUnit}` — matchingKey is the qualifier-stripped
+  // normalized name so that "kosher salt" and "salt" merge.
   const accumulator = new Map<string, AccumulatorEntry>();
 
   for (const { meal, recipe } of meals) {
@@ -191,21 +271,26 @@ export function deduplicateIngredients(
 
     for (const ingredient of recipe.ingredients) {
       const normalizedName = normalizeIngredientName(ingredient.name);
+      const matchingKey = stripQualifiers(normalizedName);
       const normalizedUnit = normalizeUnit(ingredient.unit);
       const adjustedQuantity =
         ingredient.quantity !== null
           ? Math.round(ingredient.quantity * servingMultiplier * 100) / 100
           : null;
 
-      const key = `${normalizedName}|${normalizedUnit ?? ""}`;
+      const key = `${matchingKey}|${normalizedUnit ?? ""}`;
 
       const existing = accumulator.get(key);
       if (existing) {
         existing.items.push({ quantity: adjustedQuantity, unit: normalizedUnit });
+        existing.displayName = pickDisplayName(
+          existing.displayName,
+          toDisplayName(ingredient.name),
+        );
         existing.recipeIds.add(recipe.id);
       } else {
         accumulator.set(key, {
-          normalizedName,
+          normalizedName: matchingKey,
           displayName: toDisplayName(ingredient.name),
           items: [{ quantity: adjustedQuantity, unit: normalizedUnit }],
           category: ingredient.category,

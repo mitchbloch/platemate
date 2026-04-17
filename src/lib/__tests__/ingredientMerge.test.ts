@@ -5,6 +5,9 @@ import {
   canMerge,
   mergeQuantities,
   deduplicateIngredients,
+  stripQualifiers,
+  normalizeForMatching,
+  pickDisplayName,
 } from "../ingredientMerge";
 import type { Ingredient, MealPlanRecipe, Recipe } from "../types";
 
@@ -112,6 +115,123 @@ describe("normalizeIngredientName", () => {
     expect(normalizeIngredientName("semi-sweet chocolate chips")).toBe(
       "semisweet chocolate chip",
     );
+  });
+});
+
+// ── stripQualifiers ──
+
+describe("stripQualifiers", () => {
+  it("strips kosher from salt", () => {
+    expect(stripQualifiers("kosher salt")).toBe("salt");
+  });
+
+  it("strips sea from salt", () => {
+    expect(stripQualifiers("sea salt")).toBe("salt");
+  });
+
+  it("strips extra virgin from olive oil", () => {
+    expect(stripQualifiers("extra virgin olive oil")).toBe("olive oil");
+  });
+
+  it("strips fresh from herbs", () => {
+    expect(stripQualifiers("fresh basil")).toBe("basil");
+    expect(stripQualifiers("fresh ginger")).toBe("ginger");
+  });
+
+  it("strips dried from herbs", () => {
+    expect(stripQualifiers("dried oregano")).toBe("oregano");
+    expect(stripQualifiers("dried thyme")).toBe("thyme");
+  });
+
+  it("strips unsalted from butter", () => {
+    expect(stripQualifiers("unsalted butter")).toBe("butter");
+  });
+
+  it("strips organic", () => {
+    expect(stripQualifiers("organic milk")).toBe("milk");
+  });
+
+  it("strips roasted/toasted", () => {
+    expect(stripQualifiers("roasted garlic")).toBe("garlic");
+    expect(stripQualifiers("toasted sesame oil")).toBe("sesame oil");
+  });
+
+  it("strips ground when followed by a spice", () => {
+    expect(stripQualifiers("ground cumin")).toBe("cumin");
+    expect(stripQualifiers("ground cinnamon")).toBe("cinnamon");
+    expect(stripQualifiers("ground black pepper")).toBe("black pepper");
+  });
+
+  it("keeps ground when followed by a protein", () => {
+    expect(stripQualifiers("ground turkey")).toBe("ground turkey");
+    expect(stripQualifiers("ground beef")).toBe("ground beef");
+    expect(stripQualifiers("ground chicken")).toBe("ground chicken");
+  });
+
+  it("does not strip identity words from proteins", () => {
+    expect(stripQualifiers("chicken breast")).toBe("chicken breast");
+    expect(stripQualifiers("chicken thigh")).toBe("chicken thigh");
+  });
+
+  it("is a no-op for plain ingredient names", () => {
+    expect(stripQualifiers("salt")).toBe("salt");
+    expect(stripQualifiers("olive oil")).toBe("olive oil");
+    expect(stripQualifiers("butter")).toBe("butter");
+    expect(stripQualifiers("garlic")).toBe("garlic");
+  });
+
+  it("handles multiple qualifiers", () => {
+    expect(stripQualifiers("fresh organic basil")).toBe("basil");
+  });
+
+  it("does not produce empty string", () => {
+    // edge case: name is all qualifiers — should return original
+    expect(stripQualifiers("fresh dried")).toBe("fresh dried");
+  });
+
+  it("strips flaky from salt", () => {
+    expect(stripQualifiers("flaky sea salt")).toBe("salt");
+  });
+});
+
+// ── normalizeForMatching ──
+
+describe("normalizeForMatching", () => {
+  it("full pipeline: Kosher Salt → salt", () => {
+    expect(normalizeForMatching("Kosher Salt")).toBe("salt");
+  });
+
+  it("full pipeline: Extra-Virgin Olive Oil → olive oil", () => {
+    expect(normalizeForMatching("Extra-Virgin Olive Oil")).toBe("olive oil");
+  });
+
+  it("full pipeline: Fresh Basil Leaves → basil leaf", () => {
+    // normalizeIngredientName strips plural "leaves" → "leaf" (ves→f)
+    // stripQualifiers strips "fresh"
+    expect(normalizeForMatching("Fresh Basil Leaves")).toBe("basil leaf");
+  });
+
+  it("full pipeline: Ground Turkey stays as ground turkey", () => {
+    expect(normalizeForMatching("Ground Turkey")).toBe("ground turkey");
+  });
+});
+
+// ── pickDisplayName ──
+
+describe("pickDisplayName", () => {
+  it("returns the longer (more specific) name", () => {
+    expect(pickDisplayName("Kosher salt", "Salt")).toBe("Kosher salt");
+    expect(pickDisplayName("Salt", "Kosher salt")).toBe("Kosher salt");
+  });
+
+  it("returns the longer name for olive oil variants", () => {
+    expect(pickDisplayName("Extra-virgin olive oil", "Olive oil")).toBe(
+      "Extra-virgin olive oil",
+    );
+  });
+
+  it("returns first when equal length", () => {
+    expect(pickDisplayName("Salt", "Salt")).toBe("Salt");
   });
 });
 
@@ -378,5 +498,91 @@ describe("deduplicateIngredients", () => {
 
   it("handles empty meals list", () => {
     expect(deduplicateIngredients([])).toEqual([]);
+  });
+
+  // ── Fuzzy matching via qualifier stripping ──
+
+  it("merges kosher salt with salt from different recipes", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "kosher salt", quantity: 1, unit: "tsp", category: "spice" }),
+    ]);
+    const r2 = makeRecipe("r2", [
+      makeIngredient({ name: "salt", quantity: 0.5, unit: "tsp", category: "spice" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1), makeMeal(r2)]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].quantity).toBe(1.5);
+    expect(result[0].displayName).toBe("Kosher salt"); // more specific wins
+    expect(result[0].recipeIds).toContain("r1");
+    expect(result[0].recipeIds).toContain("r2");
+  });
+
+  it("merges extra-virgin olive oil with olive oil", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "extra-virgin olive oil", quantity: 2, unit: "tbsp", category: "oil-vinegar" }),
+    ]);
+    const r2 = makeRecipe("r2", [
+      makeIngredient({ name: "olive oil", quantity: 1, unit: "tbsp", category: "oil-vinegar" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1), makeMeal(r2)]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].quantity).toBe(3);
+    expect(result[0].displayName).toBe("Extra-virgin olive oil");
+  });
+
+  it("keeps chicken breast and chicken thigh separate", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "chicken breast", quantity: 1, unit: "lb", category: "meat" }),
+      makeIngredient({ name: "chicken thigh", quantity: 1, unit: "lb", category: "meat" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1)]);
+
+    expect(result).toHaveLength(2);
+  });
+
+  it("keeps ground turkey and turkey breast separate", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "ground turkey", quantity: 1, unit: "lb", category: "meat" }),
+      makeIngredient({ name: "turkey breast", quantity: 1, unit: "lb", category: "meat" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1)]);
+
+    expect(result).toHaveLength(2);
+  });
+
+  it("merges ground cumin with cumin", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "ground cumin", quantity: 1, unit: "tsp", category: "spice" }),
+    ]);
+    const r2 = makeRecipe("r2", [
+      makeIngredient({ name: "cumin", quantity: 0.5, unit: "tsp", category: "spice" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1), makeMeal(r2)]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].quantity).toBe(1.5);
+    expect(result[0].displayName).toBe("Ground cumin");
+  });
+
+  it("merges fresh basil with basil", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "fresh basil", quantity: 0.25, unit: "cup", category: "produce" }),
+    ]);
+    const r2 = makeRecipe("r2", [
+      makeIngredient({ name: "basil", quantity: 0.25, unit: "cup", category: "produce" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1), makeMeal(r2)]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].quantity).toBe(0.5);
+    expect(result[0].displayName).toBe("Fresh basil");
   });
 });
