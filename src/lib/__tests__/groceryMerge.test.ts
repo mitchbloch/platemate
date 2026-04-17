@@ -52,4 +52,21 @@ describe("mergeManualAndRecipeQuantity", () => {
     const result = mergeManualAndRecipeQuantity(2, null, 1.5, "lb");
     expect(result).toEqual({ quantity: 1.5, unit: "lb" });
   });
+
+  it("preserves manual quantity when recipe qty is null and units match", () => {
+    // garlic: 3 cloves on list, recipe says "garlic" with no qty
+    const result = mergeManualAndRecipeQuantity(3, "clove", null, "clove");
+    expect(result).toEqual({ quantity: 3, unit: "clove" });
+  });
+
+  it("preserves manual quantity when recipe qty is null and both units null", () => {
+    const result = mergeManualAndRecipeQuantity(2, null, null, null);
+    expect(result).toEqual({ quantity: 2, unit: null });
+  });
+
+  it("preserves manual quantity when recipe qty is null with different units", () => {
+    // manual: 3 cloves, recipe: garlic (no qty, no unit)
+    const result = mergeManualAndRecipeQuantity(3, "clove", null, null);
+    expect(result).toEqual({ quantity: 3, unit: "clove" });
+  });
 });

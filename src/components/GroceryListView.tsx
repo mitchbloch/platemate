@@ -138,6 +138,7 @@ export default function GroceryListView({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [closeKey, setCloseKey] = useState(0);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [pantryBanner, setPantryBanner] = useState<GroceryListItem[]>([]);
   const { toasts, showToast } = useToast();
 
   const supabaseRef = useRef(createClient());
@@ -347,6 +348,7 @@ export default function GroceryListView({
     setWeekStart(newWeek);
     setExcludedExpanded(false);
     setPantryExpanded(false);
+    setPantryBanner([]);
     setAddingItem(null);
     bumpCloseKey();
     await fetchWeekData(newWeek);
@@ -356,6 +358,7 @@ export default function GroceryListView({
     setWeekStart(currentWeekStart);
     setExcludedExpanded(false);
     setPantryExpanded(false);
+    setPantryBanner([]);
     setAddingItem(null);
     bumpCloseKey();
     await fetchWeekData(currentWeekStart);
@@ -448,6 +451,17 @@ export default function GroceryListView({
       setHasRecipeItems(true);
       setMode("edit");
       bumpCloseKey();
+
+      // Show pantry banner for auto-dismissed items
+      const dismissedNames = new Set<string>(data.pantryDismissedNames ?? []);
+      if (dismissedNames.size > 0) {
+        const dismissedItems = (data.items as GroceryListItem[]).filter(
+          (i) => i.dismissed && dismissedNames.has(i.name),
+        );
+        setPantryBanner(dismissedItems);
+      } else {
+        setPantryBanner([]);
+      }
     } catch {
       alert("Failed to generate grocery list");
     } finally {
@@ -1012,6 +1026,50 @@ export default function GroceryListView({
                   )}
                 </div>
               </div>
+
+              {/* Pantry auto-excluded banner */}
+              {pantryBanner.length > 0 && (
+                <div className="rounded-xl border border-gold/30 bg-gold-light/50 px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm font-medium text-text-primary">
+                      {pantryBanner.length} pantry {pantryBanner.length === 1 ? "item" : "items"} auto-excluded
+                    </p>
+                    <button
+                      onClick={() => setPantryBanner([])}
+                      className="text-xs text-text-muted hover:text-text-secondary"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {pantryBanner.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between">
+                        <span className="text-sm text-text-secondary">{item.name}</span>
+                        <button
+                          onClick={() => {
+                            restoreItem(item);
+                            setPantryBanner((prev) => prev.filter((i) => i.id !== item.id));
+                          }}
+                          className="rounded-md bg-white/80 px-2.5 py-1 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-white"
+                        >
+                          Add to list
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {pantryBanner.length > 1 && (
+                    <button
+                      onClick={() => {
+                        for (const item of pantryBanner) restoreItem(item);
+                        setPantryBanner([]);
+                      }}
+                      className="mt-2 rounded-md bg-white/80 px-3 py-1.5 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-white"
+                    >
+                      Add all to list
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* TJ's items grouped by category */}
               {groupedByCategory.map((group) => (

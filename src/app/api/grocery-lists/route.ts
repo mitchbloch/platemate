@@ -5,6 +5,7 @@ import {
   getOrCreateGroceryListByWeek,
   mergeRecipeItemsIntoList,
 } from "@/lib/groceryList";
+import { normalizeForMatching } from "@/lib/ingredientMerge";
 import { getPantryItems } from "@/lib/pantryItems";
 
 export async function GET(request: NextRequest) {
@@ -51,10 +52,10 @@ export async function POST(request: NextRequest) {
     // Generate recipe items from meals
     const recipeItems = generateGroceryItems(meals);
 
-    // Build pantry names set for auto-dismissal
+    // Build pantry matching keys for auto-dismissal (fuzzy matching)
     const pantryItems = await getPantryItems();
     const pantryNames = new Set(
-      pantryItems.map((p) => p.name.toLowerCase().trim()),
+      pantryItems.map((p) => normalizeForMatching(p.name)),
     );
 
     // Merge recipe items into existing list (preserves manual items)
