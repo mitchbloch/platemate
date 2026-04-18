@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { mergeManualAndRecipeQuantity } from "../groceryList";
+import { categoryToDb, mergeManualAndRecipeQuantity } from "../groceryList";
+import { INGREDIENT_TO_GROCERY_CATEGORY } from "../categoryMap";
 
 describe("mergeManualAndRecipeQuantity", () => {
   it("sums quantities when units match", () => {
@@ -68,5 +69,35 @@ describe("mergeManualAndRecipeQuantity", () => {
     // manual: 3 cloves, recipe: garlic (no qty, no unit)
     const result = mergeManualAndRecipeQuantity(3, "clove", null, null);
     expect(result).toEqual({ quantity: 3, unit: "clove" });
+  });
+});
+
+describe("categoryToDb", () => {
+  // The UI submits the capitalized labels from GROCERY_CATEGORY_LABELS
+  // ("Protein", "Produce", "Dairy", "Pantry", "Other"). These must map to
+  // IngredientCategory values that round-trip back to the same display
+  // category via INGREDIENT_TO_GROCERY_CATEGORY; otherwise edits/adds all
+  // collapse to "Other".
+  it.each([
+    ["Protein", "Produce", "Dairy", "Pantry", "Other"] as const,
+  ].flat())("%s round-trips to the same display category", (label) => {
+    const db = categoryToDb(label);
+    expect(INGREDIENT_TO_GROCERY_CATEGORY[db]).toBe(label);
+  });
+
+  it("accepts legacy lowercase display values", () => {
+    expect(categoryToDb("protein")).toBe("meat");
+    expect(categoryToDb("dairy")).toBe("dairy");
+    expect(categoryToDb("pantry")).toBe("grain");
+  });
+
+  it("passes valid IngredientCategory values through", () => {
+    expect(categoryToDb("meat")).toBe("meat");
+    expect(categoryToDb("produce")).toBe("produce");
+    expect(categoryToDb("grain")).toBe("grain");
+  });
+
+  it("falls back to 'other' for unknown values", () => {
+    expect(categoryToDb("nonsense")).toBe("other");
   });
 });
