@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
@@ -54,12 +54,24 @@ interface OnboardingTourProps {
   onSkip: () => void;
 }
 
+// Returns false during SSR and the server snapshot of hydration, true once
+// rendered on the client. Lets us safely gate `createPortal(document.body)`
+// without an effect. React team's recommended pattern.
+const emptySubscribe = () => () => {};
+function useIsClient(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
+
 export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [tooltipPos, setTooltipPos] = useState<TooltipPosition>({ top: 0, left: 0 });
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   const step = STEPS[currentStep];
@@ -75,45 +87,42 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
     }
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const positionTooltip = useCallback(() => {
+  // Measure the target element and keep rect/tooltip position in sync with
+  // viewport changes. ResizeObserver fires immediately on attachment, so
+  // the initial measurement happens inside the observer callback — setState
+  // stays out of the effect body itself.
+  useEffect(() => {
     if (!step.target) return;
     const el = document.querySelector(step.target);
     if (!el) return;
 
-    const rect = el.getBoundingClientRect();
-    setTargetRect(rect);
+    function update() {
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setTargetRect(rect);
 
-    const tooltipWidth = 320;
-    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
-    const top = rect.bottom + 12;
+      const tooltipWidth = 320;
+      let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+      const top = rect.bottom + 12;
 
-    const padding = 16;
-    if (left < padding) left = padding;
-    if (left + tooltipWidth > window.innerWidth - padding) {
-      left = window.innerWidth - padding - tooltipWidth;
+      const padding = 16;
+      if (left < padding) left = padding;
+      if (left + tooltipWidth > window.innerWidth - padding) {
+        left = window.innerWidth - padding - tooltipWidth;
+      }
+      setTooltipPos({ top, left });
     }
 
-    setTooltipPos({ top, left });
-  }, [step.target]);
-
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
-
-  useEffect(() => {
-    if (!step.target) {
-      setTargetRect(null);
-      return;
-    }
-    positionTooltip();
-    window.addEventListener("resize", positionTooltip);
-    window.addEventListener("scroll", positionTooltip, true);
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
     return () => {
-      window.removeEventListener("resize", positionTooltip);
-      window.removeEventListener("scroll", positionTooltip, true);
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
     };
-  }, [positionTooltip, step.target]);
+  }, [step.target]);
 
   // Apply highlight z-index to target nav element
   useEffect(() => {
