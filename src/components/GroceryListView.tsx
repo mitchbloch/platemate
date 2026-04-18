@@ -724,15 +724,18 @@ export default function GroceryListView({
     updates: { name: string; quantity: number | null; unit: string | null; category: string; store: StoreName },
   ) {
     const oldItem = { ...item };
-    // Map display category to ingredient category for optimistic update
+    // Map display category to ingredient category for optimistic update.
+    // Keys are lowercased for case-insensitive lookup so the capitalized
+    // labels from GROCERY_CATEGORY_LABELS round-trip correctly.
     const DISPLAY_TO_INGREDIENT: Record<string, IngredientCategory> = {
       protein: "meat",
       produce: "produce",
       dairy: "dairy",
+      pantry: "grain",
       snacks: "other",
       other: "other",
     };
-    const dbCategory = DISPLAY_TO_INGREDIENT[updates.category] ?? (updates.category as IngredientCategory);
+    const dbCategory = DISPLAY_TO_INGREDIENT[updates.category.toLowerCase()] ?? "other";
     // Optimistic update with typed category
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, ...updates, category: dbCategory } : i)),

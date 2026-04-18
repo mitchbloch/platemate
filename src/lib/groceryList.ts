@@ -520,18 +520,22 @@ const VALID_INGREDIENT_CATEGORIES = new Set<string>([
   "canned", "spice", "oil-vinegar", "condiment", "frozen", "other",
 ]);
 
-function categoryToDb(category: string): IngredientCategory {
+export function categoryToDb(category: string): IngredientCategory {
   // Already a valid IngredientCategory — pass through
   if (VALID_INGREDIENT_CATEGORIES.has(category)) {
     return category as IngredientCategory;
   }
-  // GroceryDisplayCategory → IngredientCategory
+  // GroceryDisplayCategory → IngredientCategory (case-insensitive so the
+  // capitalized labels from GROCERY_CATEGORY_LABELS round-trip correctly;
+  // without lowercasing, "Protein"/"Produce"/etc. fall through and every
+  // manual add/edit gets stored as "other").
   const map: Record<string, IngredientCategory> = {
     protein: "meat",
     produce: "produce",
     dairy: "dairy",
+    pantry: "grain",
     snacks: "other",
     other: "other",
   };
-  return map[category] ?? "other";
+  return map[category.toLowerCase()] ?? "other";
 }
