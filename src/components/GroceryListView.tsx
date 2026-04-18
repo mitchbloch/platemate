@@ -1398,43 +1398,20 @@ function GroceryItemRow({
 }) {
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [showActions, setShowActions] = useState(false);
-  const [editName, setEditName] = useState(item.name);
-  const [editQuantity, setEditQuantity] = useState(item.quantity?.toString() ?? "");
-  const [editUnit, setEditUnit] = useState(item.unit ?? "");
-  const [editCategory, setEditCategory] = useState(toDisplayCategory(item.category));
-  const [editStore, setEditStore] = useState(item.store);
   const storeMenuRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   useClickOutside(storeMenuRef, () => setShowStoreMenu(false));
   useClickOutside(actionsRef, () => setShowActions(false));
   const qty = formatQuantity(item.quantity, item.unit);
 
-  // Close menus when closeKey changes (mode switch, week nav, etc.)
-  useEffect(() => {
+  // Close menus when closeKey changes (mode switch, week nav, etc.) —
+  // sync during render per React's "storing info from previous renders"
+  // pattern, so the reset happens without an effect.
+  const [prevCloseKey, setPrevCloseKey] = useState(closeKey);
+  if (prevCloseKey !== closeKey) {
+    setPrevCloseKey(closeKey);
     setShowStoreMenu(false);
     setShowActions(false);
-  }, [closeKey]);
-
-  // Reset edit form when entering edit mode
-  useEffect(() => {
-    if (isEditing) {
-      setEditName(item.name);
-      setEditQuantity(item.quantity?.toString() ?? "");
-      setEditUnit(item.unit ?? "");
-      setEditCategory(toDisplayCategory(item.category));
-      setEditStore(item.store);
-    }
-  }, [isEditing, item.name, item.quantity, item.unit, item.category, item.store]);
-
-  function handleSaveEdit() {
-    if (!editName.trim()) return;
-    onSaveEdit({
-      name: editName.trim(),
-      quantity: parseFloat(editQuantity) || null,
-      unit: editUnit.trim() || null,
-      category: editCategory,
-      store: editStore,
-    });
   }
 
   // Completed: read-only view, no actions
@@ -1492,80 +1469,11 @@ function GroceryItemRow({
     );
   }
 
-  // Edit mode: inline editing form
+  // Edit mode: inline editing form (mounted when isEditing flips on,
+  // unmounted when it flips off — initial state comes from `item` props,
+  // so no reset effect needed).
   if (isEditing) {
-    return (
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSaveEdit();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onCancelEdit();
-        }}
-        className="space-y-2 rounded-xl border border-primary bg-surface p-3"
-      >
-        <input
-          autoFocus
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-          placeholder="Item name..."
-          className="w-full rounded-lg border border-border bg-bg px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-        />
-        <div className="flex gap-2">
-          <input
-            value={editQuantity}
-            onChange={(e) => setEditQuantity(e.target.value)}
-            placeholder="Qty"
-            type="number"
-            min="0"
-            step="any"
-            className="w-16 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          />
-          <input
-            value={editUnit}
-            onChange={(e) => setEditUnit(e.target.value)}
-            placeholder="Unit (lbs, oz, pkg...)"
-            className="w-40 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={editCategory}
-            onChange={(e) => setEditCategory(e.target.value as GroceryDisplayCategory)}
-            className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          >
-            {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
-          <select
-            value={editStore}
-            onChange={(e) => setEditStore(e.target.value as StoreName)}
-            className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          >
-            {Object.entries(STORE_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={onCancelEdit}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
-    );
+    return <ItemEditForm item={item} onSave={onSaveEdit} onCancel={onCancelEdit} />;
   }
 
   // Edit mode: dismiss, store change, remove, mark pantry
@@ -1699,6 +1607,106 @@ function GroceryItemRow({
         )}
       </div>
     </div>
+  );
+}
+
+function ItemEditForm({
+  item,
+  onSave,
+  onCancel,
+}: {
+  item: GroceryListItem;
+  onSave: (updates: { name: string; quantity: number | null; unit: string | null; category: string; store: StoreName }) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(item.name);
+  const [quantity, setQuantity] = useState(item.quantity?.toString() ?? "");
+  const [unit, setUnit] = useState(item.unit ?? "");
+  const [category, setCategory] = useState<GroceryDisplayCategory>(toDisplayCategory(item.category) as GroceryDisplayCategory);
+  const [store, setStore] = useState<StoreName>(item.store);
+
+  function handleSave() {
+    if (!name.trim()) return;
+    onSave({
+      name: name.trim(),
+      quantity: parseFloat(quantity) || null,
+      unit: unit.trim() || null,
+      category,
+      store,
+    });
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSave();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onCancel();
+      }}
+      className="space-y-2 rounded-xl border border-primary bg-surface p-3"
+    >
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Item name..."
+        className="w-full rounded-lg border border-border bg-bg px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+      />
+      <div className="flex gap-2">
+        <input
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+          placeholder="Qty"
+          type="number"
+          min="0"
+          step="any"
+          className="w-16 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+        />
+        <input
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
+          placeholder="Unit (lbs, oz, pkg...)"
+          className="w-40 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value as GroceryDisplayCategory)}
+          className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+        >
+          {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
+            <option key={val} value={val}>{label}</option>
+          ))}
+        </select>
+        <select
+          value={store}
+          onChange={(e) => setStore(e.target.value as StoreName)}
+          className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+        >
+          {Object.entries(STORE_LABELS).map(([val, label]) => (
+            <option key={val} value={val}>{label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
