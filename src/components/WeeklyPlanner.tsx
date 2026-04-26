@@ -602,11 +602,12 @@ function MealCard({
 }) {
   const r = meal.recipe;
   return (
-    <div className="card-hover group relative rounded-2xl border border-border bg-surface p-4 shadow-warm">
+    <div className="card-hover relative rounded-2xl border border-border bg-surface p-4 shadow-warm">
       <button
         onClick={onRemove}
-        className="absolute right-2 top-2 rounded p-1 text-text-muted opacity-0 transition-all hover:text-danger group-hover:opacity-100"
-        title="Remove"
+        className="absolute right-2 top-2 rounded p-1 text-text-muted transition-colors hover:bg-border-light hover:text-danger focus:outline-none focus:ring-2 focus:ring-danger"
+        title="Remove from this week"
+        aria-label="Remove from this week"
       >
         &times;
       </button>
