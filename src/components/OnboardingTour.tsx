@@ -54,6 +54,16 @@ interface OnboardingTourProps {
   onSkip: () => void;
 }
 
+/** The desktop and mobile navs both carry data-tour attributes but only one
+ *  is displayed — pick the visible match so the spotlight lands on screen. */
+function findVisibleTarget(selector: string): HTMLElement | null {
+  const matches = document.querySelectorAll<HTMLElement>(selector);
+  for (const el of matches) {
+    if (el.offsetParent !== null || el.getClientRects().length > 0) return el;
+  }
+  return null;
+}
+
 // Returns false during SSR and the server snapshot of hydration, true once
 // rendered on the client. Lets us safely gate `createPortal(document.body)`
 // without an effect. React team's recommended pattern.
@@ -93,7 +103,7 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
   // stays out of the effect body itself.
   useEffect(() => {
     if (!step.target) return;
-    const el = document.querySelector(step.target);
+    const el = findVisibleTarget(step.target);
     if (!el) return;
 
     function update() {
@@ -127,7 +137,7 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
   // Apply highlight z-index to target nav element
   useEffect(() => {
     if (!step.target) return;
-    const el = document.querySelector(step.target) as HTMLElement | null;
+    const el = findVisibleTarget(step.target);
     if (!el) return;
 
     const prevPosition = el.style.position;

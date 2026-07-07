@@ -20,11 +20,13 @@ export async function logCookedRecipes(
   if (entries.length === 0) return 0;
 
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
 
   // Check for existing entries to avoid duplicates
   const { data: existing } = await supabase
     .from("recipe_history")
     .select("recipe_id, cooked_at")
+    .eq("household_id", householdId)
     .in("recipe_id", entries.map((e) => e.recipeId))
     .in("cooked_at", [...new Set(entries.map((e) => e.cookedAt))]);
 
@@ -38,7 +40,6 @@ export async function logCookedRecipes(
 
   if (newEntries.length === 0) return 0;
 
-  const householdId = await getActiveHouseholdId();
   const { error } = await supabase.from("recipe_history").insert(
     newEntries.map((e) => ({
       household_id: householdId,
@@ -54,9 +55,13 @@ export async function logCookedRecipes(
 /** Get the most recent cooked_at date for each recipe. Returns recipeId → ISO date map. */
 export async function getLastCookedDates(): Promise<Record<string, string>> {
   const supabase = await createClient();
+  // Scope by active household — RLS alone returns rows from every household
+  // the user belongs to.
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("recipe_history")
     .select("recipe_id, cooked_at")
+    .eq("household_id", householdId)
     .order("cooked_at", { ascending: false });
 
   if (error) throw error;
@@ -74,9 +79,11 @@ export async function getLastCookedDates(): Promise<Record<string, string>> {
 /** Check if any history entries exist for a given week (by cooked_at date). */
 export async function hasHistoryForWeek(weekStart: string): Promise<boolean> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
   const { count, error } = await supabase
     .from("recipe_history")
     .select("id", { count: "exact", head: true })
+    .eq("household_id", householdId)
     .eq("cooked_at", weekStart);
 
   if (error) throw error;

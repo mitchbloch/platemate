@@ -421,6 +421,20 @@ describe("deduplicateIngredients", () => {
     expect(result[0].category).toBe("Protein"); // meat → Protein
   });
 
+  it("does not corrupt quantities when a recipe has servings 0 (bad data guard)", () => {
+    const r1 = makeRecipe(
+      "r1",
+      [makeIngredient({ name: "chicken", quantity: 4, unit: "oz", category: "meat" })],
+      0, // corrupt servings — must not divide by zero
+    );
+
+    const result = deduplicateIngredients([makeMeal(r1)]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].quantity).toBe(4); // unscaled, not NaN
+    expect(Number.isFinite(result[0].quantity!)).toBe(true);
+  });
+
   it("handles null quantities (salt + salt = salt with null qty)", () => {
     const r1 = makeRecipe("r1", [
       makeIngredient({ name: "salt", quantity: null, unit: null }),

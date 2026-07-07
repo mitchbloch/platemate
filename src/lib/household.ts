@@ -110,47 +110,18 @@ export async function updateHouseholdPreferences(
 }
 
 // ── Invite Codes ──
-
-export async function getHouseholdByInviteCode(code: string): Promise<Household | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("households")
-    .select("*")
-    .eq("invite_code", code)
-    .single();
-
-  if (error) return null;
-
-  // Check expiration
-  if (data.invite_code_expires_at && new Date(data.invite_code_expires_at) < new Date()) {
-    return null;
-  }
-
-  return rowToHousehold(data);
-}
+// Joining by code goes through the join_household_by_code RPC (see
+// migration 014) — a direct table lookup can't work because RLS only
+// lets existing members read the household row.
 
 export async function regenerateInviteCode(householdId: string): Promise<string> {
   const supabase = await createClient();
-  // Generate new code via SQL (encode(gen_random_bytes(6), 'hex'))
+  // Admin-gated SECURITY DEFINER RPC (migration 014)
   const { data, error } = await supabase.rpc("regenerate_invite_code", {
     household_id_input: householdId,
   });
 
-  if (error) {
-    // Fallback: generate client-side
-    const code = Array.from(crypto.getRandomValues(new Uint8Array(6)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    const { error: updateError } = await supabase
-      .from("households")
-      .update({ invite_code: code })
-      .eq("id", householdId);
-
-    if (updateError) throw updateError;
-    return code;
-  }
-
+  if (error) throw error;
   return data as string;
 }
 
@@ -183,19 +154,6 @@ export async function getHouseholdMembers(householdId: string): Promise<Househol
   return members.map((row) =>
     rowToMember({ ...row, display_name: nameMap.get(row.user_id) ?? null })
   );
-}
-
-export async function addHouseholdMember(
-  householdId: string,
-  userId: string,
-  role: "admin" | "member" = "member",
-): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("household_members")
-    .insert({ household_id: householdId, user_id: userId, role });
-
-  if (error) throw error;
 }
 
 export async function updateMemberRole(

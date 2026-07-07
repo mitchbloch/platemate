@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import type { Recipe, MealPlan, MealPlanRecipe, CuisineType, MealType } from "@/lib/types";
 import { CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
@@ -60,7 +60,7 @@ export default function WeeklyPlanner({
   const [lastCookedDates, setLastCookedDates] = useState(initialLastCookedDates);
   const [loading, setLoading] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
-  const [adding, setAdding] = useState<string | null>(null); // recipeId being added
+  const [adding, setAdding] = useState<Set<string>>(new Set()); // recipeIds with adds in flight
 
   // Recipe picker filters
   const [filterCuisine, setFilterCuisine] = useState<CuisineType | "all">("all");
@@ -112,19 +112,26 @@ export default function WeeklyPlanner({
 
   // ── Data Fetching ──
 
+  // Monotonic token so a slow response for an old week can never overwrite
+  // state after the user has navigated again.
+  const fetchSeq = useRef(0);
+
   const fetchWeekData = useCallback(async (week: string) => {
+    const token = ++fetchSeq.current;
     setLoading(true);
     try {
       const res = await fetch(`/api/meal-plans?week=${week}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
+      if (token !== fetchSeq.current) return; // stale — a newer navigation won
       setPlan(data.plan);
       setMeals(data.meals);
     } catch {
+      if (token !== fetchSeq.current) return;
       setPlan(null);
       setMeals([]);
     } finally {
-      setLoading(false);
+      if (token === fetchSeq.current) setLoading(false);
     }
   }, []);
 
@@ -178,7 +185,8 @@ export default function WeeklyPlanner({
   // ── Add/Remove Meals ──
 
   async function addMeal(recipe: Recipe) {
-    setAdding(recipe.id);
+    if (adding.has(recipe.id)) return; // request already in flight
+    setAdding((prev) => new Set(prev).add(recipe.id));
     try {
       const res = await fetch("/api/meal-plans/recipes", {
         method: "POST",
@@ -219,7 +227,11 @@ export default function WeeklyPlanner({
     } catch {
       alert("Failed to add meal");
     } finally {
-      setAdding(null);
+      setAdding((prev) => {
+        const next = new Set(prev);
+        next.delete(recipe.id);
+        return next;
+      });
     }
   }
 
@@ -472,10 +484,10 @@ export default function WeeklyPlanner({
                         {!currentPlanRecipeIds.has(s.recipe.id) && (
                           <button
                             onClick={() => addMeal(s.recipe)}
-                            disabled={adding === s.recipe.id}
+                            disabled={adding.has(s.recipe.id)}
                             className="ml-2 shrink-0 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
                           >
-                            {adding === s.recipe.id ? "..." : "Add"}
+                            {adding.has(s.recipe.id) ? "..." : "Add"}
                           </button>
                         )}
                       </div>
@@ -548,10 +560,10 @@ export default function WeeklyPlanner({
                         ) : (
                           <button
                             onClick={() => addMeal(r)}
-                            disabled={adding === r.id}
+                            disabled={adding.has(r.id)}
                             className="ml-2 shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white shadow-warm transition-colors hover:bg-primary-dark disabled:opacity-50"
                           >
-                            {adding === r.id ? "..." : "Add"}
+                            {adding.has(r.id) ? "..." : "Add"}
                           </button>
                         )}
                       </div>

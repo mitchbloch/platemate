@@ -40,6 +40,10 @@ export async function updateSession(request: NextRequest) {
   const isPublicRoute = pathname === "/login" || pathname === "/signup" || pathname.startsWith("/auth/");
 
   if (!user && !isPublicRoute) {
+    // API callers get a proper 401 instead of a redirect to HTML
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

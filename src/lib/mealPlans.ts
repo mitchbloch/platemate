@@ -54,27 +54,45 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
 
 // ── Helpers ──
 
+/** The timezone weeks roll over in. Server code runs in UTC on Vercel, so
+ *  using the ambient timezone would advance the week at 8pm Eastern. */
+const APP_TIME_ZONE = "America/New_York";
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 /** Returns the Sunday of the given date's week as an ISO date string (YYYY-MM-DD) */
 export function getWeekStart(date: Date = new Date()): string {
-  const d = new Date(date);
-  d.setDate(d.getDate() - d.getDay()); // Sunday offset (getDay() 0=Sun)
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+
+  const dayIndex = WEEKDAYS.indexOf(get("weekday"));
+  // Subtract in UTC so DST transitions can't shift the calendar date
+  const utcMidnight = Date.UTC(Number(get("year")), Number(get("month")) - 1, Number(get("day")));
+  const sunday = new Date(utcMidnight - dayIndex * 86_400_000);
+  return sunday.toISOString().slice(0, 10);
 }
 
 // ── Meal Plan CRUD ──
 
 export async function getMealPlanByWeek(weekStart: string): Promise<MealPlan | null> {
   const supabase = await createClient();
+  // Scope by active household — RLS alone returns rows from every household
+  // the user belongs to, which breaks for multi-household members.
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("meal_plans")
     .select("*")
+    .eq("household_id", householdId)
     .eq("week_start", weekStart)
-    .single();
+    .maybeSingle();
 
-  if (error) return null;
+  if (error || !data) return null;
   return rowToMealPlan(data);
 }
 
@@ -87,7 +105,15 @@ export async function createMealPlan(weekStart: string, notes?: string): Promise
     .select("id")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // Unique violation: another household member created this week's plan
+    // concurrently — use theirs.
+    if ((error as { code?: string }).code === "23505") {
+      const existing = await getMealPlanByWeek(weekStart);
+      if (existing) return existing.id;
+    }
+    throw error;
+  }
   return data.id;
 }
 

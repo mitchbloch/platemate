@@ -266,8 +266,12 @@ export function deduplicateIngredients(
   const accumulator = new Map<string, AccumulatorEntry>();
 
   for (const { meal, recipe } of meals) {
+    // Guard against bad data: a recipe with servings <= 0 would turn every
+    // quantity into NaN/Infinity. Fall back to no scaling.
     const servingMultiplier =
-      (meal.servingsOverride ?? recipe.servings) / recipe.servings;
+      recipe.servings > 0
+        ? (meal.servingsOverride ?? recipe.servings) / recipe.servings
+        : 1;
 
     for (const ingredient of recipe.ingredients) {
       const normalizedName = normalizeIngredientName(ingredient.name);

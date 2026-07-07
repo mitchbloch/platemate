@@ -320,6 +320,11 @@ export const CUISINE_LABELS: Record<CuisineType, string> = {
   other: "Other",
 };
 
+/** Every store except Trader Joe's (the default), in display order.
+ *  Shared by the grocery view and the clipboard export so the two can't
+ *  drift (a missing store here silently drops its items). */
+export const NON_TJ_STORES: StoreName[] = ["target", "whole-foods", "hmart", "costco", "other"];
+
 export const STORE_LABELS: Record<StoreName, string> = {
   "trader-joes": "Trader Joe's",
   "whole-foods": "Whole Foods",

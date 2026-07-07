@@ -17,10 +17,12 @@ function rowToPantryItem(row: Record<string, unknown>): PantryItem {
 
 export async function getPantryItems(): Promise<PantryItem[]> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
 
   const { data, error } = await supabase
     .from("pantry_items")
     .select("*")
+    .eq("household_id", householdId)
     .order("name");
 
   if (error) throw error;

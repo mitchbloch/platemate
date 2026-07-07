@@ -5,7 +5,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import type { GroceryList, GroceryListItem, GroceryDisplayCategory, IngredientCategory, PantryItem, PinnedGroceryItem, StoreName } from "@/lib/types";
 import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER } from "@/lib/categoryMap";
-import { STORE_LABELS } from "@/lib/types";
+import { NON_TJ_STORES, STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToGroceryList } from "@/lib/supabase/realtime";
@@ -100,7 +100,6 @@ function storeBadgeClasses(store: StoreName): string {
   }
 }
 
-const NON_TJ_STORES: StoreName[] = ["target", "whole-foods", "hmart", "costco", "other"];
 
 export default function GroceryListView({
   initialList,
@@ -303,12 +302,18 @@ export default function GroceryListView({
 
   // ── Data Fetching ──
 
+  // Monotonic token so a slow response for an old week can never overwrite
+  // state after the user has navigated again.
+  const fetchSeq = useRef(0);
+
   const fetchWeekData = useCallback(async (week: string) => {
+    const token = ++fetchSeq.current;
     setLoading(true);
     try {
       const groceryRes = await fetch(`/api/grocery-lists?week=${week}`);
       if (!groceryRes.ok) throw new Error("Failed to fetch");
       const groceryData = await groceryRes.json();
+      if (token !== fetchSeq.current) return; // stale — a newer navigation won
       setList(groceryData.list);
       setItems(groceryData.items ?? []);
       setHasRecipeItems(
@@ -328,16 +333,17 @@ export default function GroceryListView({
       }
 
       const mealRes = await fetch(`/api/meal-plans?week=${week}`);
-      if (mealRes.ok) {
+      if (mealRes.ok && token === fetchSeq.current) {
         const mealData = await mealRes.json();
         setHasMeals((mealData.meals ?? []).length > 0);
       }
     } catch {
+      if (token !== fetchSeq.current) return;
       setList(null);
       setItems([]);
       setHasMeals(false);
     } finally {
-      setLoading(false);
+      if (token === fetchSeq.current) setLoading(false);
     }
   }, []);
 
@@ -494,7 +500,8 @@ export default function GroceryListView({
 
   // ── Dismiss/Restore (Edit mode) ──
 
-  async function dismissItem(item: GroceryListItem) {
+  /** Returns true when the dismiss was persisted (callers chain on it). */
+  async function dismissItem(item: GroceryListItem): Promise<boolean> {
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, dismissed: true } : i)),
     );
@@ -506,10 +513,12 @@ export default function GroceryListView({
         body: JSON.stringify({ itemId: item.id, dismissed: true }),
       });
       if (!res.ok) throw new Error("Failed to dismiss");
+      return true;
     } catch {
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, dismissed: false } : i)),
       );
+      return false;
     }
   }
 
@@ -535,7 +544,11 @@ export default function GroceryListView({
   // ── Mark as Pantry Staple ──
 
   async function markAsPantryStaple(item: GroceryListItem) {
-    await dismissItem(item);
+    const dismissed = await dismissItem(item);
+    if (!dismissed) {
+      showToast("Failed to update item");
+      return;
+    }
 
     try {
       const res = await fetch("/api/pantry-items", {
@@ -610,8 +623,9 @@ export default function GroceryListView({
     const quantity = parseFloat(newItemQuantity) || null;
     const unit = newItemUnit.trim() || null;
     const isWeekly = newItemIsWeekly;
+    const formGroup = addingItem;
 
-    // Reset form
+    // Reset form (restored on failure so the user's input isn't lost)
     setNewItemName("");
     setNewItemQuantity("");
     setNewItemUnit("");
@@ -646,6 +660,14 @@ export default function GroceryListView({
         }
       }
     } catch {
+      // Reopen the form with the user's input so nothing is lost
+      setNewItemName(name);
+      setNewItemQuantity(quantity !== null ? String(quantity) : "");
+      setNewItemUnit(unit ?? "");
+      setNewItemCategory(category);
+      setNewItemStore(store);
+      setNewItemIsWeekly(isWeekly);
+      setAddingItem(formGroup);
       alert("Failed to add item");
     }
   }

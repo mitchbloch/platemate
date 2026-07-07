@@ -51,9 +51,10 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields, 003 pinned items, 004 pantry + dismissed)
 
 ## Auth
-- Two users (created manually in Supabase dashboard)
-- Shared data via RLS: `auth.uid() IS NOT NULL`
-- Middleware redirects unauthenticated users to `/login`
+- Self-service sign-up; users belong to households (multi-household since migration 009)
+- Data isolation via RLS: every data table is scoped by `household_id IN (SELECT user_household_ids())`
+- Joining a household goes through the `join_household_by_code` SECURITY DEFINER RPC (migration 014) — membership inserts are otherwise admin-only
+- Middleware redirects unauthenticated page requests to `/login`; API requests get 401 JSON
 
 ## Phases
 1. **Foundation** — Scaffolding, auth, navigation, DB schema ✅

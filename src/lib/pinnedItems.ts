@@ -1,5 +1,6 @@
 import { createClient } from "./supabase/server";
 import { getActiveHouseholdId } from "./supabase/auth";
+import { normalizeForMatching } from "./ingredientMerge";
 import type {
   GroceryDisplayCategory,
   IngredientCategory,
@@ -26,10 +27,12 @@ function rowToPinnedItem(row: Record<string, unknown>): PinnedGroceryItem {
 
 export async function getPinnedItems(): Promise<PinnedGroceryItem[]> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
 
   const { data, error } = await supabase
     .from("pinned_grocery_items")
     .select("*")
+    .eq("household_id", householdId)
     .order("name");
 
   if (error) throw error;
@@ -84,11 +87,13 @@ export async function getFrequentItems(
   weekCount: number = 8,
 ): Promise<{ name: string; count: number; category: IngredientCategory; store: StoreName }[]> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
 
   // Get recent grocery lists
   const { data: lists, error: listsError } = await supabase
     .from("grocery_lists")
     .select("id")
+    .eq("household_id", householdId)
     .order("created_at", { ascending: false })
     .limit(weekCount);
 
@@ -109,7 +114,7 @@ export async function getFrequentItems(
   // Count occurrences by normalized name
   const counts = new Map<string, { name: string; count: number; category: IngredientCategory; store: StoreName }>();
   for (const item of items) {
-    const key = (item.name as string).toLowerCase().trim();
+    const key = normalizeForMatching(item.name as string);
     const existing = counts.get(key);
     if (existing) {
       existing.count++;
@@ -125,10 +130,10 @@ export async function getFrequentItems(
 
   // Get pinned items to exclude
   const pinned = await getPinnedItems();
-  const pinnedNames = new Set(pinned.map((p) => p.name.toLowerCase().trim()));
+  const pinnedNames = new Set(pinned.map((p) => normalizeForMatching(p.name)));
 
   // Filter to 3+ occurrences, not already pinned
   return Array.from(counts.values())
-    .filter((item) => item.count >= 3 && !pinnedNames.has(item.name.toLowerCase().trim()))
+    .filter((item) => item.count >= 3 && !pinnedNames.has(normalizeForMatching(item.name)))
     .sort((a, b) => b.count - a.count);
 }
