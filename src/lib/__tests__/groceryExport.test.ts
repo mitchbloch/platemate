@@ -98,6 +98,25 @@ describe("formatForClipboard", () => {
     expect(result).toContain("- [ ] Yogurt"); // quantity 1, no unit = no suffix
   });
 
+  it("includes every non-TJ store section (Costco regression)", () => {
+    const items = [
+      makeItem({ name: "Rotisserie chicken", store: "costco", category: "meat" }),
+      makeItem({ name: "Rice cakes", store: "target", category: "grain" }),
+      makeItem({ name: "Kimchi", store: "hmart", category: "condiment" }),
+      makeItem({ name: "Salmon", store: "whole-foods", category: "seafood" }),
+      makeItem({ name: "Batteries", store: "other", category: "other" }),
+    ];
+
+    const result = formatForClipboard(items);
+
+    expect(result).toContain("Costco");
+    expect(result).toContain("- [ ] Rotisserie chicken");
+    expect(result).toContain("Target");
+    expect(result).toContain("H Mart");
+    expect(result).toContain("Whole Foods");
+    expect(result).toContain("Other");
+  });
+
   it("handles empty list", () => {
     expect(formatForClipboard([])).toBe("All items checked off!");
   });

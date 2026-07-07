@@ -1,7 +1,65 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ParsedRecipe, Ingredient, CuisineType, MealType, DifficultyLevel, IngredientCategory, DietaryFlag } from "./types";
 
-const anthropic = new Anthropic();
+// Lazy so importing this module (e.g. in tests) doesn't require an API key
+let anthropicClient: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  return (anthropicClient ??= new Anthropic());
+}
+
+/** Timeout for all outbound fetches — a hung site shouldn't hold the request. */
+const FETCH_TIMEOUT_MS = 10_000;
+
+/** Reject URLs that don't point at a public http(s) host (SSRF guard). */
+export function assertPublicHttpUrl(url: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Invalid URL");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only http(s) URLs are supported");
+  }
+
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  // Internal hostnames: localhost, single-label names, .local/.internal
+  if (
+    host === "localhost" ||
+    !host.includes(".") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal")
+  ) {
+    throw new Error("URL host is not allowed");
+  }
+
+  // IPv4 literals in loopback/private/link-local/reserved ranges
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224
+    ) {
+      throw new Error("URL host is not allowed");
+    }
+  }
+
+  // IPv6 loopback / link-local / unique-local
+  if (host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) {
+    throw new Error("URL host is not allowed");
+  }
+
+  return parsed;
+}
 
 type VideoPlatform = "tiktok" | "youtube" | "instagram";
 
@@ -57,6 +115,7 @@ async function searchForCrossPost(url: string): Promise<string | null> {
   const response = await fetch(
     `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(url)}&count=10`,
     {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: {
         Accept: "application/json",
         "Accept-Encoding": "gzip",
@@ -94,6 +153,7 @@ export async function extractVideoContent(
   if (platform === "tiktok") {
     const response = await fetch(
       `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
     );
     if (!response.ok) return null;
     const data = await response.json();
@@ -112,6 +172,7 @@ export async function extractVideoContent(
     // oEmbed for title
     const oembedRes = await fetch(
       `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
     );
     let sourceName: string | null = "YouTube";
     if (oembedRes.ok) {
@@ -207,12 +268,15 @@ ${NUTRITION_GUIDELINES}`;
 
 /** Fetch HTML from a recipe URL */
 async function fetchRecipeHtml(url: string): Promise<string> {
+  assertPublicHttpUrl(url);
   const response = await fetch(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       Accept: "text/html,application/xhtml+xml",
     },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    redirect: "follow",
   });
 
   if (!response.ok) {
@@ -235,8 +299,33 @@ async function fetchRecipeHtml(url: string): Promise<string> {
   return cleaned.slice(0, 60_000);
 }
 
-/** Validate the shape of parsed JSON matches ParsedRecipe */
+const CUISINES: readonly CuisineType[] = ["american", "italian", "mexican", "asian", "mediterranean", "indian", "middle-eastern", "french", "other"];
+const MEAL_TYPES: readonly MealType[] = ["breakfast", "lunch", "dinner", "snacks"];
+const DIFFICULTIES: readonly DifficultyLevel[] = ["easy", "medium", "hard"];
+const INGREDIENT_CATEGORIES: readonly IngredientCategory[] = ["produce", "meat", "seafood", "dairy", "grain", "canned", "spice", "oil-vinegar", "condiment", "frozen", "other"];
+const DIETARY_FLAGS: readonly DietaryFlag[] = ["vegetarian", "vegan", "gluten-free", "dairy-free", "nut-free", "shellfish-free", "low-sodium", "low-cholesterol"];
+
+/** Coerce a value to one of the allowed enum members, or the fallback. */
+function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+/** Coerce a value to a finite non-negative number, or the fallback. */
+function asNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function asStringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+/** Validate the shape of parsed JSON matches ParsedRecipe.
+ *  Claude's output is untrusted: enums, numbers, and nested shapes are all
+ *  coerced to safe values rather than cast blindly. */
 function validateParsedRecipe(data: unknown): ParsedRecipe {
+  if (!data || typeof data !== "object") {
+    throw new Error("Recipe response is not an object");
+  }
   const d = data as Record<string, unknown>;
 
   if (typeof d.title !== "string" || !d.title) {
@@ -250,42 +339,51 @@ function validateParsedRecipe(data: unknown): ParsedRecipe {
   }
 
   const nutrition = d.nutrition as Record<string, unknown> | null;
-  if (!nutrition || typeof nutrition.calories !== "number") {
+  if (!nutrition || typeof nutrition !== "object" || typeof nutrition.calories !== "number") {
     throw new Error("Missing nutrition data");
   }
 
+  const servings = asNumber(d.servings, 4);
+
   return {
-    title: d.title as string,
-    description: (d.description as string) ?? null,
-    cuisine: (d.cuisine as CuisineType) ?? "other",
-    mealType: (d.mealType as MealType) ?? "dinner",
-    difficulty: (d.difficulty as DifficultyLevel) ?? "medium",
-    servings: (d.servings as number) ?? 4,
-    totalTimeMinutes: (d.totalTimeMinutes as number) ?? null,
+    title: d.title,
+    description: asStringOrNull(d.description),
+    cuisine: asEnum(d.cuisine, CUISINES, "other"),
+    mealType: asEnum(d.mealType, MEAL_TYPES, "dinner"),
+    difficulty: asEnum(d.difficulty, DIFFICULTIES, "medium"),
+    // servings divides quantities downstream — never allow 0
+    servings: Math.max(1, Math.round(servings)),
+    totalTimeMinutes: typeof d.totalTimeMinutes === "number" && Number.isFinite(d.totalTimeMinutes) && d.totalTimeMinutes > 0
+      ? Math.round(d.totalTimeMinutes)
+      : null,
     ingredients: (d.ingredients as Ingredient[]).map((ing) => ({
-      name: ing.name ?? "",
-      quantity: ing.quantity ?? null,
-      unit: ing.unit ?? null,
-      preparation: ing.preparation ?? null,
-      category: (ing.category as IngredientCategory) ?? "other",
-      raw: ing.raw ?? `${ing.quantity ?? ""} ${ing.unit ?? ""} ${ing.name}`.trim(),
+      name: typeof ing.name === "string" ? ing.name : "",
+      quantity: typeof ing.quantity === "number" && Number.isFinite(ing.quantity) ? ing.quantity : null,
+      unit: asStringOrNull(ing.unit),
+      preparation: asStringOrNull(ing.preparation),
+      category: asEnum(ing.category, INGREDIENT_CATEGORIES, "other"),
+      raw: typeof ing.raw === "string" && ing.raw
+        ? ing.raw
+        : `${ing.quantity ?? ""} ${ing.unit ?? ""} ${ing.name ?? ""}`.trim(),
     })),
-    instructions: d.instructions as string[],
+    instructions: (d.instructions as unknown[]).map(String),
     nutrition: {
-      calories: nutrition.calories as number,
-      protein: (nutrition.protein as number) ?? 0,
-      carbs: (nutrition.carbs as number) ?? 0,
-      fat: (nutrition.fat as number) ?? 0,
-      saturatedFat: (nutrition.saturatedFat as number) ?? 0,
-      cholesterol: (nutrition.cholesterol as number) ?? 0,
-      fiber: (nutrition.fiber as number) ?? 0,
-      sodium: (nutrition.sodium as number) ?? 0,
+      calories: asNumber(nutrition.calories, 0),
+      protein: asNumber(nutrition.protein, 0),
+      carbs: asNumber(nutrition.carbs, 0),
+      fat: asNumber(nutrition.fat, 0),
+      saturatedFat: asNumber(nutrition.saturatedFat, 0),
+      cholesterol: asNumber(nutrition.cholesterol, 0),
+      fiber: asNumber(nutrition.fiber, 0),
+      sodium: asNumber(nutrition.sodium, 0),
     },
-    dietaryFlags: Array.isArray(d.dietaryFlags) ? (d.dietaryFlags as DietaryFlag[]) : [],
-    tags: Array.isArray(d.tags) ? (d.tags as string[]) : [],
-    imageUrl: (d.imageUrl as string) ?? null,
-    isSlowCooker: (d.isSlowCooker as boolean) ?? false,
-    sourceName: (d.sourceName as string) ?? null,
+    dietaryFlags: Array.isArray(d.dietaryFlags)
+      ? (d.dietaryFlags as unknown[]).filter((f): f is DietaryFlag => DIETARY_FLAGS.includes(f as DietaryFlag))
+      : [],
+    tags: Array.isArray(d.tags) ? (d.tags as unknown[]).filter((t): t is string => typeof t === "string") : [],
+    imageUrl: asStringOrNull(d.imageUrl),
+    isSlowCooker: d.isSlowCooker === true,
+    sourceName: asStringOrNull(d.sourceName),
   };
 }
 
@@ -304,7 +402,7 @@ async function callClaudeForRecipe(
   systemPrompt: string,
   userMessage: string,
 ): Promise<ParsedRecipe> {
-  const message = await anthropic.messages.create({
+  const message = await getAnthropic().messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4096,
     system: systemPrompt,

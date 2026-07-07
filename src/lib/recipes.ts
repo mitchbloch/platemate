@@ -52,9 +52,13 @@ function recipeToRow(recipe: ParsedRecipe & { sourceUrl?: string | null }) {
 
 export async function listRecipes(): Promise<Recipe[]> {
   const supabase = await createClient();
+  // Scope by active household — RLS alone returns rows from every household
+  // the user belongs to.
+  const householdId = await getActiveHouseholdId();
   const { data, error } = await supabase
     .from("recipes")
     .select("*")
+    .eq("household_id", householdId)
     .order("created_at", { ascending: false });
 
   if (error) throw error;

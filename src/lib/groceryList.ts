@@ -75,11 +75,15 @@ export async function getOrCreateGroceryListByWeek(
   weekStart: string,
 ): Promise<GroceryListWithItems> {
   const supabase = await createClient();
+  // Scope by active household — RLS alone returns rows from every household
+  // the user belongs to.
+  const householdId = await getActiveHouseholdId();
 
   // Try to find existing list
   const { data: existing, error: findError } = await supabase
     .from("grocery_lists")
     .select("*")
+    .eq("household_id", householdId)
     .eq("week_start", weekStart)
     .maybeSingle();
 
@@ -92,14 +96,20 @@ export async function getOrCreateGroceryListByWeek(
   }
 
   // Create new list (no meal_plan_id yet)
-  const householdId = await getActiveHouseholdId();
   const { data: newList, error: createError } = await supabase
     .from("grocery_lists")
     .insert({ week_start: weekStart, household_id: householdId })
     .select()
     .single();
 
-  if (createError) throw createError;
+  if (createError) {
+    // Unique violation: another household member created this week's list
+    // concurrently — use theirs (already seeded with pinned items).
+    if ((createError as { code?: string }).code === "23505") {
+      return getOrCreateGroceryListByWeek(weekStart);
+    }
+    throw createError;
+  }
   const list = rowToGroceryList(newList);
 
   // Pre-populate with pinned items
@@ -168,9 +178,10 @@ export function generateGroceryItems(
 /**
  * Merge recipe-derived items into an existing grocery list, preserving manual items.
  *
- * 1. Delete items where is_manual = false (previous recipe-derived items)
- * 2. Clear recipe_ids on remaining manual items
- * 3. For each recipe item: name-match → merge into manual item, or insert new
+ * 1. For each recipe item: name-match → merge into manual item, or insert new
+ * 2. Delete the previous recipe-derived items LAST — a failure partway
+ *    through must never leave the list emptied out (worst case now is
+ *    leftover stale items, which regenerating cleans up)
  */
 export async function mergeRecipeItemsIntoList(
   listId: string,
@@ -198,22 +209,7 @@ export async function mergeRecipeItemsIntoList(
 
   const existingItems = (existingData ?? []).map(rowToGroceryListItem);
   const manualItems = existingItems.filter((i) => i.isManual);
-  const recipeDerivedItems = existingItems.filter((i) => !i.isManual);
-
-  // Delete all previous recipe-derived items
-  if (recipeDerivedItems.length > 0) {
-    const ids = recipeDerivedItems.map((i) => i.id);
-    await supabase.from("grocery_list_items").delete().in("id", ids);
-  }
-
-  // Clear recipe_ids on all manual items (will re-merge below)
-  if (manualItems.length > 0) {
-    const manualIds = manualItems.map((i) => i.id);
-    await supabase
-      .from("grocery_list_items")
-      .update({ recipe_ids: [] })
-      .in("id", manualIds);
-  }
+  const staleDerivedIds = existingItems.filter((i) => !i.isManual).map((i) => i.id);
 
   // Build lookup of manual items by fuzzy matching key
   const manualByMatchingKey = new Map<string, GroceryListItem>();
@@ -221,8 +217,9 @@ export async function mergeRecipeItemsIntoList(
     manualByMatchingKey.set(normalizeForMatching(item.name), item);
   }
 
+  // Compute the full change set before touching any rows
   const toInsert: Array<Record<string, unknown>> = [];
-  const mergedManualIds = new Set<string>();
+  const manualUpdates = new Map<string, Record<string, unknown>>();
   const pantryDismissedNames: string[] = [];
 
   for (const recipeItem of recipeItems) {
@@ -235,24 +232,20 @@ export async function mergeRecipeItemsIntoList(
       pantryDismissedNames.push(recipeItem.displayName);
     }
 
-    if (matchingManual && !mergedManualIds.has(matchingManual.id)) {
+    if (matchingManual && !manualUpdates.has(matchingManual.id)) {
       // Merge: update the manual item with recipe info
-      mergedManualIds.add(matchingManual.id);
       const merged = mergeManualAndRecipeQuantity(
         matchingManual.quantity,
         matchingManual.unit,
         recipeItem.quantity,
         recipeItem.unit,
       );
-      await supabase
-        .from("grocery_list_items")
-        .update({
-          recipe_ids: recipeItem.recipeIds,
-          quantity: merged.quantity,
-          unit: merged.unit,
-          dismissed: isPantry,
-        })
-        .eq("id", matchingManual.id);
+      manualUpdates.set(matchingManual.id, {
+        recipe_ids: recipeItem.recipeIds,
+        quantity: merged.quantity,
+        unit: merged.unit,
+        dismissed: isPantry,
+      });
     } else {
       // Insert new recipe-derived item (sort_order assigned below)
       toInsert.push({
@@ -270,6 +263,23 @@ export async function mergeRecipeItemsIntoList(
         sort_order: 0, // placeholder, assigned below
       });
     }
+  }
+
+  // Manual items that didn't match any recipe item get their recipe links cleared
+  for (const item of manualItems) {
+    if (!manualUpdates.has(item.id) && item.recipeIds.length > 0) {
+      manualUpdates.set(item.id, { recipe_ids: [] });
+    }
+  }
+
+  // Apply manual-item updates in parallel
+  const updateResults = await Promise.all(
+    Array.from(manualUpdates, ([id, row]) =>
+      supabase.from("grocery_list_items").update(row).eq("id", id),
+    ),
+  );
+  for (const { error } of updateResults) {
+    if (error) throw error;
   }
 
   if (toInsert.length > 0) {
@@ -295,6 +305,15 @@ export async function mergeRecipeItemsIntoList(
       .from("grocery_list_items")
       .insert(toInsert);
     if (insertError) throw insertError;
+  }
+
+  // Delete previous recipe-derived items only after replacements are in place
+  if (staleDerivedIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("grocery_list_items")
+      .delete()
+      .in("id", staleDerivedIds);
+    if (deleteError) throw deleteError;
   }
 
   // Re-fetch the full list
@@ -432,11 +451,15 @@ export async function bulkUpdateSortOrder(
   items: Array<{ id: string; sortOrder: number }>,
 ): Promise<void> {
   const supabase = await createClient();
-  for (const item of items) {
-    const { error } = await supabase
-      .from("grocery_list_items")
-      .update({ sort_order: item.sortOrder })
-      .eq("id", item.id);
+  const results = await Promise.all(
+    items.map((item) =>
+      supabase
+        .from("grocery_list_items")
+        .update({ sort_order: item.sortOrder })
+        .eq("id", item.id),
+    ),
+  );
+  for (const { error } of results) {
     if (error) throw error;
   }
 }
@@ -490,9 +513,11 @@ export async function getSmartWeekStart(
   currentWeekStart: string,
 ): Promise<string> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
   const { data } = await supabase
     .from("grocery_lists")
     .select("week_start")
+    .eq("household_id", householdId)
     .eq("status", "completed")
     .eq("week_start", currentWeekStart)
     .maybeSingle();

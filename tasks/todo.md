@@ -131,4 +131,53 @@
 - [ ] Self-service sign-up + onboarding tutorial
 - [ ] Recipe ratings feeding into recommendations
 - [ ] Improved ingredient normalization (includes fuzzy matching for grocery dedup)
-- [ ] USDA API for precise nutrition (optional)
+- [ ] USDA API for precise nutrition — see [phase5_usda_nutrition.md](phase5_usda_nutrition.md)
+- [ ] Smart grocery merge (Claude-assisted) — see [phase5b_smart_grocery_merge.md](phase5b_smart_grocery_merge.md) (depends on Phase 5)
+
+## Phase 6: Security & Reliability Audit (2026-07-07) ✅
+
+Full-codebase review (elite-engineer standard): bugs, security holes, real-use breakage. All worth-fixing findings fixed; verified with build + lint + 130 tests.
+
+### 6.1 Critical — Cross-tenant security & data integrity
+- [x] RLS: `household_members` INSERT policy let any user add themselves to ANY household — migration 014 drops the clause; joining now goes through `join_household_by_code` SECURITY DEFINER RPC
+- [x] Join-by-code was broken for genuinely new users (invite-code lookup ran under member-only SELECT RLS) — fixed by the same RPC; join route rewritten
+- [x] Weak invite codes (`md5(random())`) — default now `gen_random_bytes`; admin-gated `regenerate_invite_code` RPC created (was referenced but never existed)
+- [x] `getWeekStart()` used the server timezone (UTC on Vercel) — week rolled over at 8pm ET showing next week's plan/list; now computed in America/New_York (+7 regression tests)
+- [x] `mergeRecipeItemsIntoList` deleted recipe items FIRST — a mid-merge failure permanently dropped grocery items; now computes everything up front and deletes stale items last
+- [x] DAL reads relied on RLS alone — broke for multi-household members (`.maybeSingle()` errors, interleaved data); all reads now scoped by `getActiveHouseholdId()`
+- [x] Settings autosave replaced (not merged) pending updates — fast edits to two fields silently dropped the first; now accumulates a batch
+- [x] Week navigation had no stale-response guard — out-of-order fetches could show one week's data under another week's header (then mutate the wrong list); monotonic token added in WeeklyPlanner + GroceryListView
+
+### 6.2 High
+- [x] SSRF: recipe parser fetched arbitrary user URLs — now http(s)-only, blocks localhost/private/link-local/metadata hosts (`assertPublicHttpUrl`, tested)
+- [x] All outbound fetches got 10s timeouts; `parse-text` input capped at 50k chars (was unbounded input to a paid Claude call)
+- [x] Onboarding tour targeted `data-tour` attributes that didn't exist — tour was a black overlay past step 1; attributes added to Nav (visible-element picking for mobile/desktop)
+- [x] Member role change UI called PATCH on a route that only implemented DELETE (always failed) — PATCH handler added
+- [x] Nutrition "daily estimate" was a no-op (`daysInWeek / daysInWeek`) under-flagging cholesterol — intended 40%-of-day weighting implemented (+tests)
+- [x] Costco items silently dropped from clipboard export — shared `NON_TJ_STORES` constant in types.ts (regression test)
+
+### 6.3 Medium/Low — Hardening & hygiene
+- [x] Get-or-create races (meal plan + grocery list): unique-violation now refetches instead of 500
+- [x] Claude output validation: enums/numbers/nested shapes coerced (servings clamped ≥1); Anthropic client made lazy
+- [x] `servings >= 1` CHECK constraint + backfill (migration 015); divide-by-zero guard in ingredientMerge (+test)
+- [x] `bulkUpdateSortOrder` sequential N+1 → parallel
+- [x] `getFrequentItems` used raw lowercase matching — now `normalizeForMatching` (consistent with grocery dedup)
+- [x] Add-item form no longer loses input on failed request; "mark as pantry staple" no longer proceeds when the dismiss failed
+- [x] Unauthenticated `/api/*` now gets 401 JSON instead of a 307 to login HTML
+- [x] auth/callback `next` param restricted to same-origin paths
+- [x] Security headers (nosniff, X-Frame-Options DENY, referrer-policy, permissions-policy) in next.config.ts
+- [x] `household_invites` visibility policy selected from `auth.users` (unreadable by clients → SELECT errors) — now `auth.jwt()`
+- [x] Deleted duplicate migration file `008_sort_order 2.sql`; removed dead/broken DAL functions (`getHouseholdByInviteCode`, `addHouseholdMember`, silent regenerate fallback)
+
+### 6.4 Verification
+- [x] `npm run test` — 130 tests passing (was 106; +24 new incl. timezone, SSRF, nutrition, Costco, servings-0 regressions)
+- [x] `npm run lint` — clean
+- [x] `npm run build` — passing
+
+### Known-minor (deliberately not fixed)
+- Array-index React keys in RecipeForm/RecipeDetail ingredient rows (focus-loss UX nit; values stay correct)
+- Narrow realtime channel leak on rapid tab-visibility flapping (handlers are idempotent; no data impact)
+- `platemate-has-household` cookie can be stale up to 24h after leaving a household (server components still redirect correctly)
+
+### ⚠️ Deploy ordering
+Migrations **014 + 015 must be applied to Supabase before deploying** this code — the join route now calls `join_household_by_code`, which doesn't exist until 014 runs.

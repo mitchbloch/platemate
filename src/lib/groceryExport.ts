@@ -1,10 +1,10 @@
-import type { GroceryListItem, StoreName, IngredientCategory } from "./types";
+import type { GroceryListItem, IngredientCategory } from "./types";
 import {
   INGREDIENT_TO_GROCERY_CATEGORY,
   GROCERY_CATEGORY_LABELS,
   GROCERY_CATEGORY_ORDER,
 } from "./categoryMap";
-import { STORE_LABELS } from "./types";
+import { NON_TJ_STORES, STORE_LABELS } from "./types";
 
 /** Format quantity for clipboard display */
 function formatQty(quantity: number | null, unit: string | null): string {
@@ -54,7 +54,6 @@ export function formatForClipboard(items: GroceryListItem[]): string {
   }
 
   // Non-TJ's items grouped by store
-  const NON_TJ_STORES: StoreName[] = ["target", "whole-foods", "hmart", "other"];
   for (const store of NON_TJ_STORES) {
     const storeItems = nonTjItems.filter((i) => i.store === store);
     if (storeItems.length === 0) continue;

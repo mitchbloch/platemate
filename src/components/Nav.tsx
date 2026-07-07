@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   {
     href: "/",
     label: "Home",
+    tour: undefined,
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden="true">
         <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   },
   {
     href: "/recipes",
+    tour: "recipes",
     label: "Recipes",
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden="true">
@@ -24,6 +26,7 @@ const NAV_ITEMS = [
   },
   {
     href: "/plan",
+    tour: "plan",
     label: "Plan",
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden="true">
@@ -33,6 +36,7 @@ const NAV_ITEMS = [
   },
   {
     href: "/grocery",
+    tour: "grocery",
     label: "Grocery",
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden="true">
@@ -42,6 +46,7 @@ const NAV_ITEMS = [
   },
   {
     href: "/settings",
+    tour: "settings",
     label: "Settings",
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden="true">
@@ -67,10 +72,11 @@ export default function Nav() {
             Platemate
           </Link>
           <div className="flex gap-1">
-            {NAV_ITEMS.map(({ href, label }) => (
+            {NAV_ITEMS.map(({ href, label, tour }) => (
               <Link
                 key={href}
                 href={href}
+                data-tour={tour}
                 className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   isActive(href)
                     ? "bg-primary-light text-primary"
@@ -99,10 +105,11 @@ export default function Nav() {
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex">
-          {NAV_ITEMS.map(({ href, label, icon }) => (
+          {NAV_ITEMS.map(({ href, label, icon, tour }) => (
             <Link
               key={href}
               href={href}
+              data-tour={tour}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
                 isActive(href)
                   ? "text-primary"

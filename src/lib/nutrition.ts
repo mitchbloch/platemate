@@ -76,20 +76,21 @@ export function weeklyNutritionSummary(
   const totalSaturatedFat = meals.reduce((sum, m) => sum + m.nutrition.saturatedFat, 0);
   const totalSodium = meals.reduce((sum, m) => sum + m.nutrition.sodium, 0);
 
-  // Estimate: these dinners represent ~40% of daily intake (one major meal)
-  const daysInWeek = 7;
-  const mealsPerWeek = count;
-  const dailyCholesterolEstimate = (totalCholesterol / mealsPerWeek) * (daysInWeek / daysInWeek);
+  // A planned dinner is ~40% of that day's intake (one major meal), so the
+  // estimated full-day intake on a planned-meal day is avg-per-meal / 0.4.
+  const DINNER_SHARE_OF_DAY = 0.4;
+  const avgCholesterolPerMeal = totalCholesterol / count;
+  const dailyCholesterolEstimate = avgCholesterolPerMeal / DINNER_SHARE_OF_DAY;
 
   const flags: NutritionFlag[] = [];
 
-  if (dailyCholesterolEstimate > DAILY_LIMITS.cholesterol * 0.5) {
+  if (dailyCholesterolEstimate > DAILY_LIMITS.cholesterol) {
     flags.push({
       nutrient: "Weekly cholesterol",
       level: "danger",
       value: totalCholesterol,
       unit: "mg",
-      threshold: DAILY_LIMITS.cholesterol * 0.5 * mealsPerWeek,
+      threshold: DAILY_LIMITS.cholesterol * DINNER_SHARE_OF_DAY * count,
       message: `Weekly planned meals contribute ${totalCholesterol}mg cholesterol — consider swapping a high-cholesterol dinner`,
     });
   }
@@ -98,7 +99,7 @@ export function weeklyNutritionSummary(
     totalCholesterol,
     totalSaturatedFat,
     totalSodium,
-    avgCholesterolPerMeal: totalCholesterol / count,
+    avgCholesterolPerMeal,
     avgSaturatedFatPerMeal: totalSaturatedFat / count,
     dailyCholesterolEstimate,
     flags,

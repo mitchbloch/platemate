@@ -170,6 +170,9 @@ export default function HouseholdSettings({
 
   // ── Autosave Timer ──
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Edits made while a save is pending must accumulate — replacing the
+  // payload would silently drop the earlier field's change.
+  const pendingUpdates = useRef<Partial<Household>>({});
   const latestHousehold = useRef(household);
   latestHousehold.current = household;
 
@@ -204,8 +207,13 @@ export default function HouseholdSettings({
 
   const scheduleSave = useCallback(
     (updates: Partial<Household>) => {
+      pendingUpdates.current = { ...pendingUpdates.current, ...updates };
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => savePreferences(updates), AUTOSAVE_DELAY);
+      saveTimer.current = setTimeout(() => {
+        const batch = pendingUpdates.current;
+        pendingUpdates.current = {};
+        savePreferences(batch);
+      }, AUTOSAVE_DELAY);
     },
     [savePreferences]
   );
