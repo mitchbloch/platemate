@@ -13,8 +13,24 @@ describe("mergeManualAndRecipeQuantity", () => {
     expect(result).toEqual({ quantity: 5, unit: null });
   });
 
-  it("keeps recipe quantity when units differ", () => {
+  it("keeps recipe quantity when units differ and are not convertible", () => {
     const result = mergeManualAndRecipeQuantity(1, "bunch", 8, "oz");
+    expect(result).toEqual({ quantity: 8, unit: "oz" });
+  });
+
+  it("converts and sums when units differ but share a family (volume)", () => {
+    // manual: 1 cup flour on the list; recipe adds 4 tbsp → 1.25 cup
+    const result = mergeManualAndRecipeQuantity(1, "cup", 4, "tbsp");
+    expect(result).toEqual({ quantity: 1.25, unit: "cup" });
+  });
+
+  it("converts and sums when units differ but share a family (weight)", () => {
+    const result = mergeManualAndRecipeQuantity(1, "lb", 8, "oz");
+    expect(result).toEqual({ quantity: 1.5, unit: "lb" });
+  });
+
+  it("does not convert across families (weight vs volume)", () => {
+    const result = mergeManualAndRecipeQuantity(1, "cup", 8, "oz");
     expect(result).toEqual({ quantity: 8, unit: "oz" });
   });
 

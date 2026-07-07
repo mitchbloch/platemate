@@ -4,6 +4,7 @@ import {
   deduplicateIngredients,
   normalizeForMatching,
   normalizeUnit,
+  sumConvertibleQuantities,
 } from "./ingredientMerge";
 import { getPinnedItems } from "./pinnedItems";
 import { getPantryItems } from "./pantryItems";
@@ -331,7 +332,8 @@ export async function mergeRecipeItemsIntoList(
 
 /**
  * Merge manual and recipe quantities.
- * Same unit → sum. Different units → keep recipe (authoritative).
+ * Same unit → sum. Convertible units (same volume/weight family) → convert
+ * and sum. Otherwise → keep recipe (authoritative).
  * If the recipe has null quantity, keep the manual quantity (don't null it out).
  */
 export function mergeManualAndRecipeQuantity(
@@ -361,7 +363,17 @@ export function mergeManualAndRecipeQuantity(
   if (recipeQty === null) {
     return { quantity: manualQty, unit: normManualUnit };
   }
-  // Recipe has a quantity with different unit: recipe is authoritative
+
+  // Convertible units ("1 cup" manual + "3 tbsp" recipe) → convert and sum
+  if (manualQty !== null && normManualUnit !== null && normRecipeUnit !== null) {
+    const summed = sumConvertibleQuantities(
+      { quantity: manualQty, unit: normManualUnit },
+      { quantity: recipeQty, unit: normRecipeUnit },
+    );
+    if (summed) return summed;
+  }
+
+  // Not convertible: recipe is authoritative
   return { quantity: recipeQty, unit: normRecipeUnit };
 }
 
