@@ -57,7 +57,91 @@ const UNIT_ALIASES: Record<string, string> = {
   grams: "g",
   kilogram: "kg",
   kilograms: "kg",
+  "fluid ounce": "fl oz",
+  "fluid ounces": "fl oz",
+  floz: "fl oz",
+  package: "package",
+  packages: "package",
+  pkg: "package",
+  jar: "jar",
+  jars: "jar",
+  bottle: "bottle",
+  bottles: "bottle",
+  bag: "bag",
+  bags: "bag",
+  box: "box",
+  boxes: "box",
+  container: "container",
+  containers: "container",
+  stick: "stick",
+  sticks: "stick",
+  handful: "handful",
+  handfuls: "handful",
 };
+
+// ── Unit Families (for cross-unit merging) ──
+// Same ingredient in different units of the same family should merge into one
+// list item ("2 tbsp butter" + "1/2 cup butter" → "10 tbsp butter"), not two.
+// "oz" is deliberately weight-only: bare "oz" on liquids is ambiguous, and
+// keeping it out of the volume family means we never mis-convert it.
+
+const VOLUME_IN_TSP: Record<string, number> = {
+  tsp: 1,
+  tbsp: 3,
+  "fl oz": 6,
+  cup: 48,
+  pt: 96,
+  qt: 192,
+  gal: 768,
+  mL: 0.202884,
+  L: 202.884,
+};
+
+const WEIGHT_IN_G: Record<string, number> = {
+  g: 1,
+  kg: 1000,
+  oz: 28.3495,
+  lb: 453.592,
+};
+
+export type UnitFamily = "volume" | "weight";
+
+export function unitFamily(unit: string | null): UnitFamily | null {
+  if (!unit) return null;
+  if (unit in VOLUME_IN_TSP) return "volume";
+  if (unit in WEIGHT_IN_G) return "weight";
+  return null;
+}
+
+function familyTable(family: UnitFamily): Record<string, number> {
+  return family === "volume" ? VOLUME_IN_TSP : WEIGHT_IN_G;
+}
+
+/** Pick a readable display unit for a converted total: the largest unit that
+ *  appeared among the merged items where the total is still >= 1. */
+function pickDisplayUnit(units: string[], totalInBase: number, table: Record<string, number>): string {
+  const unique = [...new Set(units)].sort((a, b) => table[a] - table[b]);
+  for (let i = unique.length - 1; i >= 0; i--) {
+    if (totalInBase / table[unique[i]] >= 1) return unique[i];
+  }
+  return unique[0];
+}
+
+/**
+ * Sum two quantities whose units are in the same family, converting as needed.
+ * Returns null when the units are not convertible into each other.
+ */
+export function sumConvertibleQuantities(
+  a: { quantity: number; unit: string },
+  b: { quantity: number; unit: string },
+): { quantity: number; unit: string } | null {
+  const family = unitFamily(a.unit);
+  if (family === null || unitFamily(b.unit) !== family) return null;
+  const table = familyTable(family);
+  const totalInBase = a.quantity * table[a.unit] + b.quantity * table[b.unit];
+  const unit = pickDisplayUnit([a.unit, b.unit], totalInBase, table);
+  return { quantity: Math.round((totalInBase / table[unit]) * 100) / 100, unit };
+}
 
 export function normalizeUnit(unit: string | null): string | null {
   if (!unit) return null;
@@ -67,6 +151,9 @@ export function normalizeUnit(unit: string | null): string | null {
 }
 
 // ── Name Normalization ──
+
+// Plurals ending in -ves whose singular ends in -ve (strip only the 's')
+const VES_TO_VE = new Set(["olives", "chives", "cloves", "endives"]);
 
 // Common trailing plurals that are safe to strip
 const PLURAL_EXCEPTIONS = new Set([
@@ -121,9 +208,17 @@ export function normalizeIngredientName(name: string): string {
     else if (normalized.endsWith("oes")) {
       normalized = normalized.slice(0, -2);
     }
-    // Handle 'ves' → 'f' (e.g., 'halves' → 'half')
+    // Handle 'ves' → 'f' (e.g., 'halves' → 'half'), except words whose
+    // singular ends in '-ve' ('olives' → 'olive', not 'olif')
     else if (normalized.endsWith("ves")) {
-      normalized = normalized.slice(0, -3) + "f";
+      const words = normalized.split(" ");
+      const last = words[words.length - 1];
+      if (VES_TO_VE.has(last)) {
+        words[words.length - 1] = last.slice(0, -1);
+        normalized = words.join(" ");
+      } else {
+        normalized = normalized.slice(0, -3) + "f";
+      }
     }
     // Simple 's' removal
     else {
@@ -153,6 +248,21 @@ const SINGLE_WORD_QUALIFIERS = new Set([
   "raw", "toasted", "roasted",
   "curly",
 ]);
+
+// Count words that recipes sometimes put in the name instead of the unit
+// ("3 garlic cloves" vs "3 cloves garlic"). Stripped from the matching key,
+// and promoted to the unit during dedup when the item has none.
+const COUNT_UNIT_WORDS = new Set([
+  "clove", "bunch", "head", "stalk", "sprig", "stick", "slice",
+]);
+
+// Whole-name synonyms applied after qualifier stripping — pairs that are the
+// same grocery purchase even though the words differ. Deliberately tiny:
+// merging here is only safe when the mapping is unambiguous.
+const MATCHING_SYNONYMS: Record<string, string> = {
+  "yellow onion": "onion",
+  scallion: "green onion",
+};
 
 // "ground" is only a safe qualifier when the remaining word is a spice/seasoning.
 const GROUND_SAFE_NOUNS = new Set([
@@ -194,6 +304,16 @@ export function stripQualifiers(normalizedName: string): string {
 
   result = result.trim().replace(/\s+/g, " ");
 
+  // Drop a trailing count word ("garlic clove" → "garlic") so name-embedded
+  // counts match unit-based ones — but never when it's the whole name
+  // ("cloves" the spice stays "clove").
+  const resultWords = result.split(" ");
+  if (resultWords.length > 1 && COUNT_UNIT_WORDS.has(resultWords[resultWords.length - 1])) {
+    result = resultWords.slice(0, -1).join(" ");
+  }
+
+  result = MATCHING_SYNONYMS[result] ?? result;
+
   // If stripping removed everything, fall back to the original
   return result || normalizedName;
 }
@@ -223,7 +343,10 @@ export function canMerge(
   // Both null → mergeable (unitless items like "salt")
   if (a.unit === null && b.unit === null) return true;
   // Same unit → mergeable
-  return a.unit === b.unit;
+  if (a.unit === b.unit) return true;
+  // Different units in the same family (all volume / all weight) → convertible
+  const family = unitFamily(a.unit);
+  return family !== null && unitFamily(b.unit) === family;
 }
 
 export function mergeQuantities(
@@ -231,16 +354,32 @@ export function mergeQuantities(
 ): { quantity: number | null; unit: string | null } {
   if (items.length === 0) return { quantity: null, unit: null };
 
-  const unit = items[0].unit;
-
   // If any quantity is null, result is null (can't sum unknown amounts)
   if (items.some((i) => i.quantity === null)) {
-    return { quantity: null, unit };
+    return { quantity: null, unit: items[0].unit };
   }
 
-  const total = items.reduce((sum, i) => sum + (i.quantity ?? 0), 0);
-  // Round to avoid floating point weirdness (e.g., 0.1 + 0.2)
-  return { quantity: Math.round(total * 100) / 100, unit };
+  const units = [...new Set(items.map((i) => i.unit))];
+  if (units.length === 1) {
+    const total = items.reduce((sum, i) => sum + (i.quantity ?? 0), 0);
+    // Round to avoid floating point weirdness (e.g., 0.1 + 0.2)
+    return { quantity: Math.round(total * 100) / 100, unit: units[0] };
+  }
+
+  // Mixed units — only reachable for same-family (convertible) units
+  const family = unitFamily(items[0].unit);
+  if (family === null) {
+    // Shouldn't happen given the grouping key; fall back to the first unit
+    const total = items.reduce((sum, i) => sum + (i.quantity ?? 0), 0);
+    return { quantity: Math.round(total * 100) / 100, unit: items[0].unit };
+  }
+  const table = familyTable(family);
+  const totalInBase = items.reduce(
+    (sum, i) => sum + (i.quantity ?? 0) * table[i.unit as string],
+    0,
+  );
+  const unit = pickDisplayUnit(items.map((i) => i.unit as string), totalInBase, table);
+  return { quantity: Math.round((totalInBase / table[unit]) * 100) / 100, unit };
 }
 
 // ── Main Deduplication ──
@@ -276,13 +415,26 @@ export function deduplicateIngredients(
     for (const ingredient of recipe.ingredients) {
       const normalizedName = normalizeIngredientName(ingredient.name);
       const matchingKey = stripQualifiers(normalizedName);
-      const normalizedUnit = normalizeUnit(ingredient.unit);
+      let normalizedUnit = normalizeUnit(ingredient.unit);
+
+      // "3 garlic cloves" carries its count word in the name — promote it to
+      // the unit so it groups with "3 cloves garlic" (unit: clove)
+      if (normalizedUnit === null) {
+        const nameWords = normalizedName.split(" ");
+        const lastWord = nameWords[nameWords.length - 1];
+        if (nameWords.length > 1 && COUNT_UNIT_WORDS.has(lastWord)) {
+          normalizedUnit = lastWord;
+        }
+      }
       const adjustedQuantity =
         ingredient.quantity !== null
           ? Math.round(ingredient.quantity * servingMultiplier * 100) / 100
           : null;
 
-      const key = `${matchingKey}|${normalizedUnit ?? ""}`;
+      // Units in the same family (volume/weight) group together so they can
+      // be converted and summed; other units group by exact unit.
+      const family = unitFamily(normalizedUnit);
+      const key = `${matchingKey}|${family ?? normalizedUnit ?? ""}`;
 
       const existing = accumulator.get(key);
       if (existing) {

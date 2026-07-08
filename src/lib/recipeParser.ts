@@ -141,6 +141,33 @@ async function searchForCrossPost(url: string): Promise<string | null> {
   return null;
 }
 
+/** Fetch TikTok oEmbed data, or null if unavailable */
+async function fetchTikTokOEmbed(
+  url: string,
+): Promise<{ title?: string; author_name?: string } | null> {
+  const response = await fetch(
+    `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+  );
+  if (!response.ok) return null;
+  return response.json();
+}
+
+/** Follow redirects and return the final URL (for vm.tiktok.com short links) */
+async function resolveRedirect(url: string): Promise<string | null> {
+  try {
+    assertPublicHttpUrl(url);
+    const response = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    return response.url || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Extract recipe content from a video platform URL */
 export async function extractVideoContent(
   url: string,
@@ -151,13 +178,16 @@ export async function extractVideoContent(
   const MIN_CONTENT_LENGTH = 50;
 
   if (platform === "tiktok") {
-    const response = await fetch(
-      `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
-      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-    );
-    if (!response.ok) return null;
-    const data = await response.json();
-    const text = data?.title as string | undefined;
+    let data = await fetchTikTokOEmbed(url);
+    if (!data?.title) {
+      // Short links (vm.tiktok.com) sometimes fail oEmbed directly —
+      // resolve the redirect to the canonical video URL and retry
+      const resolved = await resolveRedirect(url);
+      if (resolved && resolved !== url && detectVideoPlatform(resolved) === "tiktok") {
+        data = await fetchTikTokOEmbed(resolved);
+      }
+    }
+    const text = data?.title;
     if (!text || text.length < MIN_CONTENT_LENGTH) return null;
     const sourceName = data?.author_name
       ? `TikTok — ${data.author_name}`
@@ -210,41 +240,73 @@ export async function extractVideoContent(
   return null;
 }
 
-const RECIPE_SCHEMA = `{
-  "title": string,
-  "description": string | null,
-  "cuisine": "american" | "italian" | "mexican" | "asian" | "mediterranean" | "indian" | "middle-eastern" | "french" | "other",
-  "mealType": "breakfast" | "lunch" | "dinner" | "snacks",
-  "difficulty": "easy" | "medium" | "hard",
-  "servings": number,
-  "totalTimeMinutes": number | null,
-  "ingredients": [
-    {
-      "name": string,
-      "quantity": number | null,
-      "unit": string | null,
-      "preparation": string | null,
-      "category": "produce" | "meat" | "seafood" | "dairy" | "grain" | "canned" | "spice" | "oil-vinegar" | "condiment" | "frozen" | "other",
-      "raw": string
-    }
+/** JSON Schema enforced via structured outputs — the API guarantees the
+ *  response parses and conforms, eliminating malformed-JSON failures. */
+const RECIPE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "title", "description", "cuisine", "mealType", "difficulty", "servings",
+    "totalTimeMinutes", "ingredients", "instructions", "nutrition",
+    "dietaryFlags", "tags", "imageUrl", "isSlowCooker", "sourceName",
   ],
-  "instructions": [string],
-  "nutrition": {
-    "calories": number,
-    "protein": number,
-    "carbs": number,
-    "fat": number,
-    "saturatedFat": number,
-    "cholesterol": number,
-    "fiber": number,
-    "sodium": number
+  properties: {
+    title: { type: "string" },
+    description: { anyOf: [{ type: "string" }, { type: "null" }] },
+    cuisine: { type: "string", enum: ["american", "italian", "mexican", "asian", "mediterranean", "indian", "middle-eastern", "french", "other"] },
+    mealType: { type: "string", enum: ["breakfast", "lunch", "dinner", "snacks"] },
+    difficulty: { type: "string", enum: ["easy", "medium", "hard"] },
+    servings: { type: "integer" },
+    totalTimeMinutes: { anyOf: [{ type: "integer" }, { type: "null" }] },
+    ingredients: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "quantity", "unit", "preparation", "category", "raw"],
+        properties: {
+          name: { type: "string" },
+          quantity: { anyOf: [{ type: "number" }, { type: "null" }] },
+          unit: { anyOf: [{ type: "string" }, { type: "null" }] },
+          preparation: { anyOf: [{ type: "string" }, { type: "null" }] },
+          category: { type: "string", enum: ["produce", "meat", "seafood", "dairy", "grain", "canned", "spice", "oil-vinegar", "condiment", "frozen", "other"] },
+          raw: { type: "string" },
+        },
+      },
+    },
+    instructions: { type: "array", items: { type: "string" } },
+    nutrition: {
+      type: "object",
+      additionalProperties: false,
+      required: ["calories", "protein", "carbs", "fat", "saturatedFat", "cholesterol", "fiber", "sodium"],
+      properties: {
+        calories: { type: "number" },
+        protein: { type: "number" },
+        carbs: { type: "number" },
+        fat: { type: "number" },
+        saturatedFat: { type: "number" },
+        cholesterol: { type: "number" },
+        fiber: { type: "number" },
+        sodium: { type: "number" },
+      },
+    },
+    dietaryFlags: {
+      type: "array",
+      items: { type: "string", enum: ["vegetarian", "vegan", "gluten-free", "dairy-free", "nut-free", "shellfish-free", "low-sodium", "low-cholesterol"] },
+    },
+    tags: { type: "array", items: { type: "string" } },
+    imageUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
+    isSlowCooker: { type: "boolean" },
+    sourceName: { anyOf: [{ type: "string" }, { type: "null" }] },
   },
-  "dietaryFlags": ["vegetarian" | "vegan" | "gluten-free" | "dairy-free" | "nut-free" | "shellfish-free" | "low-sodium" | "low-cholesterol"],
-  "tags": [string],
-  "imageUrl": string | null,
-  "isSlowCooker": boolean,
-  "sourceName": string | null
-}`;
+} as const;
+
+const COMPLETENESS_RULES = `Completeness is critical:
+- Include EVERY ingredient that appears in the source, in order — do not omit, merge, or deduplicate any, including garnishes, "for serving" items, and sauce/marinade sub-lists.
+- Include EVERY instruction step, in order — do not condense multiple steps into one or drop finishing/serving steps.
+- If the source repeats an ingredient in two components (e.g. sauce and marinade), list it twice with its component noted in "preparation".
+- "raw" must be the ingredient line exactly as written in the source.`;
+
 
 const NUTRITION_GUIDELINES = `Nutrition estimation guidelines:
 - Estimate per serving based on the ingredients and serving count
@@ -258,11 +320,9 @@ For dietaryFlags: include any that apply — "vegetarian", "vegan", "gluten-free
 For isSlowCooker: true if the recipe uses a slow cooker, crock pot, or instant pot on slow cook mode.
 For sourceName: infer from the URL/page (e.g., "NYT Cooking", "Stealth Health", "Budget Bytes").`;
 
-const HTML_SYSTEM_PROMPT = `You are a recipe extraction and nutrition estimation assistant. Given the HTML content of a recipe page, extract the recipe data and estimate per-serving nutrition.
+const HTML_SYSTEM_PROMPT = `You are a recipe extraction and nutrition estimation assistant. Given the HTML content of a recipe page, extract the recipe data and estimate per-serving nutrition. Prefer structured recipe data embedded in the page (schema.org/Recipe JSON-LD) over the visible text when both are present.
 
-Return ONLY valid JSON matching this schema (no markdown, no explanation):
-
-${RECIPE_SCHEMA}
+${COMPLETENESS_RULES}
 
 ${NUTRITION_GUIDELINES}`;
 
@@ -391,9 +451,7 @@ const TEXT_SYSTEM_PROMPT = `You are a recipe extraction and nutrition estimation
 
 The text may be informal, incomplete, or use shorthand. Do your best to infer missing details (servings, timing, etc.) from context. If ingredients lack quantities, estimate reasonable amounts for a typical recipe.
 
-Return ONLY valid JSON matching this schema (no markdown, no explanation):
-
-${RECIPE_SCHEMA}
+${COMPLETENESS_RULES}
 
 ${NUTRITION_GUIDELINES}`;
 
@@ -403,31 +461,31 @@ async function callClaudeForRecipe(
   userMessage: string,
 ): Promise<ParsedRecipe> {
   const message = await getAnthropic().messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
+    // claude-sonnet-4-20250514 was retired June 2026 (every import 404ed)
+    model: "claude-sonnet-5",
+    max_tokens: 16000,
     system: systemPrompt,
+    // Structured outputs: the response is guaranteed to be valid JSON
+    // conforming to the schema — no markdown fences, no missing fields.
+    output_config: {
+      format: { type: "json_schema", schema: RECIPE_JSON_SCHEMA },
+    },
     messages: [{ role: "user", content: userMessage }],
   });
 
-  const content = message.content[0];
-  if (content.type !== "text") {
+  if (message.stop_reason === "refusal") {
+    throw new Error("Claude declined to process this content");
+  }
+  if (message.stop_reason === "max_tokens") {
+    throw new Error("Recipe is too long to extract — try trimming the pasted text");
+  }
+
+  const content = message.content.find((block) => block.type === "text");
+  if (!content) {
     throw new Error("Unexpected response format from Claude");
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content.text);
-  } catch {
-    // Try extracting JSON from markdown code blocks
-    const jsonMatch = content.text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      parsed = JSON.parse(jsonMatch[1]);
-    } else {
-      throw new Error("Failed to parse Claude response as JSON");
-    }
-  }
-
-  return validateParsedRecipe(parsed);
+  return validateParsedRecipe(JSON.parse(content.text));
 }
 
 /** Parse a recipe from a URL using Claude API */

@@ -8,6 +8,8 @@ import {
   stripQualifiers,
   normalizeForMatching,
   pickDisplayName,
+  unitFamily,
+  sumConvertibleQuantities,
 } from "../ingredientMerge";
 import type { Ingredient, MealPlanRecipe, Recipe } from "../types";
 
@@ -265,11 +267,20 @@ describe("canMerge", () => {
     ).toBe(false);
   });
 
-  it("does not merge different units", () => {
+  it("merges different units in the same family (cup + tbsp)", () => {
     expect(
       canMerge(
         { normalizedName: "milk", unit: "cup" },
         { normalizedName: "milk", unit: "tbsp" },
+      ),
+    ).toBe(true);
+  });
+
+  it("does not merge non-convertible units", () => {
+    expect(
+      canMerge(
+        { normalizedName: "tomato", unit: "can" },
+        { normalizedName: "tomato", unit: "cup" },
       ),
     ).toBe(false);
   });
@@ -391,7 +402,7 @@ describe("deduplicateIngredients", () => {
     expect(result[0].recipeIds).toContain("r2");
   });
 
-  it("keeps ingredients with different units separate", () => {
+  it("merges the same ingredient across convertible units (cup + tbsp)", () => {
     const r1 = makeRecipe("r1", [
       makeIngredient({ name: "milk", quantity: 1, unit: "cup" }),
       makeIngredient({ name: "milk", quantity: 2, unit: "tbsp" }),
@@ -399,11 +410,37 @@ describe("deduplicateIngredients", () => {
 
     const result = deduplicateIngredients([makeMeal(r1)]);
 
+    // 1 cup + 2 tbsp = 1.13 cup — one line item, not two
+    expect(result).toHaveLength(1);
+    expect(result[0].unit).toBe("cup");
+    expect(result[0].quantity).toBe(1.13);
+  });
+
+  it("keeps ingredients with non-convertible units separate", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "chicken broth", quantity: 8, unit: "oz" }),
+      makeIngredient({ name: "chicken broth", quantity: 1, unit: "cup" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1)]);
+
+    // oz is weight, cup is volume — never mis-convert across families
     expect(result).toHaveLength(2);
-    const cupItem = result.find((i) => i.unit === "cup");
-    const tbspItem = result.find((i) => i.unit === "tbsp");
-    expect(cupItem?.quantity).toBe(1);
-    expect(tbspItem?.quantity).toBe(2);
+  });
+
+  it("merges 'garlic cloves' (count in name) with 'garlic' (count in unit)", () => {
+    const r1 = makeRecipe("r1", [
+      makeIngredient({ name: "garlic cloves", quantity: 3, unit: null, category: "produce" }),
+    ]);
+    const r2 = makeRecipe("r2", [
+      makeIngredient({ name: "garlic", quantity: 2, unit: "cloves", category: "produce" }),
+    ]);
+
+    const result = deduplicateIngredients([makeMeal(r1), makeMeal(r2)]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].quantity).toBe(5);
+    expect(result[0].unit).toBe("clove");
   });
 
   it("applies serving multiplier", () => {
@@ -598,5 +635,159 @@ describe("deduplicateIngredients", () => {
     expect(result).toHaveLength(1);
     expect(result[0].quantity).toBe(0.5);
     expect(result[0].displayName).toBe("Fresh basil");
+  });
+});
+
+// ── Regression: -ves plurals whose singular ends in -ve ──
+
+describe("-ves plural handling", () => {
+  it("does not mangle olives/chives/cloves into olif/chif/clof", () => {
+    expect(normalizeIngredientName("olives")).toBe("olive");
+    expect(normalizeIngredientName("chives")).toBe("chive");
+    expect(normalizeIngredientName("garlic cloves")).toBe("garlic clove");
+    expect(normalizeIngredientName("kalamata olives")).toBe("kalamata olive");
+  });
+
+  it("still handles true f-plurals", () => {
+    expect(normalizeIngredientName("halves")).toBe("half");
+    expect(normalizeIngredientName("loaves")).toBe("loaf");
+    expect(normalizeIngredientName("bay leaves")).toBe("bay leaf");
+  });
+
+  it("olives and olive now share a matching key", () => {
+    expect(normalizeForMatching("Olives")).toBe(normalizeForMatching("olive"));
+    expect(normalizeForMatching("garlic cloves")).toBe(normalizeForMatching("garlic clove"));
+  });
+});
+
+// ── Unit families & conversion ──
+
+describe("unitFamily", () => {
+  it("classifies volume units", () => {
+    for (const u of ["tsp", "tbsp", "cup", "fl oz", "pt", "qt", "gal", "mL", "L"]) {
+      expect(unitFamily(u), u).toBe("volume");
+    }
+  });
+
+  it("classifies weight units", () => {
+    for (const u of ["g", "kg", "oz", "lb"]) {
+      expect(unitFamily(u), u).toBe("weight");
+    }
+  });
+
+  it("treats bare oz as weight, not volume (ambiguity guard)", () => {
+    expect(unitFamily("oz")).toBe("weight");
+  });
+
+  it("returns null for count/container units and null", () => {
+    for (const u of ["clove", "can", "bunch", "package", "jar", null]) {
+      expect(unitFamily(u), String(u)).toBe(null);
+    }
+  });
+});
+
+describe("sumConvertibleQuantities", () => {
+  it("sums tbsp + cup into the readable unit", () => {
+    // 2 tbsp + 1/2 cup (8 tbsp) = 10 tbsp; 10 tbsp < 1 cup... (0.63 cup) → tbsp
+    expect(sumConvertibleQuantities({ quantity: 2, unit: "tbsp" }, { quantity: 0.5, unit: "cup" }))
+      .toEqual({ quantity: 10, unit: "tbsp" });
+  });
+
+  it("promotes to the larger unit when the total reaches it", () => {
+    // 1/2 cup + 3/4 cup handled by same-unit path; here 0.5 cup + 24 tsp (=0.5 cup) = 1 cup
+    expect(sumConvertibleQuantities({ quantity: 0.5, unit: "cup" }, { quantity: 24, unit: "tsp" }))
+      .toEqual({ quantity: 1, unit: "cup" });
+  });
+
+  it("sums oz + lb as weight", () => {
+    expect(sumConvertibleQuantities({ quantity: 8, unit: "oz" }, { quantity: 1, unit: "lb" }))
+      .toEqual({ quantity: 1.5, unit: "lb" });
+  });
+
+  it("refuses cross-family sums (oz vs cup)", () => {
+    expect(sumConvertibleQuantities({ quantity: 8, unit: "oz" }, { quantity: 1, unit: "cup" })).toBe(null);
+  });
+
+  it("refuses non-convertible units", () => {
+    expect(sumConvertibleQuantities({ quantity: 1, unit: "can" }, { quantity: 2, unit: "cup" })).toBe(null);
+  });
+});
+
+describe("mergeQuantities with mixed convertible units", () => {
+  it("merges mixed volume units", () => {
+    expect(mergeQuantities([
+      { quantity: 2, unit: "tbsp" },
+      { quantity: 0.5, unit: "cup" },
+      { quantity: 3, unit: "tsp" },
+    ])).toEqual({ quantity: 11, unit: "tbsp" });
+  });
+
+  it("null quantity anywhere still nulls the total", () => {
+    expect(mergeQuantities([
+      { quantity: 2, unit: "tbsp" },
+      { quantity: null, unit: "cup" },
+    ])).toEqual({ quantity: null, unit: "tbsp" });
+  });
+});
+
+describe("canMerge with unit families", () => {
+  it("allows same-family different units", () => {
+    expect(canMerge(
+      { normalizedName: "butter", unit: "tbsp" },
+      { normalizedName: "butter", unit: "cup" },
+    )).toBe(true);
+  });
+
+  it("rejects cross-family units", () => {
+    expect(canMerge(
+      { normalizedName: "chicken broth", unit: "oz" },
+      { normalizedName: "chicken broth", unit: "cup" },
+    )).toBe(false);
+  });
+});
+
+// ── New unit aliases ──
+
+describe("container/packaging unit aliases", () => {
+  it("normalizes plurals of container units", () => {
+    expect(normalizeUnit("packages")).toBe("package");
+    expect(normalizeUnit("pkg")).toBe("package");
+    expect(normalizeUnit("jars")).toBe("jar");
+    expect(normalizeUnit("boxes")).toBe("box");
+    expect(normalizeUnit("sticks")).toBe("stick");
+    expect(normalizeUnit("fluid ounces")).toBe("fl oz");
+  });
+});
+
+// ── Count-word promotion & synonyms ──
+
+describe("count words embedded in names", () => {
+  it("strips a trailing count word from the matching key", () => {
+    expect(normalizeForMatching("garlic cloves")).toBe("garlic");
+    expect(normalizeForMatching("celery stalks")).toBe("celery");
+    expect(normalizeForMatching("cinnamon sticks")).toBe("cinnamon");
+  });
+
+  it("keeps the count word when it IS the ingredient (whole cloves the spice)", () => {
+    expect(normalizeForMatching("cloves")).toBe("clove");
+  });
+
+});
+
+describe("matching synonyms", () => {
+  it("treats yellow onion as onion", () => {
+    expect(normalizeForMatching("yellow onions")).toBe("onion");
+    expect(normalizeForMatching("Yellow Onion")).toBe("onion");
+  });
+
+  it("does not over-strip other colors", () => {
+    expect(normalizeForMatching("red onion")).toBe("red onion");
+    expect(normalizeForMatching("yellow squash")).toBe("yellow squash");
+    expect(normalizeForMatching("yellow bell pepper")).toBe("yellow bell pepper");
+  });
+
+  it("treats scallions as green onions", () => {
+    expect(normalizeForMatching("scallions")).toBe("green onion");
+    expect(normalizeForMatching("green onions")).toBe("green onion");
   });
 });
