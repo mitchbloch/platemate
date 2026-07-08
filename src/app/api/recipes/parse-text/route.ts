@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseRecipeFromText } from "@/lib/recipeParser";
 
+// Recipe extraction calls Claude with thinking enabled — allow up to 60s
+export const maxDuration = 60;
+
 // Generous for any real recipe; prevents dumping arbitrarily large payloads
 // into a paid Claude call.
 const MAX_TEXT_LENGTH = 50_000;

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseRecipeFromUrl, parseRecipeFromText, isVideoUrl, extractVideoContent } from "@/lib/recipeParser";
 
+// Recipe extraction calls Claude with thinking enabled — allow up to 60s
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const { url } = await request.json();

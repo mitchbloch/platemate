@@ -181,3 +181,31 @@ Full-codebase review (elite-engineer standard): bugs, security holes, real-use b
 
 ### ⚠️ Deploy ordering
 Migrations **014 + 015 must be applied to Supabase before deploying** this code — the join route now calls `join_household_by_code`, which doesn't exist until 014 runs.
+
+## Phase 7: Recipe Import & Grocery Merge Reliability (2026-07-07) ✅
+
+Root-caused via Vercel production logs + fixed; verified with live API evals and 158 unit tests.
+
+### 7.1 Recipe import ("links don't work")
+- [x] ROOT CAUSE: pinned model `claude-sonnet-4-20250514` was retired by Anthropic — every import (URL, video, and text) had been failing with 404 since at least 7/6. Migrated to `claude-sonnet-5` (SDK bumped 0.52 → 0.110)
+- [x] Structured outputs (`output_config.format` + JSON Schema): responses are now guaranteed schema-valid JSON — eliminates the markdown-fence/malformed-JSON failure class entirely
+- [x] max_tokens 4096 → 16000 (long recipes could silently truncate mid-JSON); explicit errors for `max_tokens`/`refusal` stop reasons; `maxDuration = 60` on both parse routes
+
+### 7.2 Recipe import ("lossy extraction")
+- [x] Completeness rules in both prompts: every ingredient (incl. garnish/"to taste"/sub-component lists) and every step, in order; `raw` must be verbatim
+- [x] URL parsing now instructs Claude to prefer schema.org JSON-LD recipe data when present
+- [x] TikTok short links (vm.tiktok.com): oEmbed failure now resolves the redirect and retries with the canonical URL
+- [x] Live eval: TikTok-style caption → 12/12 ingredients, 8/8 steps, correct servings/time; real Budget Bytes URL → full recipe with source attribution
+
+### 7.3 Grocery merge ("fuzzy matches imperfect and lossy")
+- [x] BUG: '-ves' plural rule mangled olives→"olif", chives→"chif", garlic cloves→"garlic clof" (never matched their singulars) — exception list added
+- [x] Same ingredient in different units never merged ("2 tbsp butter" + "½ cup butter" = 2 line items) — unit-family conversion added (volume: tsp/tbsp/fl-oz/cup/pt/qt/gal/mL/L; weight: g/kg/oz/lb); bare "oz" deliberately weight-only so liquids never mis-convert
+- [x] "3 garlic cloves" (count in name) vs "3 cloves garlic" (count in unit) never merged — trailing count words (clove/bunch/head/stalk/sprig/stick/slice) now stripped from matching keys and promoted to units
+- [x] "yellow onion" vs "onion" and "scallions" vs "green onions" never merged — minimal synonym map (colors otherwise preserved: red onion, yellow squash stay distinct)
+- [x] Manual-item merge (`mergeManualAndRecipeQuantity`) now also converts within unit families
+- [x] Missing unit aliases: package/pkg, jar, bottle, bag, box, container, stick, fluid ounce
+- [x] Realistic 3-recipe eval: 22 ingredient lines → 14 correct list items, zero lost, zero mangled
+
+### 7.4 Verification
+- [x] 158 unit tests passing (+34 incl. adversarial merge cases), lint clean, build passing
+- [x] Live end-to-end evals against the real Claude API (text + URL import)
