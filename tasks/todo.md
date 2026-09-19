@@ -232,7 +232,9 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 ### 8B: Search + weekly staple editing
 - [x] B1 `recipeSearch.ts` (+8 tests); `RecipeLibrary` + shared `RecipeSearchInput` with `?q=` mirrored via debounced replace (+5 component tests); planner picker search, Suggestions hidden while filtering
 - [x] B2 `PATCH /api/pinned-items` validated by `weeklyStaples.ts` (+6 tests) + `updatePinnedItem`; staples editor lists every staple with Edit / Skip / Restore / Add this week / Remove; edits mirror onto this week's unchecked copy (+5 component tests); fuzzy staple↔item matching via `normalizeForMatching`; `PinnedItemsManager.tsx` deleted
-- [ ] Build + lint + tests clean; `/code-review`; PR; on-device verification
+- [x] `/code-review` (standards + spec agents): FIXED `GroceryDisplayCategory` type lying about its values (said lowercase `protein|produce|dairy|snacks|other`; every real value is the capitalized section label) — type now matches, casing canonicalized once in the pinned-items DAL, all `as` casts removed; duplicated remove-staple handler extracted; library search now adopts the URL query on browser back/forward (+1 test); tour target tracking short-circuits while the target is attached; `rowToPinnedItem` test added
+- [x] Build + lint + tests clean (233 tests, 29 new in this batch)
+- [ ] PR opened — awaiting user's on-device verification before Batch C
 
 ### 8C: Brand-agnostic grocery merge
 - [ ] C1 `shoppingName` in `Ingredient`, JSON schema, prompt rules, validator

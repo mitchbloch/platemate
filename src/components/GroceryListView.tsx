@@ -4,10 +4,10 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import type { GroceryList, GroceryListItem, GroceryDisplayCategory, IngredientCategory, PantryItem, PinnedGroceryItem, StoreName } from "@/lib/types";
-import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER } from "@/lib/categoryMap";
+import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER, toGroceryDisplayCategory } from "@/lib/categoryMap";
 import { NON_TJ_STORES, STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
-import { canonicalDisplayCategory, findStapleListItem, isStapleItem, stapleKeySet } from "@/lib/weeklyStaples";
+import { findStapleListItem, indexStaples, stapleForItem } from "@/lib/weeklyStaples";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToGroceryList } from "@/lib/supabase/realtime";
 import { useToast, ToastContainer } from "@/components/Toast";
@@ -85,8 +85,8 @@ function formatQuantity(quantity: number | null, unit: string | null): string {
 }
 
 /** Map IngredientCategory to GroceryDisplayCategory */
-function toDisplayCategory(category: IngredientCategory) {
-  return INGREDIENT_TO_GROCERY_CATEGORY[category] ?? "other";
+function toDisplayCategory(category: IngredientCategory): GroceryDisplayCategory {
+  return INGREDIENT_TO_GROCERY_CATEGORY[category] ?? "Other";
 }
 
 /** Store badge color classes */
@@ -121,7 +121,7 @@ export default function GroceryListView({
   const [generating, setGenerating] = useState(false);
   const [addingItem, setAddingItem] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
-  const [newItemCategory, setNewItemCategory] = useState<GroceryDisplayCategory>("other");
+  const [newItemCategory, setNewItemCategory] = useState<GroceryDisplayCategory>("Other");
   const [newItemStore, setNewItemStore] = useState<StoreName>("trader-joes");
   const [newItemQuantity, setNewItemQuantity] = useState("");
   const [newItemUnit, setNewItemUnit] = useState("");
@@ -287,7 +287,7 @@ export default function GroceryListView({
   const pantryNameSet = new Set(pantryItems.map((p) => p.name.toLowerCase().trim()));
 
   // Weekly staple name set for identifying weekly staples in the list
-  const pinnedKeys = stapleKeySet(pinnedItems);
+  const stapleIndex = indexStaples(pinnedItems);
 
   // Split dismissed items into pantry staples vs other excluded
   const pantryDismissedItems = dismissedItems.filter((i) =>
@@ -616,6 +616,12 @@ export default function GroceryListView({
 
   // ── Weekly staple editing ──
 
+  /** "Remove weekly staple" from a list row: find the staple that row came from. */
+  function removeStapleForItem(item: GroceryListItem) {
+    const staple = stapleForItem(stapleIndex, item);
+    if (staple) removeWeeklyStaple(staple.id);
+  }
+
   /** Persist a staple edit, then mirror it onto this week's unchecked copy
    *  so the change is visible now instead of next week. */
   async function editWeeklyStaple(
@@ -623,8 +629,9 @@ export default function GroceryListView({
     updates: { name: string; quantity: number | null; unit: string | null; category: string; store: StoreName },
   ) {
     const previous = staple;
+    const category = toGroceryDisplayCategory(updates.category) ?? "Other";
     setPinnedItems((prev) =>
-      prev.map((p) => (p.id === staple.id ? { ...p, ...updates, category: updates.category as GroceryDisplayCategory } : p)),
+      prev.map((p) => (p.id === staple.id ? { ...p, ...updates, category } : p)),
     );
     setEditingStapleId(null);
 
@@ -694,7 +701,7 @@ export default function GroceryListView({
     setNewItemName("");
     setNewItemQuantity("");
     setNewItemUnit("");
-    setNewItemCategory("other");
+    setNewItemCategory("Other");
     setNewItemStore("trader-joes");
     setNewItemIsWeekly(false);
     setAddingItem(null);
@@ -902,8 +909,8 @@ export default function GroceryListView({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (defaultCategory && newItemCategory === "other") {
-            setNewItemCategory(toDisplayCategory(defaultCategory) as GroceryDisplayCategory);
+          if (defaultCategory && newItemCategory === "Other") {
+            setNewItemCategory(toDisplayCategory(defaultCategory));
           }
           addItem();
         }}
@@ -943,7 +950,7 @@ export default function GroceryListView({
         <div className="flex flex-wrap gap-2">
           <select
             value={newItemCategory}
-            onChange={(e) => setNewItemCategory(e.target.value as GroceryDisplayCategory)}
+            onChange={(e) => setNewItemCategory(toGroceryDisplayCategory(e.target.value) ?? "Other")}
             className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
           >
             {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
@@ -1178,14 +1185,14 @@ export default function GroceryListView({
                         <GroceryItemRow
                           item={item}
                           mode={mode}
-                          isPinned={isStapleItem(item, pinnedKeys)}
+                          isPinned={stapleForItem(stapleIndex, item) !== undefined}
                           isCompleted={!!isCompleted}
                           closeKey={closeKey}
                           onToggle={() => toggleCheck(item)}
                           onDismiss={() => dismissItem(item)}
                           onMarkPantry={() => markAsPantryStaple(item)}
                           onMoveToWeekly={() => moveToWeeklyStaples(item)}
-                          onRemoveWeekly={() => { const staple = pinnedItems.find((p) => findStapleListItem([item], p)); if (staple) removeWeeklyStaple(staple.id); }}
+                          onRemoveWeekly={() => removeStapleForItem(item)}
                           onRemove={() => removeItem(item)}
                           onChangeStore={(store) => changeStore(item, store)}
                           isEditing={editingItemId === item.id}
@@ -1206,7 +1213,7 @@ export default function GroceryListView({
                           onClick={() => {
                             setAddingItem(group.category);
                             setNewItemName("");
-                            setNewItemCategory(toDisplayCategory(group.items[0]?.category ?? "other") as GroceryDisplayCategory);
+                            setNewItemCategory(toDisplayCategory(group.items[0]?.category ?? "other"));
                             setNewItemStore("trader-joes");
                             setNewItemIsWeekly(false);
                           }}
@@ -1230,7 +1237,7 @@ export default function GroceryListView({
                       onClick={() => {
                         setAddingItem("__new__");
                         setNewItemName("");
-                        setNewItemCategory("other");
+                        setNewItemCategory("Other");
                         setNewItemStore("trader-joes");
                         setNewItemIsWeekly(false);
                       }}
@@ -1258,14 +1265,14 @@ export default function GroceryListView({
                         <GroceryItemRow
                           item={item}
                           mode={mode}
-                          isPinned={isStapleItem(item, pinnedKeys)}
+                          isPinned={stapleForItem(stapleIndex, item) !== undefined}
                           isCompleted={!!isCompleted}
                           closeKey={closeKey}
                           onToggle={() => toggleCheck(item)}
                           onDismiss={() => dismissItem(item)}
                           onMarkPantry={() => markAsPantryStaple(item)}
                           onMoveToWeekly={() => moveToWeeklyStaples(item)}
-                          onRemoveWeekly={() => { const staple = pinnedItems.find((p) => findStapleListItem([item], p)); if (staple) removeWeeklyStaple(staple.id); }}
+                          onRemoveWeekly={() => removeStapleForItem(item)}
                           onRemove={() => removeItem(item)}
                           onChangeStore={(store) => changeStore(item, store)}
                           isEditing={editingItemId === item.id}
@@ -1324,7 +1331,7 @@ export default function GroceryListView({
                                 name: staple.name,
                                 quantity: staple.quantity,
                                 unit: staple.unit,
-                                category: (canonicalDisplayCategory(staple.category) ?? "Other") as GroceryDisplayCategory,
+                                category: staple.category,
                                 store: staple.store,
                               }}
                               submitLabel="Save staple"
@@ -1346,7 +1353,7 @@ export default function GroceryListView({
                               {staple.name}
                             </span>
                             <span className="text-[10px] uppercase tracking-wide text-text-muted">
-                              {canonicalDisplayCategory(staple.category) ?? "Other"}
+                              {staple.category}
                             </span>
                             {staple.store !== "trader-joes" && (
                               <span className={`rounded px-1 py-0.5 text-[10px] ${storeBadgeClasses(staple.store)}`}>
@@ -1623,7 +1630,7 @@ function GroceryItemRow({
           name: item.name,
           quantity: item.quantity,
           unit: item.unit,
-          category: toDisplayCategory(item.category) as GroceryDisplayCategory,
+          category: toDisplayCategory(item.category),
           store: item.store,
         }}
         onSave={onSaveEdit}
@@ -1841,7 +1848,7 @@ function ItemEditForm({
       <div className="flex flex-wrap gap-2">
         <select
           value={category}
-          onChange={(e) => setCategory(e.target.value as GroceryDisplayCategory)}
+          onChange={(e) => setCategory(toGroceryDisplayCategory(e.target.value) ?? "Other")}
           className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
         >
           {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (

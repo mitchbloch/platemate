@@ -157,8 +157,10 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
     }
 
     function attach() {
+      // Cheap path for the many mutations that don't touch the nav
+      if (el?.isConnected) return;
       const found = findVisibleTarget(selector!);
-      if (found === el && (el === null || el.isConnected)) return;
+      if (found === el) return;
       release();
       if (!found) return;
       el = found;

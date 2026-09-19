@@ -7,6 +7,7 @@ import {
   getFrequentItems,
 } from "@/lib/pinnedItems";
 import { validatePinnedItemUpdate } from "@/lib/weeklyStaples";
+import { toGroceryDisplayCategory } from "@/lib/categoryMap";
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     const item = await addPinnedItem({
       name: body.name,
-      category: body.category ?? "other",
+      category: (typeof body.category === "string" && toGroceryDisplayCategory(body.category)) || "Other",
       store: body.store ?? "trader-joes",
       quantity: body.quantity ?? null,
       unit: body.unit ?? null,

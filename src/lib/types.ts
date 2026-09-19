@@ -121,14 +121,16 @@ export interface GroceryListItem {
 
 export type StoreName = "trader-joes" | "whole-foods" | "hmart" | "target" | "costco" | "other";
 
-export type GroceryDisplayCategory = "protein" | "produce" | "dairy" | "snacks" | "other";
+/** Grocery list section. These are the exact values stored on pinned items
+ *  and produced by the ingredient→section map — capitalized, as displayed. */
+export type GroceryDisplayCategory = "Protein" | "Produce" | "Dairy" | "Pantry" | "Other";
 
 export interface MergedIngredient {
   name: string; // normalized name (lowercase, trimmed)
   displayName: string; // human-readable name for UI
   quantity: number | null;
   unit: string | null;
-  category: string;
+  category: GroceryDisplayCategory;
   store: StoreName;
   recipeIds: string[]; // which recipes need this item
 }

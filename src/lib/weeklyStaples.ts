@@ -1,7 +1,7 @@
 import { normalizeForMatching } from "./ingredientMerge";
-import { GROCERY_CATEGORY_LABELS } from "./categoryMap";
+import { toGroceryDisplayCategory } from "./categoryMap";
 import { STORE_LABELS } from "./types";
-import type { GroceryListItem, PinnedGroceryItem, StoreName } from "./types";
+import type { GroceryDisplayCategory, GroceryListItem, PinnedGroceryItem, StoreName } from "./types";
 
 // ── Matching a staple to its copy on a week's list ──
 
@@ -15,20 +15,21 @@ export function findStapleListItem(
   return items.find((item) => normalizeForMatching(item.name) === key);
 }
 
-/** Set of matching keys for every staple — for tagging list rows as pinned. */
-export function stapleKeySet(staples: Pick<PinnedGroceryItem, "name">[]): Set<string> {
-  return new Set(staples.map((s) => normalizeForMatching(s.name)));
+/** Staples keyed by matching key — built once per render, looked up per row. */
+export function indexStaples<T extends Pick<PinnedGroceryItem, "name">>(staples: T[]): Map<string, T> {
+  return new Map(staples.map((s) => [normalizeForMatching(s.name), s]));
 }
 
-export function isStapleItem(item: Pick<GroceryListItem, "name">, keys: Set<string>): boolean {
-  return keys.has(normalizeForMatching(item.name));
+/** The staple a list row was materialized from, if any. */
+export function stapleForItem<T>(index: Map<string, T>, item: Pick<GroceryListItem, "name">): T | undefined {
+  return index.get(normalizeForMatching(item.name));
 }
 
 // ── Validating a staple edit ──
 
 export interface PinnedItemUpdates {
   name?: string;
-  category?: string;
+  category?: GroceryDisplayCategory;
   store?: StoreName;
   quantity?: number | null;
   unit?: string | null;
@@ -37,12 +38,6 @@ export interface PinnedItemUpdates {
 export type PinnedItemValidation =
   | { ok: true; updates: PinnedItemUpdates }
   | { ok: false; error: string };
-
-/** Canonical display-category key ("Produce") for any casing, or null. */
-export function canonicalDisplayCategory(value: string): string | null {
-  const lower = value.trim().toLowerCase();
-  return Object.keys(GROCERY_CATEGORY_LABELS).find((k) => k.toLowerCase() === lower) ?? null;
-}
 
 export function validatePinnedItemUpdate(body: unknown): PinnedItemValidation {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Invalid request body" };
@@ -54,7 +49,7 @@ export function validatePinnedItemUpdate(body: unknown): PinnedItemValidation {
     updates.name = b.name.trim();
   }
   if ("category" in b) {
-    const canonical = typeof b.category === "string" ? canonicalDisplayCategory(b.category) : null;
+    const canonical = typeof b.category === "string" ? toGroceryDisplayCategory(b.category) : null;
     if (!canonical) return { ok: false, error: "Invalid category" };
     updates.category = canonical;
   }

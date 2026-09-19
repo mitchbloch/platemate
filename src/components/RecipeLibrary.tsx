@@ -15,8 +15,18 @@ export default function RecipeLibrary({ recipes }: { recipes: Recipe[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const urlQuery = searchParams.get("q") ?? "";
+  const [query, setQuery] = useState(urlQuery);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Back/forward changes the URL underneath us: adopt its query. Tracked as
+  // "previous prop" state so a change is applied exactly once, during render,
+  // without an effect (the writes we make ourselves land here as no-ops).
+  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery);
+  if (urlQuery !== seenUrlQuery) {
+    setSeenUrlQuery(urlQuery);
+    setQuery(urlQuery);
+  }
 
   // Mirror the query into the URL, debounced so typing doesn't spam history
   useEffect(() => {

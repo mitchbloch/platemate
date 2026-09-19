@@ -78,6 +78,19 @@ describe("RecipeLibrary", () => {
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/recipes?q=taco", { scroll: false }));
   });
 
+  it("adopts the URL's query when the browser navigates back or forward", () => {
+    const { rerender } = render(<RecipeLibrary recipes={recipes} />);
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+    nav.params = new URLSearchParams("q=taco");
+    rerender(<RecipeLibrary recipes={recipes} />);
+    expect(screen.getByLabelText("Search recipes")).toHaveValue("taco");
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    nav.params = new URLSearchParams();
+    rerender(<RecipeLibrary recipes={recipes} />);
+    expect(screen.getByLabelText("Search recipes")).toHaveValue("");
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+  });
+
   it("starts from the query in the URL", () => {
     nav.params = new URLSearchParams("q=lentil");
     render(<RecipeLibrary recipes={recipes} />);

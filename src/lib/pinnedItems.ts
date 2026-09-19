@@ -1,6 +1,7 @@
 import { createClient } from "./supabase/server";
 import { getActiveHouseholdId } from "./supabase/auth";
 import { normalizeForMatching } from "./ingredientMerge";
+import { toGroceryDisplayCategory } from "./categoryMap";
 import type {
   GroceryDisplayCategory,
   IngredientCategory,
@@ -10,12 +11,13 @@ import type {
 
 // ── Row Converters ──
 
-function rowToPinnedItem(row: Record<string, unknown>): PinnedGroceryItem {
+export function rowToPinnedItem(row: Record<string, unknown>): PinnedGroceryItem {
   return {
     id: row.id as string,
     householdId: row.household_id as string,
     name: row.name as string,
-    category: row.category as GroceryDisplayCategory,
+    // Older rows were written with mixed casing; canonicalize at the boundary
+    category: toGroceryDisplayCategory(String(row.category ?? "")) ?? "Other",
     store: row.store as StoreName,
     quantity: row.quantity as number | null,
     unit: row.unit as string | null,
@@ -70,7 +72,7 @@ export async function updatePinnedItem(
   id: string,
   updates: Partial<{
     name: string;
-    category: string;
+    category: GroceryDisplayCategory;
     store: StoreName;
     quantity: number | null;
     unit: string | null;

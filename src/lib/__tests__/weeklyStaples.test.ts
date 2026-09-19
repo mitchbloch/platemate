@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canonicalDisplayCategory, findStapleListItem, isStapleItem, stapleKeySet, validatePinnedItemUpdate } from "../weeklyStaples";
+import { findStapleListItem, indexStaples, stapleForItem, validatePinnedItemUpdate } from "../weeklyStaples";
+import { toGroceryDisplayCategory } from "../categoryMap";
 import type { GroceryListItem } from "../types";
 
 function item(name: string, over: Partial<GroceryListItem> = {}): GroceryListItem {
@@ -18,18 +19,18 @@ describe("findStapleListItem", () => {
     expect(findStapleListItem(items, { name: "milk" })).toBeUndefined();
   });
 
-  it("tags list rows that correspond to a staple", () => {
-    const keys = stapleKeySet([{ name: "Yogurt" }]);
-    expect(isStapleItem(item("yogurt"), keys)).toBe(true);
-    expect(isStapleItem(item("Milk"), keys)).toBe(false);
+  it("finds the staple a list row came from", () => {
+    const index = indexStaples([{ name: "Yogurt", id: "pin1" }]);
+    expect(stapleForItem(index, item("yogurt"))?.id).toBe("pin1");
+    expect(stapleForItem(index, item("Milk"))).toBeUndefined();
   });
 });
 
 describe("validatePinnedItemUpdate", () => {
   it("normalizes category casing to the canonical display key", () => {
-    expect(canonicalDisplayCategory("dairy")).toBe("Dairy");
-    expect(canonicalDisplayCategory("PRODUCE")).toBe("Produce");
-    expect(canonicalDisplayCategory("meat")).toBeNull();
+    expect(toGroceryDisplayCategory("dairy")).toBe("Dairy");
+    expect(toGroceryDisplayCategory("PRODUCE")).toBe("Produce");
+    expect(toGroceryDisplayCategory("meat")).toBeNull();
     expect(validatePinnedItemUpdate({ category: "dairy" })).toEqual({ ok: true, updates: { category: "Dairy" } });
   });
 
