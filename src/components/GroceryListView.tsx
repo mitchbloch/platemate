@@ -4,9 +4,10 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import type { GroceryList, GroceryListItem, GroceryDisplayCategory, IngredientCategory, PantryItem, PinnedGroceryItem, StoreName } from "@/lib/types";
-import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER } from "@/lib/categoryMap";
+import { INGREDIENT_TO_GROCERY_CATEGORY, GROCERY_CATEGORY_LABELS, GROCERY_CATEGORY_ORDER, toGroceryDisplayCategory } from "@/lib/categoryMap";
 import { NON_TJ_STORES, STORE_LABELS } from "@/lib/types";
 import { formatForClipboard } from "@/lib/groceryExport";
+import { findStapleListItem, indexStaples, stapleForItem } from "@/lib/weeklyStaples";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToGroceryList } from "@/lib/supabase/realtime";
 import { useToast, ToastContainer } from "@/components/Toast";
@@ -84,8 +85,8 @@ function formatQuantity(quantity: number | null, unit: string | null): string {
 }
 
 /** Map IngredientCategory to GroceryDisplayCategory */
-function toDisplayCategory(category: IngredientCategory) {
-  return INGREDIENT_TO_GROCERY_CATEGORY[category] ?? "other";
+function toDisplayCategory(category: IngredientCategory): GroceryDisplayCategory {
+  return INGREDIENT_TO_GROCERY_CATEGORY[category] ?? "Other";
 }
 
 /** Store badge color classes */
@@ -120,7 +121,7 @@ export default function GroceryListView({
   const [generating, setGenerating] = useState(false);
   const [addingItem, setAddingItem] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
-  const [newItemCategory, setNewItemCategory] = useState<GroceryDisplayCategory>("other");
+  const [newItemCategory, setNewItemCategory] = useState<GroceryDisplayCategory>("Other");
   const [newItemStore, setNewItemStore] = useState<StoreName>("trader-joes");
   const [newItemQuantity, setNewItemQuantity] = useState("");
   const [newItemUnit, setNewItemUnit] = useState("");
@@ -135,6 +136,7 @@ export default function GroceryListView({
   const [pinnedItems, setPinnedItems] = useState<PinnedGroceryItem[]>(initialPinnedItems);
   const [frequentItems, setFrequentItems] = useState<FrequentItem[]>(initialFrequentItems);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingStapleId, setEditingStapleId] = useState<string | null>(null);
   const [closeKey, setCloseKey] = useState(0);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [pantryBanner, setPantryBanner] = useState<GroceryListItem[]>([]);
@@ -285,7 +287,7 @@ export default function GroceryListView({
   const pantryNameSet = new Set(pantryItems.map((p) => p.name.toLowerCase().trim()));
 
   // Weekly staple name set for identifying weekly staples in the list
-  const pinnedNameSet = new Set(pinnedItems.map((p) => p.name.toLowerCase().trim()));
+  const stapleIndex = indexStaples(pinnedItems);
 
   // Split dismissed items into pantry staples vs other excluded
   const pantryDismissedItems = dismissedItems.filter((i) =>
@@ -592,8 +594,8 @@ export default function GroceryListView({
     }
   }
 
-  async function removeWeeklyStaple(name: string) {
-    const item = pinnedItems.find((p) => p.name.toLowerCase().trim() === name.toLowerCase().trim());
+  async function removeWeeklyStaple(id: string) {
+    const item = pinnedItems.find((p) => p.id === id);
     if (!item) return;
 
     setPinnedItems((prev) => prev.filter((p) => p.id !== item.id));
@@ -609,6 +611,76 @@ export default function GroceryListView({
       }
     } catch {
       setPinnedItems((prev) => [...prev, item]);
+    }
+  }
+
+  // ── Weekly staple editing ──
+
+  /** "Remove weekly staple" from a list row: find the staple that row came from. */
+  function removeStapleForItem(item: GroceryListItem) {
+    const staple = stapleForItem(stapleIndex, item);
+    if (staple) removeWeeklyStaple(staple.id);
+  }
+
+  /** Persist a staple edit, then mirror it onto this week's unchecked copy
+   *  so the change is visible now instead of next week. */
+  async function editWeeklyStaple(
+    staple: PinnedGroceryItem,
+    updates: { name: string; quantity: number | null; unit: string | null; category: string; store: StoreName },
+  ) {
+    const previous = staple;
+    const category = toGroceryDisplayCategory(updates.category) ?? "Other";
+    setPinnedItems((prev) =>
+      prev.map((p) => (p.id === staple.id ? { ...p, ...updates, category } : p)),
+    );
+    setEditingStapleId(null);
+
+    try {
+      const res = await fetch("/api/pinned-items", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: staple.id, ...updates }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update staple");
+      }
+      const saved: PinnedGroceryItem = await res.json();
+      setPinnedItems((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+
+      // Match on the staple's OLD name — that's what this week's row is called
+      const copy = findStapleListItem(items, previous);
+      if (copy && !copy.checked) {
+        await editItem(copy, updates);
+      }
+      showToast(`"${updates.name}" updated`, "success");
+    } catch (err) {
+      setPinnedItems((prev) => prev.map((p) => (p.id === staple.id ? previous : p)));
+      showToast(err instanceof Error ? err.message : "Failed to update staple", "error");
+    }
+  }
+
+  /** Lists created before a staple was pinned don't have it — add it now. */
+  async function addStapleToList(staple: PinnedGroceryItem) {
+    if (!list) return;
+    try {
+      const res = await fetch(`/api/grocery-lists/${list.id}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: staple.name,
+          quantity: staple.quantity,
+          unit: staple.unit,
+          category: staple.category,
+          store: staple.store,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to add");
+      const created: GroceryListItem = await res.json();
+      setItems((prev) => [...prev, created]);
+      showToast(`"${staple.name}" added to this week`, "success");
+    } catch {
+      showToast("Failed to add staple to this week", "error");
     }
   }
 
@@ -629,7 +701,7 @@ export default function GroceryListView({
     setNewItemName("");
     setNewItemQuantity("");
     setNewItemUnit("");
-    setNewItemCategory("other");
+    setNewItemCategory("Other");
     setNewItemStore("trader-joes");
     setNewItemIsWeekly(false);
     setAddingItem(null);
@@ -837,8 +909,8 @@ export default function GroceryListView({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (defaultCategory && newItemCategory === "other") {
-            setNewItemCategory(toDisplayCategory(defaultCategory) as GroceryDisplayCategory);
+          if (defaultCategory && newItemCategory === "Other") {
+            setNewItemCategory(toDisplayCategory(defaultCategory));
           }
           addItem();
         }}
@@ -878,7 +950,7 @@ export default function GroceryListView({
         <div className="flex flex-wrap gap-2">
           <select
             value={newItemCategory}
-            onChange={(e) => setNewItemCategory(e.target.value as GroceryDisplayCategory)}
+            onChange={(e) => setNewItemCategory(toGroceryDisplayCategory(e.target.value) ?? "Other")}
             className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
           >
             {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
@@ -1113,14 +1185,14 @@ export default function GroceryListView({
                         <GroceryItemRow
                           item={item}
                           mode={mode}
-                          isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                          isPinned={stapleForItem(stapleIndex, item) !== undefined}
                           isCompleted={!!isCompleted}
                           closeKey={closeKey}
                           onToggle={() => toggleCheck(item)}
                           onDismiss={() => dismissItem(item)}
                           onMarkPantry={() => markAsPantryStaple(item)}
                           onMoveToWeekly={() => moveToWeeklyStaples(item)}
-                          onRemoveWeekly={() => removeWeeklyStaple(item.name)}
+                          onRemoveWeekly={() => removeStapleForItem(item)}
                           onRemove={() => removeItem(item)}
                           onChangeStore={(store) => changeStore(item, store)}
                           isEditing={editingItemId === item.id}
@@ -1141,7 +1213,7 @@ export default function GroceryListView({
                           onClick={() => {
                             setAddingItem(group.category);
                             setNewItemName("");
-                            setNewItemCategory(toDisplayCategory(group.items[0]?.category ?? "other") as GroceryDisplayCategory);
+                            setNewItemCategory(toDisplayCategory(group.items[0]?.category ?? "other"));
                             setNewItemStore("trader-joes");
                             setNewItemIsWeekly(false);
                           }}
@@ -1165,7 +1237,7 @@ export default function GroceryListView({
                       onClick={() => {
                         setAddingItem("__new__");
                         setNewItemName("");
-                        setNewItemCategory("other");
+                        setNewItemCategory("Other");
                         setNewItemStore("trader-joes");
                         setNewItemIsWeekly(false);
                       }}
@@ -1193,14 +1265,14 @@ export default function GroceryListView({
                         <GroceryItemRow
                           item={item}
                           mode={mode}
-                          isPinned={pinnedNameSet.has(item.name.toLowerCase().trim())}
+                          isPinned={stapleForItem(stapleIndex, item) !== undefined}
                           isCompleted={!!isCompleted}
                           closeKey={closeKey}
                           onToggle={() => toggleCheck(item)}
                           onDismiss={() => dismissItem(item)}
                           onMarkPantry={() => markAsPantryStaple(item)}
                           onMoveToWeekly={() => moveToWeeklyStaples(item)}
-                          onRemoveWeekly={() => removeWeeklyStaple(item.name)}
+                          onRemoveWeekly={() => removeStapleForItem(item)}
                           onRemove={() => removeItem(item)}
                           onChangeStore={(store) => changeStore(item, store)}
                           isEditing={editingItemId === item.id}
@@ -1238,43 +1310,99 @@ export default function GroceryListView({
                 </div>
               )}
 
-              {/* Weekly staples management (edit mode) */}
+              {/* Weekly staples editor (edit mode) */}
               {mode === "edit" && !isCompleted && pinnedItems.length > 0 && (
                 <div className="rounded-2xl border border-border bg-surface p-4 shadow-warm">
-                  <h2 className="mb-2 font-display text-sm font-semibold text-text">
+                  <h2 className="mb-1 font-display text-sm font-semibold text-text">
                     Weekly Staples
                   </h2>
                   <p className="mb-3 text-xs text-text-muted">
-                    Auto-added to every grocery list.
+                    Auto-added to every grocery list. Tap one to edit its name, section, or store.
                   </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {pinnedItems.map((pinned) => {
-                      const matchingItem = items.find(
-                        (i) => i.name.toLowerCase().trim() === pinned.name.toLowerCase().trim() && !i.dismissed,
-                      );
-                      if (!matchingItem) return null;
+                  <ul className="space-y-1">
+                    {pinnedItems.map((staple) => {
+                      const copy = findStapleListItem(items, staple);
+                      const status = !copy ? "missing" : copy.dismissed ? "skipped" : copy.checked ? "checked" : "active";
+                      if (editingStapleId === staple.id) {
+                        return (
+                          <li key={staple.id}>
+                            <ItemEditForm
+                              initial={{
+                                name: staple.name,
+                                quantity: staple.quantity,
+                                unit: staple.unit,
+                                category: staple.category,
+                                store: staple.store,
+                              }}
+                              submitLabel="Save staple"
+                              onSave={(updates) => editWeeklyStaple(staple, updates)}
+                              onCancel={() => setEditingStapleId(null)}
+                            />
+                          </li>
+                        );
+                      }
                       return (
-                        <span
-                          key={pinned.id}
-                          className="group flex items-center gap-1 rounded-full border border-primary/20 bg-primary-light/30 px-2.5 py-1 text-xs text-primary"
-                        >
-                          {pinned.name}
-                          {pinned.store !== "trader-joes" && (
-                            <span className={`ml-0.5 rounded px-1 py-0.5 text-[10px] ${storeBadgeClasses(pinned.store)}`}>
-                              {STORE_LABELS[pinned.store]}
+                        <li key={staple.id} className="flex min-h-11 items-center gap-2 rounded-xl px-2 transition-colors hover:bg-border-light">
+                          <button
+                            type="button"
+                            onClick={() => setEditingStapleId(staple.id)}
+                            className="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-left"
+                            aria-label={`Edit staple ${staple.name}`}
+                          >
+                            <span className={`text-sm ${status === "skipped" ? "text-text-muted line-through" : "text-text"}`}>
+                              {staple.name}
                             </span>
+                            <span className="text-[10px] uppercase tracking-wide text-text-muted">
+                              {staple.category}
+                            </span>
+                            {staple.store !== "trader-joes" && (
+                              <span className={`rounded px-1 py-0.5 text-[10px] ${storeBadgeClasses(staple.store)}`}>
+                                {STORE_LABELS[staple.store]}
+                              </span>
+                            )}
+                            {status === "skipped" && <span className="text-xs text-text-muted">skipped this week</span>}
+                            {status === "missing" && <span className="text-xs text-text-muted">not on this list</span>}
+                          </button>
+                          {status === "active" && copy && (
+                            <button
+                              type="button"
+                              onClick={() => dismissItem(copy)}
+                              className="min-h-9 shrink-0 rounded-md px-2 text-xs text-text-secondary transition-colors hover:bg-surface hover:text-text"
+                            >
+                              Skip
+                            </button>
+                          )}
+                          {status === "skipped" && copy && (
+                            <button
+                              type="button"
+                              onClick={() => restoreItem(copy)}
+                              className="min-h-9 shrink-0 rounded-md px-2 text-xs text-primary transition-colors hover:bg-surface"
+                            >
+                              Restore
+                            </button>
+                          )}
+                          {status === "missing" && (
+                            <button
+                              type="button"
+                              onClick={() => addStapleToList(staple)}
+                              className="min-h-9 shrink-0 rounded-md px-2 text-xs text-primary transition-colors hover:bg-surface"
+                            >
+                              Add this week
+                            </button>
                           )}
                           <button
-                            onClick={() => dismissItem(matchingItem)}
-                            className="ml-0.5 text-primary/40 transition-colors hover:text-danger"
-                            title="Skip this week"
+                            type="button"
+                            onClick={() => removeWeeklyStaple(staple.id)}
+                            aria-label={`Remove staple ${staple.name}`}
+                            title="Remove weekly staple"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:text-danger"
                           >
                             &times;
                           </button>
-                        </span>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 </div>
               )}
 
@@ -1496,7 +1624,19 @@ function GroceryItemRow({
   // unmounted when it flips off — initial state comes from `item` props,
   // so no reset effect needed).
   if (isEditing) {
-    return <ItemEditForm item={item} onSave={onSaveEdit} onCancel={onCancelEdit} />;
+    return (
+      <ItemEditForm
+        initial={{
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          category: toDisplayCategory(item.category),
+          store: item.store,
+        }}
+        onSave={onSaveEdit}
+        onCancel={onCancelEdit}
+      />
+    );
   }
 
   // Edit mode: dismiss, store change, remove, mark pantry
@@ -1633,20 +1773,30 @@ function GroceryItemRow({
   );
 }
 
+interface ItemEditValues {
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  category: GroceryDisplayCategory;
+  store: StoreName;
+}
+
 function ItemEditForm({
-  item,
+  initial,
+  submitLabel = "Save",
   onSave,
   onCancel,
 }: {
-  item: GroceryListItem;
+  initial: ItemEditValues;
+  submitLabel?: string;
   onSave: (updates: { name: string; quantity: number | null; unit: string | null; category: string; store: StoreName }) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState(item.name);
-  const [quantity, setQuantity] = useState(item.quantity?.toString() ?? "");
-  const [unit, setUnit] = useState(item.unit ?? "");
-  const [category, setCategory] = useState<GroceryDisplayCategory>(toDisplayCategory(item.category) as GroceryDisplayCategory);
-  const [store, setStore] = useState<StoreName>(item.store);
+  const [name, setName] = useState(initial.name);
+  const [quantity, setQuantity] = useState(initial.quantity?.toString() ?? "");
+  const [unit, setUnit] = useState(initial.unit ?? "");
+  const [category, setCategory] = useState<GroceryDisplayCategory>(initial.category);
+  const [store, setStore] = useState<StoreName>(initial.store);
 
   function handleSave() {
     if (!name.trim()) return;
@@ -1698,7 +1848,7 @@ function ItemEditForm({
       <div className="flex flex-wrap gap-2">
         <select
           value={category}
-          onChange={(e) => setCategory(e.target.value as GroceryDisplayCategory)}
+          onChange={(e) => setCategory(toGroceryDisplayCategory(e.target.value) ?? "Other")}
           className="rounded-lg border border-border bg-bg px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
         >
           {Object.entries(GROCERY_CATEGORY_LABELS).map(([val, label]) => (
@@ -1718,14 +1868,14 @@ function ItemEditForm({
       <div className="flex gap-2">
         <button
           type="submit"
-          className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
+          className="min-h-11 rounded-lg bg-primary px-3 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
         >
-          Save
+          {submitLabel}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light"
+          className="min-h-11 rounded-lg border border-border px-3 text-sm text-text-secondary transition-colors hover:bg-border-light"
         >
           Cancel
         </button>

@@ -1,6 +1,6 @@
-import type { GroceryCategory, IngredientCategory } from "./types";
+import type { GroceryCategory, GroceryDisplayCategory, IngredientCategory } from "./types";
 
-export const INGREDIENT_TO_GROCERY_CATEGORY: Record<IngredientCategory, string> = {
+export const INGREDIENT_TO_GROCERY_CATEGORY: Record<IngredientCategory, GroceryDisplayCategory> = {
   meat: "Protein",
   seafood: "Protein",
   produce: "Produce",
@@ -14,7 +14,7 @@ export const INGREDIENT_TO_GROCERY_CATEGORY: Record<IngredientCategory, string> 
   other: "Other",
 };
 
-export const GROCERY_CATEGORY_LABELS: Record<string, string> = {
+export const GROCERY_CATEGORY_LABELS: Record<GroceryDisplayCategory, string> = {
   Protein: "Protein",
   Produce: "Produce",
   Dairy: "Dairy",
@@ -22,13 +22,21 @@ export const GROCERY_CATEGORY_LABELS: Record<string, string> = {
   Other: "Other",
 };
 
-export const GROCERY_CATEGORY_ORDER: string[] = [
+export const GROCERY_CATEGORY_ORDER: GroceryDisplayCategory[] = [
   "Protein",
   "Produce",
   "Dairy",
   "Pantry",
   "Other",
 ];
+
+/** Canonical section for any casing ("produce", "PRODUCE" → "Produce"), or
+ *  null when the value isn't a section at all. Older pinned rows and API
+ *  callers used mixed casing; the DAL normalizes through this. */
+export function toGroceryDisplayCategory(value: string): GroceryDisplayCategory | null {
+  const lower = value.trim().toLowerCase();
+  return GROCERY_CATEGORY_ORDER.find((c) => c.toLowerCase() === lower) ?? null;
+}
 
 export const DEFAULT_GROCERY_CATEGORIES: GroceryCategory[] = [
   { name: "Protein", ingredientTypes: ["meat", "seafood"] },

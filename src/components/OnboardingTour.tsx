@@ -120,56 +120,74 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
     }
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Measure the target element and keep rect/tooltip position in sync with
-  // viewport changes. ResizeObserver fires immediately on attachment, so
-  // the initial measurement happens inside the observer callback — setState
-  // stays out of the effect body itself.
+  // Locate, highlight and measure the target. The target lives in the page's
+  // <Nav/>, and each step navigates — so the element found when the step
+  // changes is unmounted moments later (instant loading skeletons make this
+  // near-certain). Re-locate on every DOM mutation until the new page's nav
+  // is in place; ResizeObserver delivers the measurement asynchronously so no
+  // setState runs in the effect body itself.
   useEffect(() => {
-    if (!step.target) return;
-    const el = findVisibleTarget(step.target);
-    if (!el) return;
+    const selector = step.target;
+    if (!selector) return;
 
-    function update() {
-      if (!el) return;
+    let el: HTMLElement | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let restoreStyle: (() => void) | null = null;
+
+    function measure() {
+      if (!el || !el.isConnected || !tooltipRef.current) return;
       const rect = el.getBoundingClientRect();
       setTargetRect(rect);
-
       setTooltipPos(
         positionTooltip(rect, {
           width: 320,
-          height: tooltipRef.current?.offsetHeight ?? 200,
+          height: tooltipRef.current.offsetHeight,
           viewportWidth: window.innerWidth,
           viewportHeight: window.innerHeight,
         }),
       );
     }
 
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
+    function release() {
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      restoreStyle?.();
+      restoreStyle = null;
+      el = null;
+    }
+
+    function attach() {
+      // Cheap path for the many mutations that don't touch the nav
+      if (el?.isConnected) return;
+      const found = findVisibleTarget(selector!);
+      if (found === el) return;
+      release();
+      if (!found) return;
+      el = found;
+      // Lift the target above the overlay so it shows through the cutout
+      const prevPosition = el.style.position;
+      const prevZIndex = el.style.zIndex;
+      el.style.position = "relative";
+      el.style.zIndex = "60";
+      const target = el;
+      restoreStyle = () => {
+        target.style.position = prevPosition;
+        target.style.zIndex = prevZIndex;
+      };
+      resizeObserver = new ResizeObserver(measure);
+      resizeObserver.observe(el);
+    }
+
+    attach();
+    const mutationObserver = new MutationObserver(attach);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
     return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [step.target]);
-
-  // Apply highlight z-index to target nav element
-  useEffect(() => {
-    if (!step.target) return;
-    const el = findVisibleTarget(step.target);
-    if (!el) return;
-
-    const prevPosition = el.style.position;
-    const prevZIndex = el.style.zIndex;
-
-    el.style.position = "relative";
-    el.style.zIndex = "60";
-
-    return () => {
-      el.style.position = prevPosition;
-      el.style.zIndex = prevZIndex;
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+      release();
     };
   }, [step.target]);
 

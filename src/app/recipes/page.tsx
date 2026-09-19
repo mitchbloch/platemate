@@ -1,7 +1,8 @@
 import Nav from "@/components/Nav";
 import Link from "next/link";
+import { Suspense } from "react";
 import { listRecipes } from "@/lib/recipes";
-import RecipeCard from "@/components/RecipeCard";
+import RecipeLibrary from "@/components/RecipeLibrary";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +36,10 @@ export default async function RecipesPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {recipes.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} />
-            ))}
-          </div>
+          // useSearchParams needs a Suspense boundary
+          <Suspense>
+            <RecipeLibrary recipes={recipes} />
+          </Suspense>
         )}
       </main>
     </>

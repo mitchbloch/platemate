@@ -100,7 +100,7 @@ Routine calls made without asking: search hides the Suggestions banner while a q
 
 ### B2. Weekly staples editor
 - `PATCH /api/pinned-items` body `{ id, name?, category?, store?, quantity?, unit? }` → `updatePinnedItem` in `pinnedItems.ts` (category through `categoryToDb` on the list side only; pinned rows keep display categories as today).
-- Grocery page Weekly Staples section: every staple listed (not just those present this week). Tap → inline form (name, category, store, qty, unit) with Save / Remove. Skipped staples shown muted with "Restore this week".
+- Grocery page Weekly Staples section: every staple listed (not just those present this week). Tap → inline form (name, category, store, qty, unit) with Save / Remove. Skipped staples shown muted with "Restore". Staples missing from a list created before they were pinned get "Add this week".
 - After a successful staple PATCH, the client PATCHes the matching unchecked list item (`/api/grocery-lists/[id]/items`) with the same fields so this week's list reflects the change; optimistic UI, revert on failure. Name-match uses `normalizeForMatching` on both sides (today it is exact lowercase).
 - Delete `src/components/PinnedItemsManager.tsx`.
 - Tests: `updatePinnedItem` row mapping; staple↔item matching helper; `matchesRecipeQuery`.
