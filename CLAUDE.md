@@ -52,7 +52,7 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/components/RecipeForm.tsx` — Recipe import flow (URL or text → parse → review → save)
 - `src/components/WeeklyPlanner.tsx` — Meal planner (week nav, picker with filters, suggestions, optimistic add/remove)
 - `src/components/WeeklyNutritionSummary.tsx` — Aggregated weekly nutrition with color-coded flags
-- `supabase/migrations/` — DB schema (001 initial … 015 servings check, 016 recipe shares)
+- `supabase/migrations/` — DB schema (001 initial … 015 servings check, 016 recipe shares, 017 share RPC jsonb fix)
 
 ## Auth
 - Self-service sign-up; users belong to households (multi-household since migration 009)
