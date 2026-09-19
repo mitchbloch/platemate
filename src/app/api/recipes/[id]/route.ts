@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecipe, updateRecipe, deleteRecipe } from "@/lib/recipes";
+import { validateRecipeUpdate } from "@/lib/recipeValidation";
 
 export async function GET(
   _request: NextRequest,
@@ -26,9 +27,14 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
 
-    await updateRecipe(id, body);
+    const result = validateRecipeUpdate(body);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    await updateRecipe(id, result.updates);
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update recipe";

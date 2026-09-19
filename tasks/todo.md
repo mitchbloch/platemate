@@ -209,3 +209,44 @@ Root-caused via Vercel production logs + fixed; verified with live API evals and
 ### 7.4 Verification
 - [x] 158 unit tests passing (+34 incl. adversarial merge cases), lint clean, build passing
 - [x] Live end-to-end evals against the real Claude API (text + URL import)
+
+## Phase 8: Mobile QoL + Share, Search, Staples, Generation (2026-09-14)
+
+Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch, merged in order; user verifies on iPhone between batches.
+
+### 8A: Mobile QoL fixes
+
+> **Resume here (paused 2026-09-14 night):** all code for A1–A4, A6 is written on branch `feature/phase8a-mobile-qol` (uncommitted). Remaining: rerun build + lint, A5 walkthrough, `/code-review`, PR.
+- [x] A1 Recipe pages use `getRecipe`/`listRecipes` (raw-row root cause); single `rowToRecipe`; `recipeValidation.ts` + PATCH 400s; RecipeDetail re-syncs from props
+- [x] A2 Shared `RecipeEditor` (structured ingredient rows, `raw` regenerated, stable keys) used by RecipeForm + RecipeDetail
+- [x] A3 `grid-cols-1` on the 4 mobile grids; NutritionBadge compact wraps; 390px repro before/after (Chrome, 390px: Add button right edge 418px vs 374px content edge before → 344px after, button 44px tall)
+- [x] A4 44px targets; `touch-action: manipulation`; middleware `getClaims()`; `cache()` on auth helpers; `loading.tsx` ×4; `useLinkStatus` nav + optimistic active tab; solid bottom bar; `useResumeRefresh` (≥5 min)
+- [~] A5 `NumberField` replaces the 5 coerce-on-keystroke inputs (HouseholdSettings ×5, RecipeEditor ×3; grocery qty inputs already held strings, got `inputMode="decimal"` only) — walkthrough NOT yet run
+- [ ] A5 walkthrough: throwaway account `mbloch98+platemate-test@gmail.com` (password in git-ignored `.env.test.local`, never printed); confirm whether Supabase email confirmation is on; run signup → household → preferences → tour at 390px via `npm run dev` + Chrome; log fixes here; delete the account + household + `.env.test.local` at the end of Phase 8
+- [ ] A verification still pending: `npm run build` and `npm run lint` were started but killed at the 2026-09-14 pause (tsc clean, 191 tests green) — rerun both before the PR
+- [x] A6 Testing Library + jsdom; tests for NumberField (9), RecipeEditor (8), recipeValidation (10), Nav (5), rowToRecipe (1) — 191 total
+- [ ] Build + lint + tests clean; `/code-review`; PR; on-device verification
+
+### 8B: Search + weekly staple editing
+- [ ] B1 `recipeSearch.ts` + tests; `RecipeLibrary` client component with `?q=`; picker search input (Suggestions hidden while searching)
+- [ ] B2 `PATCH /api/pinned-items` + `updatePinnedItem`; staples editor (all staples, inline edit, skipped → restore); this-week item updated after staple PATCH; delete `PinnedItemsManager.tsx`
+- [ ] Build + lint + tests clean; `/code-review`; PR; on-device verification
+
+### 8C: Brand-agnostic grocery merge
+- [ ] C1 `shoppingName` in `Ingredient`, JSON schema, prompt rules, validator
+- [ ] C2 Dedup keys/displays on `shoppingName`; percent-token + spelling rules; tests
+- [ ] C3 `scripts/backfill-shopping-names.ts` (service-role, Haiku 4.5, idempotent, `--dry-run`); run once; Phase 5B doc marked superseded
+- [ ] Build + lint + tests clean; `/code-review`; PR; verify a real week's list merges yogurt variants
+
+### 8D: Share
+- [ ] D1 Migration 016 `recipe_shares` + `get_shared_recipe` / `record_share_save` RPCs (apply before merge)
+- [ ] D2 Public `/r/[token]` page with OG metadata; `/api/share/[token]/save`; `/api/recipes/[id]/share` get-or-create + revoke; middleware allowlist; `next` param on login/signup/household step
+- [ ] D3 Share button (native sheet / copy link), Copy as text, Stop sharing, stats line; tests
+- [ ] Build + lint + tests clean; `/security-review`; `/code-review`; PR; end-to-end with a second account
+
+### 8E: Recipe generation
+- [ ] E1 Migration 017 `recipe_generations` (apply before merge)
+- [ ] E2 `POST /api/generate` (Sonnet 5, structured turns: options | draft, library matches, household prefs, 20-turn cap) + list/get/delete/save routes
+- [ ] E3 `/recipes/generate` page: drafts strip, thread, photo picker with client downscale, option chips, draft card with Save, match cards with View + Add to plan; entry link on `/recipes/add`; "How this was generated" on detail
+- [ ] E4 Tests: prompt builder, validator, digest, route with mocked client
+- [ ] Build + lint + tests clean; `/code-review`; PR; live eval with the real API

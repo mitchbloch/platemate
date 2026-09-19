@@ -59,6 +59,18 @@ Two accounts (the couple). Shared data — no multi-tenancy needed.
 - **UI**: Invisible improvement in v1, no new badge or trust signal. Edit-mode unchanged so users can manually override any merge.
 - **Cost**: Single Haiku call per generation, mostly cache hits. ~$0.01–0.02 per generation max.
 
+## Phase 8: Mobile QoL + Share, Search, Staples, Generation — Design Decisions
+Full spec and root-cause table: `tasks/phase8_qol_and_features.md`.
+- **Data path**: Server pages must go through the DAL converters (`getRecipe`, `listRecipes`); raw rows never reach components. This was the root cause of "edits don't save".
+- **Editing model**: Ingredients are edited as structured fields (qty, unit, name, category, prep); `raw` is derived, never the source of truth. One `RecipeEditor` serves import review, detail edit, and generation.
+- **Mobile responsiveness**: Local JWT verification in middleware (project uses ES256 signing keys), per-request caching of the household lookup, loading skeletons on every route, instant pending state on the tab bar, 44px targets on repeated-tap controls, resume-from-background refresh after 5 minutes.
+- **Number inputs**: A shared `NumberField` keeps text while typing and commits a clamped number on blur — no coerce-on-keystroke anywhere.
+- **Grocery merge**: Brand-agnostic `shoppingName` is produced by Claude at import time inside the existing extraction call and is the merge key. Rule: drop brand/marketing/size words and milk/yogurt fat level unless essential; keep form, cut, type. Supersedes the Phase 5B canonical-list design (never built).
+- **Search**: Client-side over the loaded library (title, cuisine, tags, meal type, ingredient names); URL-backed on the Recipes page.
+- **Weekly staples**: Editable in place; edits propagate to this week's unchecked copy so the change is visible immediately.
+- **Share**: Public read-only recipe page per share token (full recipe visible, OG preview), "Save to Platemate" behind sign-in, independent copy into the recipient's household. `recipe_shares` keeps one active link per recipe per sharer with view/save counts and revocation.
+- **Generation**: Household-scoped chat with Sonnet 5; each turn returns either up to three options or a full draft with nutrition; photos downscaled client-side and not persisted; library matches offer View and Add to plan; household dietary and nutrient priorities shape every draft. Conversations persist server-side until saved (linked to the recipe) or discarded (deleted).
+
 ## Success Metrics
 - Can import a recipe from any major cooking site in <10 seconds
 - Video recipe links (TikTok, Instagram, YouTube) detected and gracefully redirected to text input

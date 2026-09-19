@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ParsedRecipe, CuisineType, MealType, DifficultyLevel, Ingredient } from "@/lib/types";
-import { CUISINE_LABELS, DIETARY_FLAG_LABELS } from "@/lib/types";
+import type { ParsedRecipe } from "@/lib/types";
+import { DIETARY_FLAG_LABELS } from "@/lib/types";
 import NutritionBadge from "./NutritionBadge";
+import RecipeEditor, { toEditableRecipe, fromEditableRecipe, type EditableRecipe } from "./RecipeEditor";
 
 type InputMode = "url" | "text";
 
@@ -20,10 +21,9 @@ export default function RecipeForm() {
   const [url, setUrl] = useState("");
   const [recipeText, setRecipeText] = useState("");
   const [formState, setFormState] = useState<FormState>({ step: "input" });
-  const [editedRecipe, setEditedRecipe] = useState<ParsedRecipe | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [editedRecipe, setEditedRecipe] = useState<EditableRecipe | null>(null);
   const router = useRouter();
-
-  const recipe = editedRecipe;
 
   async function handleParse(e: React.FormEvent) {
     e.preventDefault();
@@ -69,7 +69,7 @@ export default function RecipeForm() {
       }
 
       const parsed: ParsedRecipe = await res.json();
-      setEditedRecipe(parsed);
+      setEditedRecipe(toEditableRecipe(parsed));
       setFormState({ step: "review", parsed });
     } catch (err) {
       setFormState({
@@ -80,15 +80,22 @@ export default function RecipeForm() {
   }
 
   async function handleSave() {
-    if (!recipe) return;
+    if (!editedRecipe || formState.step !== "review") return;
+    const { parsed } = formState;
 
     setFormState({ step: "saving" });
 
     try {
+      // Editable fields come from the editor; everything Claude produced
+      // that the user can't edit (nutrition, flags, image, source) is kept.
       const res = await fetch("/api/recipes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...recipe, sourceUrl: url.trim() }),
+        body: JSON.stringify({
+          ...parsed,
+          ...fromEditableRecipe(editedRecipe),
+          sourceUrl: url.trim() || null,
+        }),
       });
 
       if (!res.ok) {
@@ -99,16 +106,9 @@ export default function RecipeForm() {
       const { id } = await res.json();
       router.push(`/recipes/${id}`);
     } catch (err) {
-      setFormState({
-        step: "error",
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
+      setSaveError(err instanceof Error ? err.message : "Unknown error");
+      setFormState({ step: "review", parsed });
     }
-  }
-
-  function updateField<K extends keyof ParsedRecipe>(key: K, value: ParsedRecipe[K]) {
-    if (!recipe) return;
-    setEditedRecipe({ ...recipe, [key]: value });
   }
 
   // ── Input step ──
@@ -245,7 +245,8 @@ export default function RecipeForm() {
   }
 
   // ── Review step ──
-  if (!recipe) return null;
+  if (!editedRecipe || formState.step !== "review") return null;
+  const parsed = formState.parsed;
 
   return (
     <div className="space-y-6">
@@ -253,257 +254,42 @@ export default function RecipeForm() {
         Review the extracted recipe below. Edit any fields before saving.
       </div>
 
-      {/* Dietary Flags */}
-      {recipe.dietaryFlags && recipe.dietaryFlags.length > 0 && (
+      {parsed.dietaryFlags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {recipe.dietaryFlags.map((flag) => (
-            <span
-              key={flag}
-              className="rounded-md bg-accent-light px-2 py-0.5 text-xs text-accent"
-            >
+          {parsed.dietaryFlags.map((flag) => (
+            <span key={flag} className="rounded-md bg-accent-light px-2 py-0.5 text-xs text-accent">
               {DIETARY_FLAG_LABELS[flag]}
             </span>
           ))}
         </div>
       )}
 
-      {/* Title */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-text-secondary">
-          Title
-        </label>
-        <input
-          type="text"
-          value={recipe.title}
-          onChange={(e) => updateField("title", e.target.value)}
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-        />
-      </div>
+      <RecipeEditor value={editedRecipe} onChange={setEditedRecipe} />
 
-      {/* Description */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-text-secondary">
-          Description
-        </label>
-        <textarea
-          value={recipe.description ?? ""}
-          onChange={(e) => updateField("description", e.target.value || null)}
-          rows={2}
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-        />
-      </div>
+      <NutritionBadge nutrition={parsed.nutrition} />
 
-      {/* Metadata row */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-text-secondary">
-            Cuisine
-          </label>
-          <select
-            value={recipe.cuisine}
-            onChange={(e) => updateField("cuisine", e.target.value as CuisineType)}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          >
-            {Object.entries(CUISINE_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
+      {saveError && (
+        <div role="alert" className="rounded-xl border border-danger-light bg-danger-light/50 p-3 text-sm text-danger">
+          {saveError}
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-text-secondary">
-            Meal Type
-          </label>
-          <select
-            value={recipe.mealType}
-            onChange={(e) => updateField("mealType", e.target.value as MealType)}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          >
-            <option value="breakfast">Breakfast</option>
-            <option value="lunch">Lunch</option>
-            <option value="dinner">Dinner</option>
-            <option value="snacks">Snacks</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-text-secondary">
-            Difficulty
-          </label>
-          <select
-            value={recipe.difficulty}
-            onChange={(e) => updateField("difficulty", e.target.value as DifficultyLevel)}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          >
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-text-secondary">
-            Servings
-          </label>
-          <input
-            type="number"
-            min={1}
-            value={recipe.servings}
-            onChange={(e) => updateField("servings", parseInt(e.target.value) || 1)}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-          />
-        </div>
-      </div>
+      )}
 
-      {/* Time */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-text-secondary">
-          Total Time (min)
-        </label>
-        <input
-          type="number"
-          min={0}
-          value={recipe.totalTimeMinutes ?? ""}
-          onChange={(e) =>
-            updateField("totalTimeMinutes", e.target.value ? parseInt(e.target.value) : null)
-          }
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-        />
-      </div>
-
-      {/* Slow cooker toggle */}
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={recipe.isSlowCooker}
-          onChange={(e) => updateField("isSlowCooker", e.target.checked)}
-          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-        />
-        <span className="text-sm text-text-secondary">Slow cooker recipe</span>
-      </label>
-
-      {/* Ingredients */}
-      <div>
-        <label className="mb-2 block text-sm font-medium text-text-secondary">
-          Ingredients
-        </label>
-        <div className="space-y-2">
-          {recipe.ingredients.map((ing, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <input
-                type="text"
-                value={ing.raw}
-                onChange={(e) => {
-                  const updated = [...recipe.ingredients];
-                  updated[i] = { ...updated[i], raw: e.target.value };
-                  updateField("ingredients", updated);
-                }}
-                className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-              />
-              <button
-                onClick={() => {
-                  const updated = recipe.ingredients.filter((_, j) => j !== i);
-                  updateField("ingredients", updated);
-                }}
-                className="rounded px-2 py-1.5 text-sm text-text-muted hover:text-danger transition-colors"
-              >
-                &times;
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          onClick={() => {
-            const blank: Ingredient = {
-              name: "",
-              quantity: null,
-              unit: null,
-              preparation: null,
-              category: "other",
-              raw: "",
-            };
-            updateField("ingredients", [...recipe.ingredients, blank]);
-          }}
-          className="mt-2 text-sm text-primary hover:text-primary-dark"
-        >
-          + Add ingredient
-        </button>
-      </div>
-
-      {/* Instructions */}
-      <div>
-        <label className="mb-2 block text-sm font-medium text-text-secondary">
-          Instructions
-        </label>
-        <div className="space-y-2">
-          {recipe.instructions.map((step, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <span className="mt-1.5 text-xs text-text-muted">{i + 1}.</span>
-              <textarea
-                value={step}
-                onChange={(e) => {
-                  const updated = [...recipe.instructions];
-                  updated[i] = e.target.value;
-                  updateField("instructions", updated);
-                }}
-                rows={2}
-                className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-              />
-              <button
-                onClick={() => {
-                  const updated = recipe.instructions.filter((_, j) => j !== i);
-                  updateField("instructions", updated);
-                }}
-                className="rounded px-2 py-1.5 text-sm text-text-muted hover:text-danger transition-colors"
-              >
-                &times;
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          onClick={() => updateField("instructions", [...recipe.instructions, ""])}
-          className="mt-2 text-sm text-primary hover:text-primary-dark"
-        >
-          + Add step
-        </button>
-      </div>
-
-      {/* Nutrition */}
-      {recipe.nutrition && <NutritionBadge nutrition={recipe.nutrition} />}
-
-      {/* Tags */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-text-secondary">
-          Tags (comma-separated)
-        </label>
-        <input
-          type="text"
-          value={recipe.tags.join(", ")}
-          onChange={(e) =>
-            updateField(
-              "tags",
-              e.target.value
-                .split(",")
-                .map((t) => t.trim())
-                .filter(Boolean),
-            )
-          }
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
-        />
-      </div>
-
-      {/* Actions */}
       <div className="flex gap-3 border-t border-border pt-4">
         <button
+          type="button"
           onClick={handleSave}
-          className="rounded-lg bg-primary px-6 py-2 font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
+          className="min-h-11 rounded-lg bg-primary px-6 py-2 font-medium text-white shadow-warm transition-colors hover:bg-primary-dark"
         >
           Save Recipe
         </button>
         <button
+          type="button"
           onClick={() => {
             setFormState({ step: "input" });
             setEditedRecipe(null);
+            setSaveError(null);
           }}
-          className="rounded-lg border border-border px-6 py-2 text-text-secondary transition-colors hover:bg-border-light hover:text-text"
+          className="min-h-11 rounded-lg border border-border px-6 py-2 text-text-secondary transition-colors hover:bg-border-light hover:text-text"
         >
           Start Over
         </button>

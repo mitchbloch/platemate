@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, type ReactNode } from "react";
 
 const NAV_ITEMS = [
   {
@@ -56,11 +57,29 @@ const NAV_ITEMS = [
   },
 ] as const;
 
+/** Renders inside a <Link>; dims itself while that link's navigation is pending. */
+function TabContent({ children }: { children: ReactNode }) {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      data-pending={pending ? "true" : undefined}
+      className={`flex flex-col items-center gap-0.5 transition-opacity ${pending ? "animate-pulse opacity-70" : ""}`}
+    >
+      {children}
+    </span>
+  );
+}
+
 export default function Nav() {
   const pathname = usePathname();
+  // Highlight the tapped tab immediately instead of waiting for the server
+  // render. Remembered together with the path it was tapped from, so a stale
+  // tap can't mis-highlight after a later navigation (e.g. browser back).
+  const [tapped, setTapped] = useState<{ href: string; from: string } | null>(null);
+  const activePath = tapped && tapped.from === pathname ? tapped.href : pathname;
 
   function isActive(href: string) {
-    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+    return href === "/" ? activePath === "/" : activePath.startsWith(href);
   }
 
   return (
@@ -77,13 +96,14 @@ export default function Nav() {
                 key={href}
                 href={href}
                 data-tour={tour}
+                onClick={() => setTapped({ href, from: pathname })}
                 className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   isActive(href)
                     ? "bg-primary-light text-primary"
                     : "text-text-secondary hover:bg-border-light hover:text-text"
                 }`}
               >
-                {label}
+                <TabContent>{label}</TabContent>
               </Link>
             ))}
           </div>
@@ -91,7 +111,7 @@ export default function Nav() {
       </nav>
 
       {/* Mobile: logo-only top bar */}
-      <nav className="border-b border-border bg-surface/80 backdrop-blur-sm sm:hidden">
+      <nav className="border-b border-border bg-surface sm:hidden">
         <div className="flex items-center justify-center px-4 py-3">
           <Link href="/" className="font-display text-xl font-semibold tracking-tight text-primary">
             Platemate
@@ -99,9 +119,10 @@ export default function Nav() {
         </div>
       </nav>
 
-      {/* Mobile: fixed bottom tab bar */}
+      {/* Mobile: fixed bottom tab bar. Solid surface — backdrop-blur over
+          scrolling content is a compositing cost on iOS. */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/95 backdrop-blur-sm sm:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface sm:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex">
@@ -110,14 +131,18 @@ export default function Nav() {
               key={href}
               href={href}
               data-tour={tour}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+              aria-current={isActive(href) ? "page" : undefined}
+              onClick={() => setTapped({ href, from: pathname })}
+              className={`flex min-h-11 flex-1 items-center justify-center py-2 text-[10px] font-medium transition-colors ${
                 isActive(href)
                   ? "text-primary"
                   : "text-text-muted hover:text-text-secondary"
               }`}
             >
-              {icon}
-              {label}
+              <TabContent>
+                {icon}
+                {label}
+              </TabContent>
             </Link>
           ))}
         </div>

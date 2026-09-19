@@ -1,5 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { ParsedRecipe, Ingredient, CuisineType, MealType, DifficultyLevel, IngredientCategory, DietaryFlag } from "./types";
+import type { ParsedRecipe, Ingredient, DietaryFlag } from "./types";
+import {
+  CUISINES,
+  MEAL_TYPES,
+  DIFFICULTIES,
+  INGREDIENT_CATEGORIES,
+  DIETARY_FLAGS,
+  asEnum,
+  asNumber,
+  asStringOrNull,
+} from "./recipeValidation";
 
 // Lazy so importing this module (e.g. in tests) doesn't require an API key
 let anthropicClient: Anthropic | null = null;
@@ -357,26 +367,6 @@ async function fetchRecipeHtml(url: string): Promise<string> {
 
   // Cap at ~60k chars to stay within context limits
   return cleaned.slice(0, 60_000);
-}
-
-const CUISINES: readonly CuisineType[] = ["american", "italian", "mexican", "asian", "mediterranean", "indian", "middle-eastern", "french", "other"];
-const MEAL_TYPES: readonly MealType[] = ["breakfast", "lunch", "dinner", "snacks"];
-const DIFFICULTIES: readonly DifficultyLevel[] = ["easy", "medium", "hard"];
-const INGREDIENT_CATEGORIES: readonly IngredientCategory[] = ["produce", "meat", "seafood", "dairy", "grain", "canned", "spice", "oil-vinegar", "condiment", "frozen", "other"];
-const DIETARY_FLAGS: readonly DietaryFlag[] = ["vegetarian", "vegan", "gluten-free", "dairy-free", "nut-free", "shellfish-free", "low-sodium", "low-cholesterol"];
-
-/** Coerce a value to one of the allowed enum members, or the fallback. */
-function asEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
-  return allowed.includes(value as T) ? (value as T) : fallback;
-}
-
-/** Coerce a value to a finite non-negative number, or the fallback. */
-function asNumber(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
-}
-
-function asStringOrNull(value: unknown): string | null {
-  return typeof value === "string" && value ? value : null;
 }
 
 /** Validate the shape of parsed JSON matches ParsedRecipe.

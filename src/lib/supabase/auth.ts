@@ -1,7 +1,11 @@
+import { cache } from "react";
 import { createClient } from "./server";
 import { redirect } from "next/navigation";
 
-export async function getUser() {
+// Both helpers are memoized per request with React cache(): a page render
+// used to call getActiveHouseholdId() once per DAL call (4–5× on /plan),
+// each hitting the auth server and the profile table again.
+export const getUser = cache(async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,10 +17,10 @@ export async function getUser() {
   }
 
   return user;
-}
+});
 
 /** Get the active household ID for the current user. Throws if not found. */
-export async function getActiveHouseholdId(): Promise<string> {
+export const getActiveHouseholdId = cache(async (): Promise<string> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -38,4 +42,4 @@ export async function getActiveHouseholdId(): Promise<string> {
   }
 
   return profile.active_household_id as string;
-}
+});

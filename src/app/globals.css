@@ -97,6 +97,11 @@ body::before {
 .stagger-5 { animation-delay: 0.25s; }
 .stagger-6 { animation-delay: 0.3s; }
 
+/* Tap handling: no double-tap-to-zoom heuristics on controls */
+button, a, [role="button"], input, select, textarea, label {
+  touch-action: manipulation;
+}
+
 /* ── Form elements ── */
 
 /* Prevent iOS Safari zoom on input focus (requires >= 16px font) */

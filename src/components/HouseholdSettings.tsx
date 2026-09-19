@@ -36,6 +36,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import NumberField from "./NumberField";
 
 // ── Constants ──
 
@@ -662,21 +663,21 @@ export default function HouseholdSettings({
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {ALL_MEAL_TYPES.map((meal) => (
             <div key={meal}>
-              <label className="mb-1 block text-xs font-medium text-text-secondary uppercase tracking-wide">
+              <label htmlFor={`meal-schedule-${meal}`} className="mb-1 block text-xs font-medium text-text-secondary uppercase tracking-wide">
                 {MEAL_TYPE_LABELS[meal]}
               </label>
-              <input
-                type="number"
-                min={0}
-                max={14}
+              <NumberField
+                id={`meal-schedule-${meal}`}
                 value={household.mealSchedule[meal]}
-                onChange={(e) => {
-                  const val = Math.max(0, Math.min(14, Number(e.target.value)));
+                onChange={(val) =>
                   updateHousehold("mealSchedule", {
                     ...household.mealSchedule,
-                    [meal]: val,
-                  } as MealSchedule);
-                }}
+                    [meal]: val ?? 0,
+                  } as MealSchedule)
+                }
+                min={0}
+                max={14}
+                integer
                 className={`${inputClass} w-full`}
               />
             </div>
@@ -689,15 +690,14 @@ export default function HouseholdSettings({
         <h2 className="font-display mb-4 text-lg font-semibold text-text">
           Default Servings
         </h2>
-        <input
-          type="number"
+        <NumberField
+          id="default-servings"
+          aria-label="Default servings"
+          value={household.defaultServings}
+          onChange={(val) => updateHousehold("defaultServings", val ?? 1)}
           min={1}
           max={12}
-          value={household.defaultServings}
-          onChange={(e) => {
-            const val = Math.max(1, Math.min(12, Number(e.target.value)));
-            updateHousehold("defaultServings", val);
-          }}
+          integer
           className={`${inputClass} w-24`}
         />
       </section>

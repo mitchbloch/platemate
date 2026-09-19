@@ -1,3 +1,5 @@
+> **Superseded (2026-09-14):** the canonical-ingredients dependency was never built. Brand-agnostic merging now ships via an import-time `shoppingName` — see [phase8_qol_and_features.md](phase8_qol_and_features.md) Batch C.
+
 # Phase 5B: Smart Grocery List Merging (Claude-assisted)
 
 > Depends on Phase 5 USDA Nutrition. Build only after the `canonical_ingredients` table from Phase 5 is in place.
