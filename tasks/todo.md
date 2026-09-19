@@ -263,5 +263,10 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] E4 Tests: engine (17), route (9), component (8); `npm run eval:generate` live eval script (run 2026-09-19: options 12.8s → recipe 13.1s → revision 21.7s, cache read on turns 2–3, cholesterol 110 → 78mg)
 - [x] `/code-review` (standards+security, spec): FIXED lost-update race when two members append to one chat (optimistic lock on updated_at → 409); FIXED in-flight answer clobbering a chat you switched to; FIXED EXIF orientation on iPhone photos; ADDED household daily cap (100 turns/rolling 24h → 429) since per-chat caps don't bound spend; generic 500 messages with server-side logging; household filter on every mutation; Add-to-plan uses the match's own meal type; failed Discard restores the chat; photo cap matches the spec's 600KB
 - [x] Build + lint + tests clean (301 tests)
-- [ ] PR opened — awaiting user's on-device verification
+- [x] PR #40 merged 2026-09-19
+
+### 8F: Wrap-up ✅
+- [x] Throwaway account + "Platemate Test Household" deleted (household, member, profile, 1 empty grocery list, auth user); local test/backfill env files removed; localhost credential helpers removed
+- [x] All five batches merged: #33 A, #34 B, #35 search fix, #36 C, #37 picker links, #38 D, #39 share hotfix, #40 E. Migrations 016–018 applied. 301 tests.
+- [ ] User: turn on email confirmation in Supabase Auth (Dashboard → Authentication → Providers → Email → "Confirm email") — shared links now send strangers to signup
 - [ ] Build + lint + tests clean; `/code-review`; PR; live eval with the real API
