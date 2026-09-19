@@ -4,8 +4,9 @@
 -- link stays stable; revoked rows are kept for history. The public page
 -- reads through get_shared_recipe(), a SECURITY DEFINER RPC callable by
 -- anon that returns only the recipe's public fields (never household ids)
--- and bumps view_count. Saves are counted by record_share_save(), which
--- requires an authenticated caller.
+-- and bumps view_count. Saving is save_shared_recipe(): one SECURITY DEFINER
+-- call that copies the recipe into the caller's active household AND bumps
+-- save_count, so the count can only move when a copy was really made.
 --
 -- Known trade-off (accepted in the spec): view counting on an unauthenticated
 -- endpoint is spammable; fine at friends-and-family scale.
@@ -31,6 +32,9 @@ CREATE INDEX idx_recipe_shares_recipe ON recipe_shares(recipe_id);
 
 ALTER TABLE recipe_shares ENABLE ROW LEVEL SECURITY;
 
+-- Intentionally household-wide (not created_by-scoped): a household shares
+-- its recipes, so either partner can see and disable a link. household_id
+-- is always the RECIPE's household (set by the app from the recipe row).
 CREATE POLICY "Household members can select shares" ON recipe_shares
   FOR SELECT USING (household_id IN (SELECT user_household_ids()));
 CREATE POLICY "Members create their own shares" ON recipe_shares
@@ -98,24 +102,63 @@ $$;
 REVOKE ALL ON FUNCTION get_shared_recipe(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION get_shared_recipe(text) TO anon, authenticated;
 
--- ── Count a save (authenticated only) ──
-CREATE OR REPLACE FUNCTION record_share_save(token_input text)
-RETURNS void
+-- ── Save a shared recipe into the caller's active household ──
+-- Returns {"recipeId": uuid, "existing": bool}. "existing" means the active
+-- household already has that exact recipe (e.g. a partner shared it), so
+-- nothing was copied and save_count is untouched.
+CREATE OR REPLACE FUNCTION save_shared_recipe(token_input text)
+RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  share recipe_shares%ROWTYPE;
+  src recipes%ROWTYPE;
+  target_household uuid;
+  new_id uuid;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
-  UPDATE recipe_shares
-  SET save_count = save_count + 1
-  WHERE token = token_input AND revoked_at IS NULL;
+
+  SELECT * INTO share FROM recipe_shares WHERE token = token_input AND revoked_at IS NULL;
+  IF share.id IS NULL THEN
+    RAISE EXCEPTION 'This link is no longer active';
+  END IF;
+
+  SELECT active_household_id INTO target_household FROM user_profiles WHERE id = auth.uid();
+  IF target_household IS NULL OR NOT EXISTS (
+    SELECT 1 FROM household_members WHERE household_id = target_household AND user_id = auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'No active household';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM recipes WHERE id = share.recipe_id AND household_id = target_household) THEN
+    RETURN jsonb_build_object('recipeId', share.recipe_id, 'existing', true);
+  END IF;
+
+  SELECT * INTO src FROM recipes WHERE id = share.recipe_id;
+  IF src.id IS NULL THEN
+    RAISE EXCEPTION 'This link is no longer active';
+  END IF;
+
+  INSERT INTO recipes (
+    household_id, title, source_url, source_name, description, cuisine, meal_type,
+    difficulty, servings, total_time_minutes, ingredients, instructions, nutrition,
+    dietary_flags, tags, image_url, is_slow_cooker
+  ) VALUES (
+    target_household, src.title, src.source_url, src.source_name, src.description, src.cuisine, src.meal_type,
+    src.difficulty, src.servings, src.total_time_minutes, src.ingredients, src.instructions, src.nutrition,
+    src.dietary_flags, src.tags, src.image_url, src.is_slow_cooker
+  ) RETURNING id INTO new_id;
+
+  UPDATE recipe_shares SET save_count = save_count + 1 WHERE id = share.id;
+  RETURN jsonb_build_object('recipeId', new_id, 'existing', false);
 END;
 $$;
 
-REVOKE ALL ON FUNCTION record_share_save(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION record_share_save(text) TO authenticated;
+REVOKE ALL ON FUNCTION save_shared_recipe(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION save_shared_recipe(text) TO authenticated;
 
 COMMIT;

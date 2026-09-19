@@ -146,17 +146,18 @@ create unique index recipe_shares_active_unique on recipe_shares(recipe_id, crea
 -- RLS: household members select/insert/update (same user_household_ids() pattern)
 ```
 - `get_shared_recipe(token_input text)` — SECURITY DEFINER, callable by `anon`: returns `null` if missing/revoked; otherwise increments `view_count` and returns a jsonb of the recipe's public fields (no `household_id`, no ids of other tables) plus the sharer's display name.
-- `record_share_save(token_input text)` — SECURITY DEFINER, authenticated only: increments `save_count`.
+- `save_shared_recipe(token_input text)` — SECURITY DEFINER, authenticated only: copies the recipe into the caller's active household (checked for membership) **and** increments `save_count` in one call, returning `{ recipeId, existing }`. Replaced the spec's separate `record_share_save` after review: a standalone counter could be inflated by any signed-in user calling the RPC directly; tying the count to the copy makes it trustworthy.
+- Share rows are filed under the **recipe's** household (not the sharer's active one) so the owning household can always see and revoke them; the household-wide select/revoke policies are intentional for a couples app.
 
 ### D2. Routes
 - Middleware public allowlist: `/r/*` only. The share page reads through the anon RPC server-side, so no public API route is needed; `/api/share/[token]/save` stays behind auth (401 JSON when signed out). Login and household-setup redirects now carry `next=<original path>`.
-- `GET /r/[token]` server page: calls the RPC with the anon client; `generateMetadata` sets OG title/description/image (imageUrl when present) for iMessage previews; 404 when null. Renders full recipe (ingredients, instructions, nutrition badge, source link) and a sticky "Save to Platemate" CTA. Signed-out → `/login?next=/r/<token>`; signed in → `POST /api/share/[token]/save`.
-- `POST /api/share/[token]/save`: re-reads via RPC, `createRecipe` into the caller's active household (sourceUrl/sourceName preserved, `tags` preserved), `record_share_save`, returns the new id → client routes to `/recipes/<id>`. If the caller's active household already owns the source recipe → 409 with the existing id (client shows "already in your library").
-- `POST /api/recipes/[id]/share`: get-or-create the caller's active share row; returns `{ url, viewCount, saveCount }`. `DELETE` revokes.
+- `GET /r/[token]` server page: calls the RPC with the anon client (memoized per request so metadata and page count one view); `generateMetadata` sets OG title/description/image (imageUrl when present) for iMessage previews and `robots: noindex` so shared links stay out of search engines; 404 when null. Renders full recipe (ingredients, instructions, nutrition badge, source link) and a sticky "Save to Platemate" CTA. Signed-out → `/login?next=/r/<token>`; signed in → `POST /api/share/[token]/save`.
+- `POST /api/share/[token]/save`: calls `save_shared_recipe`; `existing: true` → 409 with the existing id (client shows "already in your library"); otherwise 201 with the new id → client routes to `/recipes/<id>`. Inactive link → 404; no active household → 400.
+- `POST /api/recipes/[id]/share`: get-or-create the caller's active share row (filed under the recipe's household); returns the share (token + counts). The client builds the public URL from its own `window.location.origin`, so no server code trusts proxy headers for the host. `GET` returns the active share or null; `DELETE` revokes.
 - `login` and `signup` honor a same-origin `next` param via `safeInternalPath`; the household-setup and preferences steps forward it, and the email-confirmation redirect carries it too.
 
 ### D3. UI
-- `RecipeDetail` view mode: Share button → fetch share → `navigator.share({ title, text, url })` when available, else copy link + toast. Menu: "Copy as text" (`formatRecipeAsText` in `src/lib/recipeShareText.ts`, tested), "Stop sharing". Stats line "Shared · N views · N saved" when a share exists.
+- `RecipeDetail` view mode: Share button → fetch share → `navigator.share({ title, text, url })` when available, else copy link + toast. Menu: "Copy as text" (`formatRecipeAsText` in `src/lib/recipeShareText.ts`, tested), "Copy link", "Stop sharing". Stats line "Shared · N views · N saved" when a share exists. The read-only recipe body is one shared `RecipeContent` component used by both the detail page and the public page.
 - Security: 128-bit tokens; RPC exposes only recipe fields; no enumeration path; `X-Frame-Options` unchanged.
 - Tests: `formatRecipeAsText`; `next`-param sanitizer; save route with mocked RPC (409 path, copy path).
 

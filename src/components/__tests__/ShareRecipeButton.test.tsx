@@ -11,7 +11,8 @@ const recipe: Recipe = {
   ingredients: [{ name: "shrimp", quantity: 1, unit: "lb", preparation: null, category: "seafood", raw: "1 lb shrimp" }],
   instructions: ["Cook"], nutrition: null, dietaryFlags: [], tags: [], imageUrl: null, isSlowCooker: false, createdAt: "", updatedAt: "",
 };
-const share = { id: "s1", recipeId: "r1", token: "tok", viewCount: 3, saveCount: 1, revokedAt: null, createdAt: "", url: "https://app/r/tok" };
+const share = { id: "s1", recipeId: "r1", token: "tok", viewCount: 3, saveCount: 1, revokedAt: null, createdAt: "" };
+const url = `${window.location.origin}/r/tok`;
 
 // user-event installs its own clipboard stub in setup(); read back through it.
 describe("ShareRecipeButton", () => {
@@ -30,7 +31,7 @@ describe("ShareRecipeButton", () => {
     await user.click(screen.getByRole("button", { name: "Share" }));
     await waitFor(() => expect(nativeShare).toHaveBeenCalled());
     expect(fetch).toHaveBeenCalledWith("/api/recipes/r1/share", { method: "POST" });
-    expect(nativeShare).toHaveBeenCalledWith({ title: "Shrimp Tacos", text: "Shrimp Tacos — a recipe from Platemate", url: "https://app/r/tok" });
+    expect(nativeShare).toHaveBeenCalledWith({ title: "Shrimp Tacos", text: "Shrimp Tacos — a recipe from Platemate", url });
     expect(await screen.findByText(/Shared · 3 views · 1 saved/)).toBeInTheDocument();
   });
 
@@ -40,7 +41,7 @@ describe("ShareRecipeButton", () => {
     render(<ShareRecipeButton recipe={recipe} initialShare={null} />);
     await user.click(screen.getByRole("button", { name: "Share" }));
     expect(await screen.findByText("Link copied")).toBeInTheDocument();
-    expect(await navigator.clipboard.readText()).toBe("https://app/r/tok");
+    expect(await navigator.clipboard.readText()).toBe(url);
   });
 
   it("copies the recipe as text, including the link when one exists", async () => {
@@ -51,7 +52,7 @@ describe("ShareRecipeButton", () => {
     expect(await screen.findByText("Recipe copied as text")).toBeInTheDocument();
     const text = await navigator.clipboard.readText();
     expect(text.startsWith("Shrimp Tacos\n")).toBe(true);
-    expect(text).toContain("Shared from Platemate: https://app/r/tok");
+    expect(text).toContain(`Shared from Platemate: ${url}`);
   });
 
   it("stops sharing and reverts if the server refuses", async () => {

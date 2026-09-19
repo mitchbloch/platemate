@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newShareToken, rowToRecipeShare, sharePath } from "../recipeShares";
+import { isValidShareToken, newShareToken, rowToRecipeShare, sharePath } from "../recipeShares";
 
 describe("share tokens", () => {
   it("are URL-safe, 128-bit, and unique", () => {
@@ -12,6 +12,13 @@ describe("share tokens", () => {
 
   it("build the public path", () => {
     expect(sharePath("abc_DEF-123")).toBe("/r/abc_DEF-123");
+  });
+
+  it("reject malformed tokens before they reach the database", () => {
+    expect(isValidShareToken(newShareToken())).toBe(true);
+    for (const bad of ["", "short", "has space", "semi;colon", "a".repeat(65), "../etc", "tok?x=1"]) {
+      expect(isValidShareToken(bad)).toBe(false);
+    }
   });
 });
 

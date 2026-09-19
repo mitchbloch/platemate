@@ -2,8 +2,11 @@ import { randomBytes } from "node:crypto";
 import { cache } from "react";
 import { createClient } from "./supabase/server";
 import { createAnonClient } from "./supabase/anon";
-import { getActiveHouseholdId, getUser } from "./supabase/auth";
+import { getUser } from "./supabase/auth";
 import type { RecipeShare, SharedRecipe } from "./types";
+import { isValidShareToken } from "./sharePaths";
+
+export { sharePath, isValidShareToken } from "./sharePaths";
 
 // ── Row converters ──
 
@@ -24,9 +27,7 @@ export function newShareToken(): string {
   return randomBytes(16).toString("base64url");
 }
 
-export function sharePath(token: string): string {
-  return `/r/${token}`;
-}
+
 
 // ── Sharer side (authenticated, household-scoped by RLS) ──
 
@@ -46,20 +47,22 @@ export async function getActiveShare(recipeId: string): Promise<RecipeShare | nu
   return data ? rowToRecipeShare(data) : null;
 }
 
-/** Reuse the caller's active share or mint one — the link stays stable. */
-export async function getOrCreateShare(recipeId: string): Promise<RecipeShare> {
-  const existing = await getActiveShare(recipeId);
+/** Reuse the caller's active share or mint one — the link stays stable.
+ *  The share belongs to the RECIPE's household (not the caller's active
+ *  one) so the owning household can always see and revoke it. */
+export async function getOrCreateShare(recipe: { id: string; householdId: string }): Promise<RecipeShare> {
+  const existing = await getActiveShare(recipe.id);
   if (existing) return existing;
 
   const supabase = await createClient();
-  const [user, householdId] = await Promise.all([getUser(), getActiveHouseholdId()]);
+  const user = await getUser();
   if (!user) throw new Error("Not authenticated");
 
   const { data, error } = await supabase
     .from("recipe_shares")
     .insert({
-      recipe_id: recipeId,
-      household_id: householdId,
+      recipe_id: recipe.id,
+      household_id: recipe.householdId,
       created_by: user.id,
       token: newShareToken(),
     })
@@ -69,7 +72,7 @@ export async function getOrCreateShare(recipeId: string): Promise<RecipeShare> {
   if (error) {
     // Unique violation: a concurrent share from the same user won — use it
     if ((error as { code?: string }).code === "23505") {
-      const again = await getActiveShare(recipeId);
+      const again = await getActiveShare(recipe.id);
       if (again) return again;
     }
     throw error;
@@ -92,7 +95,7 @@ export async function revokeShare(shareId: string): Promise<void> {
 /** Resolve a share token to its recipe (and count the view). Memoized per
  *  request so generateMetadata and the page share one call — and one view. */
 export const getSharedRecipe = cache(async (token: string): Promise<SharedRecipe | null> => {
-  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+  if (!isValidShareToken(token)) return null;
   const supabase = createAnonClient();
   const { data, error } = await supabase.rpc("get_shared_recipe", { token_input: token });
   if (error) throw error;
@@ -100,9 +103,12 @@ export const getSharedRecipe = cache(async (token: string): Promise<SharedRecipe
   return data as SharedRecipe;
 });
 
-/** Count a successful save; the caller must be signed in (enforced by the RPC). */
-export async function recordShareSave(token: string): Promise<void> {
+/** Copy the shared recipe into the caller's active household, atomically
+ *  with the save count. `existing` means the household already had it. */
+export async function saveSharedRecipe(token: string): Promise<{ recipeId: string; existing: boolean }> {
+  if (!isValidShareToken(token)) throw new Error("This link is no longer active");
   const supabase = await createClient();
-  const { error } = await supabase.rpc("record_share_save", { token_input: token });
-  if (error) throw error;
+  const { data, error } = await supabase.rpc("save_shared_recipe", { token_input: token });
+  if (error) throw new Error(error.message);
+  return data as { recipeId: string; existing: boolean };
 }

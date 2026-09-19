@@ -4,9 +4,13 @@ import { useRef, useState } from "react";
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { useToast, ToastContainer } from "./Toast";
 import { formatRecipeAsText } from "@/lib/recipeShareText";
+import { sharePath } from "@/lib/sharePaths";
 import type { Recipe, RecipeShare } from "@/lib/types";
 
-type ShareWithUrl = RecipeShare & { url: string };
+/** Public URL for a share, from the page's own origin (never proxy headers). */
+function shareUrl(share: RecipeShare): string {
+  return `${window.location.origin}${sharePath(share.token)}`;
+}
 
 /** Share sheet on a recipe: native share (link + text) with a copy-link
  *  fallback, "Copy as text", "Stop sharing", and the link's view/save counts. */
@@ -15,16 +19,16 @@ export default function ShareRecipeButton({
   initialShare,
 }: {
   recipe: Recipe;
-  initialShare: ShareWithUrl | null;
+  initialShare: RecipeShare | null;
 }) {
-  const [share, setShare] = useState<ShareWithUrl | null>(initialShare);
+  const [share, setShare] = useState<RecipeShare | null>(initialShare);
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useClickOutside(menuRef, () => setMenuOpen(false));
   const { toasts, showToast } = useToast();
 
-  async function ensureShare(): Promise<ShareWithUrl | null> {
+  async function ensureShare(): Promise<RecipeShare | null> {
     if (share) return share;
     const res = await fetch(`/api/recipes/${recipe.id}/share`, { method: "POST" });
     if (!res.ok) {
@@ -32,7 +36,7 @@ export default function ShareRecipeButton({
       showToast(data.error || "Couldn't create a share link");
       return null;
     }
-    const created: ShareWithUrl = await res.json();
+    const created: RecipeShare = await res.json();
     setShare(created);
     return created;
   }
@@ -51,17 +55,18 @@ export default function ShareRecipeButton({
     try {
       const s = await ensureShare();
       if (!s) return;
-      const payload = { title: recipe.title, text: `${recipe.title} — a recipe from Platemate`, url: s.url };
+      const url = shareUrl(s);
+      const payload = { title: recipe.title, text: `${recipe.title} — a recipe from Platemate`, url };
       if (typeof navigator.share === "function") {
         try {
           await navigator.share(payload);
         } catch (err) {
           // User dismissed the sheet — not an error
           if (err instanceof Error && err.name === "AbortError") return;
-          await copy(s.url, "Link copied");
+          await copy(url, "Link copied");
         }
       } else {
-        await copy(s.url, "Link copied");
+        await copy(url, "Link copied");
       }
     } finally {
       setBusy(false);
@@ -70,7 +75,7 @@ export default function ShareRecipeButton({
 
   async function handleCopyText() {
     setMenuOpen(false);
-    await copy(formatRecipeAsText(recipe, share?.url), "Recipe copied as text");
+    await copy(formatRecipeAsText(recipe, share ? shareUrl(share) : undefined), "Recipe copied as text");
   }
 
   async function handleStopSharing() {
@@ -123,7 +128,7 @@ export default function ShareRecipeButton({
             </button>
             {share && (
               <>
-                <button type="button" onClick={() => { setMenuOpen(false); copy(share.url, "Link copied"); }} className="block min-h-11 w-full px-3 text-left text-sm text-text transition-colors hover:bg-border-light">
+                <button type="button" onClick={() => { setMenuOpen(false); copy(shareUrl(share), "Link copied"); }} className="block min-h-11 w-full px-3 text-left text-sm text-text transition-colors hover:bg-border-light">
                   Copy link
                 </button>
                 <div className="px-3 py-1 text-xs text-text-muted sm:hidden">
