@@ -234,7 +234,8 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] B2 `PATCH /api/pinned-items` validated by `weeklyStaples.ts` (+6 tests) + `updatePinnedItem`; staples editor lists every staple with Edit / Skip / Restore / Add this week / Remove; edits mirror onto this week's unchecked copy (+5 component tests); fuzzy staple↔item matching via `normalizeForMatching`; `PinnedItemsManager.tsx` deleted
 - [x] `/code-review` (standards + spec agents): FIXED `GroceryDisplayCategory` type lying about its values (said lowercase `protein|produce|dairy|snacks|other`; every real value is the capitalized section label) — type now matches, casing canonicalized once in the pinned-items DAL, all `as` casts removed; duplicated remove-staple handler extracted; library search now adopts the URL query on browser back/forward (+1 test); tour target tracking short-circuits while the target is attached; `rowToPinnedItem` test added
 - [x] Build + lint + tests clean (233 tests, 29 new in this batch)
-- [ ] PR opened — awaiting user's on-device verification before Batch C
+- [x] PR #34 merged 2026-09-19 after on-device verification
+- [x] Follow-up (user report: Recipes search "backspaces and overwrites" fast typing): the URL mirror used `router.replace`, which on this dynamic page is a server round-trip; when it landed after more typing, the adopt-URL logic echoed the older query into the input. Now mirrors via native `history.replaceState` (no navigation) and adopts the URL only on `popstate` (+1 regression test) — PR #35
 
 ### 8C: Brand-agnostic grocery merge
 - [ ] C1 `shoppingName` in `Ingredient`, JSON schema, prompt rules, validator

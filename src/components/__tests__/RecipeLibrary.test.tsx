@@ -4,12 +4,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Recipe } from "@/lib/types";
 
-const nav = { replace: vi.fn(), params: new URLSearchParams() };
+// Next keeps useSearchParams in sync with native history writes; mirror that
+// so any code that re-adopts the URL's query mid-typing is exercised here.
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: nav.replace }),
-  usePathname: () => "/recipes",
-  useSearchParams: () => nav.params,
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
+
+function setUrl(path: string) {
+  window.history.replaceState(null, "", path);
+}
 vi.mock("next/link", async () => {
   const React = await import("react");
   return { default: ({ href, children, ...rest }: React.ComponentProps<"a">) => <a href={href} {...rest}>{children}</a> };
@@ -34,8 +37,7 @@ const recipes = [
 
 describe("RecipeLibrary", () => {
   beforeEach(() => {
-    nav.replace.mockReset();
-    nav.params = new URLSearchParams();
+    setUrl("/recipes");
   });
 
   it("shows every recipe with no query", () => {
@@ -71,28 +73,45 @@ describe("RecipeLibrary", () => {
     expect(screen.getAllByRole("link")).toHaveLength(3);
   });
 
-  it("mirrors the query into the URL (debounced) so back-navigation keeps it", async () => {
+  it("mirrors the query into the URL (debounced) without a router navigation", async () => {
     const user = userEvent.setup();
     render(<RecipeLibrary recipes={recipes} />);
     await user.type(screen.getByLabelText("Search recipes"), "taco");
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/recipes?q=taco", { scroll: false }));
+    await waitFor(() => expect(window.location.search).toBe("?q=taco"));
+    await user.clear(screen.getByLabelText("Search recipes"));
+    await waitFor(() => expect(window.location.search).toBe(""));
   });
 
-  it("adopts the URL's query when the browser navigates back or forward", () => {
+  it("never overwrites characters typed while the URL write lands (fast typing)", async () => {
+    // Regression: the URL mirror used to echo an older query back into the
+    // input, deleting keystrokes typed after the debounce fired.
+    const user = userEvent.setup();
     const { rerender } = render(<RecipeLibrary recipes={recipes} />);
+    const box = screen.getByLabelText("Search recipes");
+    await user.type(box, "tac");
+    await waitFor(() => expect(window.location.search).toBe("?q=tac"));
+    await user.type(box, "os");
+    rerender(<RecipeLibrary recipes={recipes} />); // router re-render with the older ?q=tac still in the URL
+    expect(box).toHaveValue("tacos");
+    await waitFor(() => expect(window.location.search).toBe("?q=tacos"));
+    expect(box).toHaveValue("tacos");
+  });
+
+  it("adopts the URL's query only on browser back/forward", async () => {
+    render(<RecipeLibrary recipes={recipes} />);
     expect(screen.getAllByRole("link")).toHaveLength(3);
-    nav.params = new URLSearchParams("q=taco");
-    rerender(<RecipeLibrary recipes={recipes} />);
-    expect(screen.getByLabelText("Search recipes")).toHaveValue("taco");
+    setUrl("/recipes?q=taco");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.getByLabelText("Search recipes")).toHaveValue("taco"));
     expect(screen.getAllByRole("link")).toHaveLength(1);
-    nav.params = new URLSearchParams();
-    rerender(<RecipeLibrary recipes={recipes} />);
-    expect(screen.getByLabelText("Search recipes")).toHaveValue("");
+    setUrl("/recipes");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.getByLabelText("Search recipes")).toHaveValue(""));
     expect(screen.getAllByRole("link")).toHaveLength(3);
   });
 
   it("starts from the query in the URL", () => {
-    nav.params = new URLSearchParams("q=lentil");
+    setUrl("/recipes?q=lentil");
     render(<RecipeLibrary recipes={recipes} />);
     expect(screen.getByLabelText("Search recipes")).toHaveValue("lentil");
     expect(screen.getAllByRole("link")).toHaveLength(1);

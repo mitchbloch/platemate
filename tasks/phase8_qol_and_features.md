@@ -95,7 +95,7 @@ Routine calls made without asking: search hides the Suggestions banner while a q
 
 ### B1. Search
 - `src/lib/recipeSearch.ts`: `matchesRecipeQuery(recipe, query)`. Tokenize on whitespace; every token must match (case- and diacritic-insensitive substring) at least one of: title, `CUISINE_LABELS[cuisine]`, tags, `MEAL_TYPE_LABELS[mealType]`, ingredient names. Empty query matches everything. Unit-tested (multi-token AND, diacritics, ingredient hit, no false hit on `raw`).
-- `src/components/RecipeLibrary.tsx` (client): search input + grid, receives recipes from the server page; reads `?q=` with `useSearchParams`, writes with a debounced `router.replace` so back-navigation keeps it. Empty-result state with a clear button.
+- `src/components/RecipeLibrary.tsx` (client): search input + grid, receives recipes from the server page; reads `?q=` once on mount, mirrors the query into the URL with a debounced native `history.replaceState` (a router navigation on this dynamic page is a server round-trip that echoed stale text into the input when typing fast), and adopts the URL's query only on `popstate` (back/forward). Empty-result state with a clear button.
 - Plan picker: search input above the cuisine/type filters; `filteredRecipes` also applies the query; Suggestions banner hidden while the query is non-empty.
 
 ### B2. Weekly staples editor
