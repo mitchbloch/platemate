@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
+import { safeInternalPath } from "@/lib/navigation";
 
 type Step = "account" | "household" | "preferences";
 
@@ -140,6 +141,8 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialStep = searchParams.get("step") === "household" ? "household" : "account";
+  // Where to land once set up (e.g. a shared recipe that brought you here)
+  const next = safeInternalPath(searchParams.get("next")) ?? "/";
 
   const [step, setStep] = useState<Step>(initialStep);
   const [displayName, setDisplayName] = useState("");
@@ -177,7 +180,7 @@ function SignupForm() {
         .single();
 
       if (profile?.active_household_id) {
-        router.replace("/");
+        router.replace(next);
         return;
       }
 
@@ -186,7 +189,7 @@ function SignupForm() {
       setChecking(false);
     }
     checkAuth();
-  }, [router]);
+  }, [router, next]);
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -198,7 +201,9 @@ function SignupForm() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/signup?step=household')}`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+          next === "/" ? "/signup?step=household" : `/signup?step=household&next=${encodeURIComponent(next)}`,
+        )}`,
       },
     });
 
@@ -250,7 +255,7 @@ function SignupForm() {
           throw new Error(data.error ?? "Failed to join household");
         }
         // Joining an existing household — skip preferences, go straight to app
-        router.push("/");
+        router.push(next);
         router.refresh();
       }
     } catch (err) {
@@ -262,7 +267,7 @@ function SignupForm() {
   async function handlePreferences(e: React.FormEvent) {
     e.preventDefault();
     if (!householdId) {
-      router.push("/");
+      router.push(next);
       return;
     }
 
@@ -285,7 +290,7 @@ function SignupForm() {
     }
 
     // Hard redirect so OnboardingWrapper remounts and the tooltip tour fires
-    window.location.href = "/";
+    window.location.href = next;
   }
 
   if (checking) {
@@ -345,7 +350,7 @@ function SignupForm() {
             </form>
             <p className="mt-6 text-center text-sm text-text-muted">
               Already have an account?{" "}
-              <Link href="/login" className="font-medium text-primary hover:text-primary-dark">
+              <Link href={next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`} className="font-medium text-primary hover:text-primary-dark">
                 Sign in
               </Link>
             </p>
@@ -504,7 +509,7 @@ function SignupForm() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { window.location.href = "/"; }}
+                  onClick={() => { window.location.href = next; }}
                   className="w-full py-2 text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
                 >
                   Skip for now

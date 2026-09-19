@@ -51,14 +51,19 @@ describe("updateSession (middleware)", () => {
     expect(await res.json()).toEqual({ error: "Not authenticated" });
   });
 
-  it("redirects unauthenticated page requests to /login", async () => {
-    const res = await updateSession(request("/plan"));
+  it("redirects unauthenticated page requests to /login, remembering where they were going", async () => {
+    const res = await updateSession(request("/plan?add=1"));
     expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
+    const url = new URL(res.headers.get("location")!);
+    expect(url.pathname).toBe("/login");
+    expect(url.searchParams.get("next")).toBe("/plan?add=1");
+    // The home page needs no `next`
+    const home = await updateSession(request("/"));
+    expect(new URL(home.headers.get("location")!).searchParams.get("next")).toBeNull();
   });
 
   it("leaves public routes alone when signed out", async () => {
-    for (const path of ["/login", "/signup", "/auth/callback"]) {
+    for (const path of ["/login", "/signup", "/auth/callback", "/r/abc123"]) {
       const res = await updateSession(request(path));
       expect(res.headers.get("location")).toBeNull();
     }
@@ -77,6 +82,7 @@ describe("updateSession (middleware)", () => {
     const url = new URL(res.headers.get("location")!);
     expect(url.pathname).toBe("/signup");
     expect(url.searchParams.get("step")).toBe("household");
+    expect(url.searchParams.get("next")).toBe("/plan");
   });
 
   it("passes through and sets the has-household cookie on first visit", async () => {

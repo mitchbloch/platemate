@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NutritionBadge from "./NutritionBadge";
 import RecipeEditor, { toEditableRecipe, fromEditableRecipe, type EditableRecipe } from "./RecipeEditor";
-import type { Recipe, Ingredient } from "@/lib/types";
+import type { Recipe, Ingredient, RecipeShare } from "@/lib/types";
+import ShareRecipeButton from "./ShareRecipeButton";
 import { CUISINE_LABELS, DIETARY_FLAG_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
 
 const secondaryButton =
@@ -14,9 +15,11 @@ const secondaryButton =
 export default function RecipeDetail({
   recipe,
   back = { href: "/recipes", label: "Back to recipes" },
+  share = null,
 }: {
   recipe: Recipe;
   back?: { href: string; label: string };
+  share?: (RecipeShare & { url: string }) | null;
 }) {
   // The page keys this component on recipe.updatedAt, so after a save +
   // router.refresh() it remounts with the fresh row — no stale local copy.
@@ -106,7 +109,8 @@ export default function RecipeDetail({
         <Link href={back.href} className="inline-flex min-h-11 items-center text-sm text-text-muted transition-colors hover:text-text-secondary">
           &larr; {back.label}
         </Link>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <ShareRecipeButton recipe={recipe} initialShare={share} />
           <button type="button" onClick={() => setDraft(toEditableRecipe(recipe))} className={secondaryButton}>
             Edit
           </button>

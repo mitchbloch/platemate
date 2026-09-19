@@ -149,11 +149,11 @@ create unique index recipe_shares_active_unique on recipe_shares(recipe_id, crea
 - `record_share_save(token_input text)` — SECURITY DEFINER, authenticated only: increments `save_count`.
 
 ### D2. Routes
-- Middleware public allowlist: `/r/*`, `/api/share/*`.
+- Middleware public allowlist: `/r/*` only. The share page reads through the anon RPC server-side, so no public API route is needed; `/api/share/[token]/save` stays behind auth (401 JSON when signed out). Login and household-setup redirects now carry `next=<original path>`.
 - `GET /r/[token]` server page: calls the RPC with the anon client; `generateMetadata` sets OG title/description/image (imageUrl when present) for iMessage previews; 404 when null. Renders full recipe (ingredients, instructions, nutrition badge, source link) and a sticky "Save to Platemate" CTA. Signed-out → `/login?next=/r/<token>`; signed in → `POST /api/share/[token]/save`.
 - `POST /api/share/[token]/save`: re-reads via RPC, `createRecipe` into the caller's active household (sourceUrl/sourceName preserved, `tags` preserved), `record_share_save`, returns the new id → client routes to `/recipes/<id>`. If the caller's active household already owns the source recipe → 409 with the existing id (client shows "already in your library").
 - `POST /api/recipes/[id]/share`: get-or-create the caller's active share row; returns `{ url, viewCount, saveCount }`. `DELETE` revokes.
-- `login` and `signup` honor a same-origin `next` param (existing `auth/callback` check reused as a helper); the household-setup step forwards it.
+- `login` and `signup` honor a same-origin `next` param via `safeInternalPath`; the household-setup and preferences steps forward it, and the email-confirmation redirect carries it too.
 
 ### D3. UI
 - `RecipeDetail` view mode: Share button → fetch share → `navigator.share({ title, text, url })` when available, else copy link + toast. Menu: "Copy as text" (`formatRecipeAsText` in `src/lib/recipeShareText.ts`, tested), "Stop sharing". Stats line "Shared · N views · N saved" when a share exists.

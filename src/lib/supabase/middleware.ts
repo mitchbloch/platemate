@@ -40,7 +40,11 @@ export async function updateSession(request: NextRequest) {
 
   // Public routes that don't require auth
   const pathname = request.nextUrl.pathname;
-  const isPublicRoute = pathname === "/login" || pathname === "/signup" || pathname.startsWith("/auth/");
+  // Shared recipe pages (/r/<token>) are readable signed-out; saving from
+  // one goes through an authenticated API route.
+  const isPublicRoute =
+    pathname === "/login" || pathname === "/signup" || pathname.startsWith("/auth/") || pathname.startsWith("/r/");
+  const currentPath = request.nextUrl.pathname + request.nextUrl.search;
 
   if (!user && !isPublicRoute) {
     // API callers get a proper 401 instead of a redirect to HTML
@@ -49,6 +53,8 @@ export async function updateSession(request: NextRequest) {
     }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    if (pathname !== "/") url.searchParams.set("next", currentPath);
     return NextResponse.redirect(url);
   }
 
@@ -71,7 +77,9 @@ export async function updateSession(request: NextRequest) {
       if (!profile?.active_household_id) {
         const url = request.nextUrl.clone();
         url.pathname = "/signup";
+        url.search = "";
         url.searchParams.set("step", "household");
+        if (pathname !== "/") url.searchParams.set("next", currentPath);
         return NextResponse.redirect(url);
       }
 

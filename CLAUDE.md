@@ -45,18 +45,20 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/lib/groceryExport.ts` — Clipboard export formatter for Apple Notes (Phase 4)
 - `src/lib/pinnedItems.ts` — Pinned grocery staples DAL (Phase 4)
 - `src/lib/pantryItems.ts` — Pantry staples DAL: auto-exclude items you always have (Phase 4)
+- `src/lib/recipeShares.ts` — Share links DAL: one active token per (recipe, sharer), public read via RPC, view/save counts (Phase 8D)
+- `src/lib/navigation.ts` — Same-origin `next`/`from` path validation for deep links
 - `src/lib/supabase/` — Client (browser), server, middleware, auth helpers
 - `src/components/RecipeDetail.tsx` — Recipe view/edit/delete (client component)
 - `src/components/RecipeForm.tsx` — Recipe import flow (URL or text → parse → review → save)
 - `src/components/WeeklyPlanner.tsx` — Meal planner (week nav, picker with filters, suggestions, optimistic add/remove)
 - `src/components/WeeklyNutritionSummary.tsx` — Aggregated weekly nutrition with color-coded flags
-- `supabase/migrations/` — DB schema (001 initial, 002 consolidate time fields, 003 pinned items, 004 pantry + dismissed)
+- `supabase/migrations/` — DB schema (001 initial … 015 servings check, 016 recipe shares)
 
 ## Auth
 - Self-service sign-up; users belong to households (multi-household since migration 009)
 - Data isolation via RLS: every data table is scoped by `household_id IN (SELECT user_household_ids())`
 - Joining a household goes through the `join_household_by_code` SECURITY DEFINER RPC (migration 014) — membership inserts are otherwise admin-only
-- Middleware redirects unauthenticated page requests to `/login`; API requests get 401 JSON
+- Middleware redirects unauthenticated page requests to `/login?next=<path>`; API requests get 401 JSON. `/r/<token>` (shared recipes) is public: the page reads through the anon-callable `get_shared_recipe` RPC (migration 016); saving a copy goes through the authenticated `/api/share/[token]/save`
 
 ## Phases
 1. **Foundation** — Scaffolding, auth, navigation, DB schema ✅
