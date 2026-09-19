@@ -249,9 +249,10 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] Enhancement (user, 2026-09-19): plan picker rows link to the recipe detail page; picker state (open/query/filters) mirrored into the URL by the new shared `useUrlMirror` hook (RecipeLibrary refactored onto it); detail page shows "← Back to plan" via a same-origin-checked `?from=` param (+4 planner tests, +2 navigation tests)
 
 ### 8D: Share
-- [ ] D1 Migration 016 `recipe_shares` + `get_shared_recipe` / `record_share_save` RPCs (apply before merge)
-- [ ] D2 Public `/r/[token]` page with OG metadata; `/api/share/[token]/save`; `/api/recipes/[id]/share` get-or-create + revoke; middleware allowlist; `next` param on login/signup/household step
-- [ ] D3 Share button (native sheet / copy link), Copy as text, Stop sharing, stats line; tests
+- [x] D1 Migration 016 `recipe_shares` (unique active row per recipe+sharer, RLS, no delete) + `get_shared_recipe` (anon, returns public fields only, bumps view_count) / `record_share_save` (authenticated) — **apply before merge**
+- [x] D2 Public `/r/[token]` page (OG metadata, memoized RPC call so metadata + page = one view, not-found page, sticky Save CTA); `/api/share/[token]/save` (409 with the existing id when already owned; count is best-effort); `/api/recipes/[id]/share` GET/POST/DELETE; middleware `/r/*` public + `next` carried through login and household redirects; login/signup honor `next` end to end
+- [x] D3 `ShareRecipeButton` (native share sheet → copy-link fallback, Copy as text, Copy link, Stop sharing with revert, view/save counts); `formatRecipeAsText`; tests: share text, tokens/row mapping + malformed tokens, middleware public route + next, SaveSharedRecipe (4), ShareRecipeButton (4), save route (5)
+- [x] `/code-review` (standards+security, spec): FIXED share row filed under the sharer's active household instead of the recipe's (owning household couldn't see/revoke); FIXED save count inflatable by any signed-in user → copy + count are one atomic `save_shared_recipe` RPC; FIXED "already owned" check was RLS-wide, now active-household; proxy-header origin derivation removed (client builds the URL); recipe body deduplicated into `RecipeContent`; noindex on share pages documented
 - [ ] Build + lint + tests clean; `/security-review`; `/code-review`; PR; end-to-end with a second account
 
 ### 8E: Recipe generation

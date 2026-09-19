@@ -224,6 +224,26 @@ export interface UserProfile {
   updatedAt: string;
 }
 
+// ── Sharing ──
+
+export interface RecipeShare {
+  id: string;
+  recipeId: string;
+  token: string;
+  viewCount: number;
+  saveCount: number;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+/** What the public share page can see: the recipe's content and who shared
+ *  it. Never household ids. */
+export interface SharedRecipe {
+  recipeId: string;
+  sharedBy: string | null;
+  recipe: Omit<Recipe, "id" | "householdId" | "createdAt" | "updatedAt">;
+}
+
 export interface GroceryListWithItems {
   list: GroceryList;
   items: GroceryListItem[];

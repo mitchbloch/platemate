@@ -1,11 +1,16 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { safeInternalPath } from "@/lib/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams();
+  // Where to go after signing in (e.g. a shared recipe you were sent)
+  const next = safeInternalPath(searchParams.get("next")) ?? "/";
+  const signupHref = next === "/" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +34,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/");
+    router.push(next);
     router.refresh();
   }
 
@@ -93,11 +98,19 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-sm text-text-muted">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-primary hover:text-primary-dark">
+          <Link href={signupHref} className="text-primary hover:text-primary-dark">
             Sign up
           </Link>
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

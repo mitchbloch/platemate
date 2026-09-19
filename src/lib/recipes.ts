@@ -77,6 +77,22 @@ export async function getRecipe(id: string): Promise<Recipe | null> {
   return rowToRecipe(data);
 }
 
+/** Whether the active household already has this exact recipe row. RLS
+ *  alone answers "any household I belong to", which is the wrong question
+ *  when deciding whether a shared recipe needs copying. */
+export async function recipeIdInActiveHousehold(id: string): Promise<string | null> {
+  const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
+  const { data, error } = await supabase
+    .from("recipes")
+    .select("id")
+    .eq("id", id)
+    .eq("household_id", householdId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
 export async function createRecipe(
   recipe: ParsedRecipe & { sourceUrl?: string | null },
 ): Promise<string> {
