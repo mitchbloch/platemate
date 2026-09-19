@@ -10,7 +10,7 @@ export const SHOPPING_NAME_RULES = `For each ingredient also return "shoppingNam
 - Drop brand names, marketing words (100%, natural, premium, farm-fresh), organic/free-range, sizes (large, small, jumbo) and counts.
 - Drop fat level on milk and yogurt unless the recipe truly depends on it (whipping cream, a custard that needs whole milk): "2% milk" → "milk", "whole milk" → "milk", "nonfat greek yogurt" → "greek yogurt".
 - KEEP anything you would shop differently for: form (canned vs fresh vs frozen), cut (chicken thighs vs chicken breast), type (greek yogurt vs yogurt, heavy cream vs milk, red onion vs onion), and dried vs fresh herbs.
-Examples: "FAGE 100% greek yoghurt" → "greek yogurt"; "San Marzano canned tomatoes" → "canned tomatoes"; "boneless skinless chicken thighs" → "chicken thighs"; "1 large yellow onion" → "onion"; "extra-virgin olive oil" → "olive oil"; "fresh basil leaves" → "basil".`;
+Examples: "FAGE 100% greek yoghurt" → "greek yogurt"; "2% milk" → "milk"; "heavy whipping cream" → "heavy cream"; "boneless skinless chicken thighs" → "chicken thighs"; "San Marzano canned tomatoes" → "canned tomatoes"; "1 large yellow onion" → "onion"; "extra-virgin olive oil" → "olive oil"; "fresh basil leaves" → "basil".`;
 
 const MAX_LENGTH = 60;
 

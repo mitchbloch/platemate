@@ -89,6 +89,10 @@ describe("RecipeEditor", () => {
     await user.clear(name);
     await user.type(name, "skyr");
     expect(result().ingredients[0].shoppingName).toBeNull();
+    // Typing back to the original name restores it
+    await user.clear(name);
+    await user.type(name, "FAGE greek yogurt");
+    expect(result().ingredients[0].shoppingName).toBe("greek yogurt");
   });
 
   it("lets the user set the shopping name directly", async () => {
@@ -97,13 +101,14 @@ describe("RecipeEditor", () => {
     await user.click(screen.getByRole("button", { name: /Dairy & Eggs.*edit/ }));
     const shops = screen.getByLabelText("Ingredient 1 shopping name");
     await user.clear(shops);
-    await user.type(shops, "Yogurt");
-    expect(result().ingredients[0].shoppingName).toBe("yogurt");
+    await user.type(shops, "Plain Yogurt");
+    expect(shops).toHaveValue("Plain Yogurt"); // spaces survive while typing
+    expect(result().ingredients[0].shoppingName).toBe("plain yogurt"); // normalized on save
     // quantity/unit edits do not disturb it
     const qty = screen.getByLabelText("Ingredient 1 quantity");
     await user.clear(qty);
     await user.type(qty, "3{Enter}");
-    expect(result().ingredients[0].shoppingName).toBe("yogurt");
+    expect(result().ingredients[0].shoppingName).toBe("plain yogurt");
   });
 
   it("changing the category is saved", async () => {

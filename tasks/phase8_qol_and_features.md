@@ -112,7 +112,8 @@ Routine calls made without asking: search hides the Suggestions banner while a q
 ### C1. `shoppingName` at import
 - `Ingredient.shoppingName?: string | null` (optional: existing JSONB rows lack it).
 - `RECIPE_JSON_SCHEMA.ingredients.items` gains `shoppingName` (string|null, required in schema). New `SHOPPING_NAME_RULES` prompt block encoding decision #8, with examples: `FAGE 100% greek yoghurt → greek yogurt`; `2% milk → milk`; `heavy whipping cream → heavy cream`; `boneless skinless chicken thighs → chicken thighs`; `San Marzano canned tomatoes → canned tomatoes`; `1 large yellow onion → onion`.
-- `validateParsedRecipe` passes it through (lowercased, trimmed, empty → null).
+- `validateParsedRecipe` passes it through (lowercased, trimmed, empty → null). The JSON schema requires a plain (non-null) string so Claude always produces one; the validator is what maps a blank answer to null.
+- Addendum (implemented 2026-09-19, not in the original spec): the shared `RecipeEditor` shows the shopping name in the collapsed ingredient row ("shops as …") and exposes a "Shops as" field, because it is the only way a user can correct a wrong merge key. Renaming an ingredient drops its shopping name (it was produced for the old name) and renaming back restores it.
 
 ### C2. Merge on it
 - `deduplicateIngredients`: matching key = `normalizeForMatching(ing.shoppingName ?? ing.name)`; display name = capitalized `shoppingName` when present, else today's `pickDisplayName` behavior. When entries with and without `shoppingName` merge, the canonical name wins.

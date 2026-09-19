@@ -139,13 +139,15 @@ async function main() {
       }
       const ingredients = r.ingredients.map((ing, idx) => ({
         ...ing,
-        // Never overwrite a name that is already set (idempotence)
-        shoppingName: ing.shoppingName ?? normalizeShoppingName(assigned[idx]) ?? ing.name.toLowerCase(),
+        // Never overwrite a name that is already set (idempotence). An empty
+        // answer stays null: the merge then falls back to the ingredient name
+        // without claiming canonical precedence over other recipes' names.
+        shoppingName: ing.shoppingName ?? normalizeShoppingName(assigned[idx]),
       }));
 
       if (dryRun) {
         console.log(`  ${r.title}`);
-        for (const ing of ingredients) if (ing.shoppingName !== ing.name.toLowerCase()) console.log(`      ${ing.name}  →  ${ing.shoppingName}`);
+        for (const ing of ingredients) if (ing.shoppingName !== ing.name.toLowerCase()) console.log(`      ${ing.name}  →  ${ing.shoppingName ?? "(none)"}`);
         continue;
       }
       const { error: updateError } = await supabase.from("recipes").update({ ingredients }).eq("id", r.id);

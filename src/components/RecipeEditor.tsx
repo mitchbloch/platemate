@@ -11,12 +11,16 @@ import type {
 } from "@/lib/types";
 import { CATEGORY_LABELS, CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
 import { ingredientRaw, type RecipeUpdates } from "@/lib/recipeValidation";
+import { normalizeShoppingName } from "@/lib/shoppingName";
 import NumberField from "./NumberField";
 
 // ── Editable shape (stable keys so rows keep focus when siblings change) ──
 
 export interface EditableIngredient extends Ingredient {
   key: string;
+  /** As loaded: renaming away from this drops the shopping name (it was
+   *  produced for the old name); renaming back restores it. */
+  original: { name: string; shoppingName: string | null | undefined } | null;
 }
 
 export interface EditableStep {
@@ -59,7 +63,7 @@ export function toEditableRecipe(recipe: EditableSource): EditableRecipe {
     difficulty: recipe.difficulty,
     servings: recipe.servings,
     totalTimeMinutes: recipe.totalTimeMinutes,
-    ingredients: recipe.ingredients.map((ing) => ({ ...ing, key: nextKey() })),
+    ingredients: recipe.ingredients.map((ing) => ({ ...ing, key: nextKey(), original: { name: ing.name, shoppingName: ing.shoppingName } })),
     instructions: recipe.instructions.map((text) => ({ key: nextKey(), text })),
     tags: recipe.tags,
     isSlowCooker: recipe.isSlowCooker,
@@ -77,7 +81,9 @@ export function fromEditableRecipe(recipe: EditableRecipe): Required<RecipeUpdat
     servings: recipe.servings,
     totalTimeMinutes: recipe.totalTimeMinutes,
     ingredients: recipe.ingredients.map(({ name, quantity, unit, preparation, category, raw, shoppingName }) => ({
-      name, quantity, unit, preparation, category, raw, shoppingName,
+      name, quantity, unit, preparation, category, raw,
+      // Typed text is kept verbatim while editing; normalize once on save
+      ...(shoppingName === undefined ? {} : { shoppingName: normalizeShoppingName(shoppingName) }),
     })),
     instructions: recipe.instructions.map((s) => s.text),
     tags: recipe.tags,
@@ -86,7 +92,7 @@ export function fromEditableRecipe(recipe: EditableRecipe): Required<RecipeUpdat
 }
 
 export function blankIngredient(): EditableIngredient {
-  return { key: nextKey(), name: "", quantity: null, unit: null, preparation: null, category: "other", raw: "" };
+  return { key: nextKey(), original: null, name: "", quantity: null, unit: null, preparation: null, category: "other", raw: "" };
 }
 
 // ── Styles ──
@@ -116,10 +122,11 @@ export default function RecipeEditor({
       value.ingredients.map((ing) => {
         if (ing.key !== key) return ing;
         const next = { ...ing, ...patch };
-        // A renamed ingredient's canonical shopping name is no longer trustworthy;
-        // drop it so the grocery merge falls back to the new name.
-        if (patch.name !== undefined && patch.name !== ing.name && patch.shoppingName === undefined) {
-          next.shoppingName = null;
+        // A renamed ingredient's canonical shopping name is no longer
+        // trustworthy: drop it so the merge falls back to the new name, and
+        // bring it back if the user types their way back to the original.
+        if (patch.name !== undefined && patch.shoppingName === undefined && ing.original) {
+          next.shoppingName = patch.name === ing.original.name ? ing.original.shoppingName : null;
         }
         // raw is derived from the structured fields — they are what the app
         // displays and what the grocery list reads
@@ -389,7 +396,7 @@ function IngredientRow({
             <input
               type="text"
               value={ingredient.shoppingName ?? ""}
-              onChange={(e) => onChange({ shoppingName: e.target.value.trim().toLowerCase() || null })}
+              onChange={(e) => onChange({ shoppingName: e.target.value || null })}
               placeholder="Shops as (greek yogurt)"
               title="Brand-agnostic name used to merge this with other recipes on the grocery list"
               aria-label={`Ingredient ${n} shopping name`}

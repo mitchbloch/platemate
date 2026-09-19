@@ -165,11 +165,14 @@ const PLURAL_EXCEPTIONS = new Set([
   "lemongrass",
 ]);
 
-// Marketing/spec tokens that never change what you buy: "100% greek yogurt",
-// "2% milk" (fat level is handled by shoppingName when it matters).
+// Fat-level / marketing percentages on dairy never change what you buy:
+// "100% greek yogurt", "2% milk". Scoped to dairy words on purpose — the
+// percentage on "70% dark chocolate" or "5% vinegar" IS the product.
 const PERCENT_TOKEN = /\b\d+(?:\.\d+)?\s*%\s*/g;
+const DAIRY_WORD = /\b(?:milk|yogurt|yoghurt|cream|kefir|cottage cheese)s?\b/;
 
-// Spelling variants that are the same word
+// Spelling variants that are the same word. Deliberately excludes regional
+// names that are different products (coriander = the spice in US usage).
 const SPELLING_VARIANTS: Record<string, string> = {
   yoghurt: "yogurt",
   yoghurts: "yogurts",
@@ -179,8 +182,6 @@ const SPELLING_VARIANTS: Record<string, string> = {
   chiles: "chilies",
   aubergine: "eggplant",
   courgette: "zucchini",
-  coriander: "cilantro",
-  scallions: "scallion",
 };
 
 export function normalizeIngredientName(name: string): string {
@@ -189,8 +190,8 @@ export function normalizeIngredientName(name: string): string {
   // Strip parentheticals: "tomatoes (Roma)" → "tomatoes"
   normalized = normalized.replace(/\s*\([^)]*\)/g, "");
 
-  // Strip percent tokens: "100% greek yogurt" → "greek yogurt"
-  normalized = normalized.replace(PERCENT_TOKEN, " ");
+  // Strip percent tokens on dairy only: "100% greek yogurt" → "greek yogurt"
+  if (DAIRY_WORD.test(normalized)) normalized = normalized.replace(PERCENT_TOKEN, " ");
 
   // Unify spellings word by word: "greek yoghurt" → "greek yogurt"
   normalized = normalized

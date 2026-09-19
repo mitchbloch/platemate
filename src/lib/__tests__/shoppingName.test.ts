@@ -28,9 +28,16 @@ describe("normalizeShoppingName", () => {
 });
 
 describe("rule-only normalization improvements", () => {
-  it("strips percent tokens and unifies spelling variants", () => {
+  it("strips percent tokens on dairy only and unifies spelling variants", () => {
     expect(normalizeIngredientName("100% greek yoghurt")).toBe("greek yogurt");
     expect(normalizeIngredientName("2% milk")).toBe("milk");
+    expect(normalizeIngredientName("nonfat 0% yogurt")).toBe("nonfat yogurt");
+    // The percentage is the product here — keep it
+    expect(normalizeIngredientName("70% dark chocolate")).toBe("70% dark chocolate");
+    expect(normalizeIngredientName("70% dark chocolate")).not.toBe(normalizeIngredientName("85% dark chocolate"));
+    expect(normalizeIngredientName("5% vinegar")).toBe("5% vinegar");
+    // Regional names that are different products stay distinct
+    expect(normalizeIngredientName("ground coriander")).toBe("ground coriander");
     expect(normalizeIngredientName("red chillies")).toBe(normalizeIngredientName("red chilies"));
     expect(normalizeIngredientName("aubergine")).toBe("eggplant");
   });
