@@ -257,8 +257,11 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [ ] Build + lint + tests clean; `/security-review`; `/code-review`; PR; end-to-end with a second account
 
 ### 8E: Recipe generation
-- [ ] E1 Migration 017 `recipe_generations` (apply before merge)
-- [ ] E2 `POST /api/generate` (Sonnet 5, structured turns: options | draft, library matches, household prefs, 20-turn cap) + list/get/delete/save routes
-- [ ] E3 `/recipes/generate` page: drafts strip, thread, photo picker with client downscale, option chips, draft card with Save, match cards with View + Add to plan; entry link on `/recipes/add`; "How this was generated" on detail
-- [ ] E4 Tests: prompt builder, validator, digest, route with mocked client
+- [x] E1 Migration 018 `recipe_generations` (applied 2026-09-19 via CLI; real-row probe: insert, anon blocked, updated_at trigger, delete)
+- [x] E2 `POST /api/generate` (Sonnet 5, structured turns: options | draft + library matches + seenIngredients, household prefs, cached library digest, 20-turn cap, refusal → 422) + GET list, GET/DELETE by id, POST save
+- [x] E3 `/recipes/generate` page (`?g=` mirrored to the URL): drafts strip, thread, photo picker with canvas downscale to 1280px JPEG, option chips, draft card with Save/Discard, library matches with View (`?from=` back) + Add to this week; entry link on `/recipes/add`; "See the conversation" on detail
+- [x] E4 Tests: engine (17), route (9), component (8); `npm run eval:generate` live eval script (run 2026-09-19: options 12.8s → recipe 13.1s → revision 21.7s, cache read on turns 2–3, cholesterol 110 → 78mg)
+- [x] `/code-review` (standards+security, spec): FIXED lost-update race when two members append to one chat (optimistic lock on updated_at → 409); FIXED in-flight answer clobbering a chat you switched to; FIXED EXIF orientation on iPhone photos; ADDED household daily cap (100 turns/rolling 24h → 429) since per-chat caps don't bound spend; generic 500 messages with server-side logging; household filter on every mutation; Add-to-plan uses the match's own meal type; failed Discard restores the chat; photo cap matches the spec's 600KB
+- [x] Build + lint + tests clean (301 tests)
+- [ ] PR opened — awaiting user's on-device verification
 - [ ] Build + lint + tests clean; `/code-review`; PR; live eval with the real API

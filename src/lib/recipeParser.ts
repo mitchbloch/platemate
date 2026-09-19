@@ -253,7 +253,7 @@ export async function extractVideoContent(
 
 /** JSON Schema enforced via structured outputs — the API guarantees the
  *  response parses and conforms, eliminating malformed-JSON failures. */
-const RECIPE_JSON_SCHEMA = {
+export const RECIPE_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
@@ -376,7 +376,7 @@ async function fetchRecipeHtml(url: string): Promise<string> {
 /** Validate the shape of parsed JSON matches ParsedRecipe.
  *  Claude's output is untrusted: enums, numbers, and nested shapes are all
  *  coerced to safe values rather than cast blindly. */
-function validateParsedRecipe(data: unknown): ParsedRecipe {
+export function validateParsedRecipe(data: unknown): ParsedRecipe {
   if (!data || typeof data !== "object") {
     throw new Error("Recipe response is not an object");
   }

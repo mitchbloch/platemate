@@ -4,6 +4,8 @@ import { getRecipe } from "@/lib/recipes";
 import { notFound } from "next/navigation";
 import { backLinkFor } from "@/lib/navigation";
 import { getActiveShare } from "@/lib/recipeShares";
+import { getGenerationForRecipe } from "@/lib/recipeGenerations";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,7 @@ export default async function RecipeDetailPage({
   const recipe = await getRecipe(id);
   if (!recipe) notFound();
 
-  const share = await getActiveShare(recipe.id);
+  const [share, generation] = await Promise.all([getActiveShare(recipe.id), getGenerationForRecipe(recipe.id)]);
 
   return (
     <>
@@ -30,6 +32,14 @@ export default async function RecipeDetailPage({
         {/* key on updatedAt: after a save + router.refresh() the editor
             remounts with the fresh row instead of its stale local copy */}
         <RecipeDetail key={recipe.updatedAt} recipe={recipe} back={back} share={share} />
+        {generation && (
+          <p className="mt-6 border-t border-border pt-4 text-sm text-text-muted">
+            Generated with Platemate.{" "}
+            <Link href={`/recipes/generate?g=${generation.id}`} className="text-primary hover:text-primary-dark">
+              See the conversation &rarr;
+            </Link>
+          </p>
+        )}
       </main>
     </>
   );
