@@ -165,11 +165,57 @@ const PLURAL_EXCEPTIONS = new Set([
   "lemongrass",
 ]);
 
-export function normalizeIngredientName(name: string): string {
+// Fat-level / marketing percentages on dairy never change what you buy:
+// "100% greek yogurt", "2% milk". Scoped to dairy words on purpose — the
+// percentage on "70% dark chocolate" or "5% vinegar" IS the product.
+const PERCENT_TOKEN = /\b\d+(?:\.\d+)?\s*%\s*/g;
+const DAIRY_WORD = /\b(?:milk|yogurt|yoghurt|cream|kefir|cottage cheese)s?\b/;
+// Fat-level words on dairy: one carton covers "whole" and "2%" alike.
+// Only applied when DAIRY_WORD matches — "light brown sugar" keeps "light" —
+// and only to names the rules have to judge themselves (see
+// NormalizeOptions.trustFatLevel): a canonical shoppingName already encodes
+// whether the recipe depends on the fat level.
+const DAIRY_FAT_WORD = /\b(?:nonfat|lowfat|fullfat|fatfree|reducedfat|skim|skimmed|whole|light|lite)\b\s*/g;
+
+export interface NormalizeOptions {
+  /** Keep dairy fat-level words and percentages instead of stripping them.
+   *  Used for canonical shopping names, where Claude has already decided
+   *  whether "whole milk" is essential to the recipe. Default false. */
+  trustFatLevel?: boolean;
+}
+
+// Spelling variants that are the same word. Deliberately excludes regional
+// names that are different products (coriander = the spice in US usage).
+const SPELLING_VARIANTS: Record<string, string> = {
+  yoghurt: "yogurt",
+  yoghurts: "yogurts",
+  chilli: "chili",
+  chillies: "chilies",
+  chile: "chili",
+  chiles: "chilies",
+  aubergine: "eggplant",
+  courgette: "zucchini",
+};
+
+export function normalizeIngredientName(name: string, options: NormalizeOptions = {}): string {
+  const dairyFatAgnostic = !options.trustFatLevel;
   let normalized = name.toLowerCase().trim();
 
   // Strip parentheticals: "tomatoes (Roma)" → "tomatoes"
   normalized = normalized.replace(/\s*\([^)]*\)/g, "");
+
+  // Dairy only, when the rules have to judge it themselves: drop percent
+  // tokens so "100% greek yogurt" and "2% milk" match their plain forms
+  if (dairyFatAgnostic && DAIRY_WORD.test(normalized)) {
+    normalized = normalized.replace(PERCENT_TOKEN, " ");
+  }
+
+  // Unify spellings word by word: "greek yoghurt" → "greek yogurt"
+  normalized = normalized
+    .split(/\s+/)
+    .map((w) => SPELLING_VARIANTS[w] ?? w)
+    .join(" ")
+    .trim();
 
   // Strip trailing commas and whitespace
   normalized = normalized.replace(/[,\s]+$/, "");
@@ -188,9 +234,15 @@ export function normalizeIngredientName(name: string): string {
     "low sodium": "lowsodium",
     "semi sweet": "semisweet",
     "half and half": "halfandhalf",
+    "fat free": "fatfree",
+    "reduced fat": "reducedfat",
   };
   for (const [spaced, joined] of Object.entries(COMPOUND_WORDS)) {
     normalized = normalized.replace(spaced, joined);
+  }
+
+  if (dairyFatAgnostic && DAIRY_WORD.test(normalized)) {
+    normalized = normalized.replace(DAIRY_FAT_WORD, "").replace(/\s+/g, " ").trim();
   }
 
   // Strip trailing 's' for simple plurals, but not words ending in 'ss', 'us', etc.
@@ -321,8 +373,8 @@ export function stripQualifiers(normalizedName: string): string {
 /**
  * Full fuzzy matching pipeline: normalize name then strip qualifiers.
  */
-export function normalizeForMatching(name: string): string {
-  return stripQualifiers(normalizeIngredientName(name));
+export function normalizeForMatching(name: string, options: NormalizeOptions = {}): string {
+  return stripQualifiers(normalizeIngredientName(name, options));
 }
 
 /**
@@ -392,9 +444,23 @@ interface MealWithRecipe {
 interface AccumulatorEntry {
   normalizedName: string;
   displayName: string; // keep the first occurrence's casing
+  /** True when displayName came from a canonical shoppingName — it wins
+   *  over longer-but-branded original names when entries merge. */
+  canonicalDisplay: boolean;
   items: { quantity: number | null; unit: string | null }[];
   category: Ingredient["category"];
   recipeIds: Set<string>;
+}
+
+/** The text an ingredient is matched and named by on the grocery list:
+ *  the brand-agnostic shoppingName when the importer produced one, else
+ *  the recipe's own ingredient name. */
+export function groceryNameFor(ingredient: Pick<Ingredient, "name" | "shoppingName">): {
+  text: string;
+  canonical: boolean;
+} {
+  const canonical = ingredient.shoppingName?.trim();
+  return canonical ? { text: canonical, canonical: true } : { text: ingredient.name, canonical: false };
 }
 
 export function deduplicateIngredients(
@@ -413,7 +479,10 @@ export function deduplicateIngredients(
         : 1;
 
     for (const ingredient of recipe.ingredients) {
-      const normalizedName = normalizeIngredientName(ingredient.name);
+      const grocery = groceryNameFor(ingredient);
+      // A canonical name is Claude's per-recipe judgment (incl. whether the
+      // fat level matters); a plain name gets the rules' fat-agnostic default
+      const normalizedName = normalizeIngredientName(grocery.text, { trustFatLevel: grocery.canonical });
       const matchingKey = stripQualifiers(normalizedName);
       let normalizedUnit = normalizeUnit(ingredient.unit);
 
@@ -439,15 +508,19 @@ export function deduplicateIngredients(
       const existing = accumulator.get(key);
       if (existing) {
         existing.items.push({ quantity: adjustedQuantity, unit: normalizedUnit });
-        existing.displayName = pickDisplayName(
-          existing.displayName,
-          toDisplayName(ingredient.name),
-        );
+        if (grocery.canonical && !existing.canonicalDisplay) {
+          existing.displayName = toDisplayName(grocery.text);
+          existing.canonicalDisplay = true;
+        } else if (!grocery.canonical && !existing.canonicalDisplay) {
+          existing.displayName = pickDisplayName(existing.displayName, toDisplayName(grocery.text));
+        }
+        // canonical + canonical: keep the first (they normalize to the same key)
         existing.recipeIds.add(recipe.id);
       } else {
         accumulator.set(key, {
           normalizedName: matchingKey,
-          displayName: toDisplayName(ingredient.name),
+          displayName: toDisplayName(grocery.text),
+          canonicalDisplay: grocery.canonical,
           items: [{ quantity: adjustedQuantity, unit: normalizedUnit }],
           category: ingredient.category,
           recipeIds: new Set([recipe.id]),

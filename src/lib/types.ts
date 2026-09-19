@@ -33,6 +33,9 @@ export interface Ingredient {
   preparation: string | null; // e.g. "diced", "minced"
   category: IngredientCategory;
   raw: string; // original text from recipe
+  /** Brand-agnostic grocery name used as the merge key ("greek yogurt").
+   *  Absent on recipes imported before Phase 8C until backfilled. */
+  shoppingName?: string | null;
 }
 
 export type IngredientCategory =

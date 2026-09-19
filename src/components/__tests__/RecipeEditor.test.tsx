@@ -15,7 +15,7 @@ const parsed: ParsedRecipe = {
   servings: 2,
   totalTimeMinutes: 5,
   ingredients: [
-    { name: "FAGE greek yogurt", quantity: 1, unit: "cup", preparation: null, category: "dairy", raw: "1 cup FAGE greek yogurt" },
+    { name: "FAGE greek yogurt", quantity: 1, unit: "cup", preparation: null, category: "dairy", raw: "1 cup FAGE greek yogurt", shoppingName: "greek yogurt" },
     { name: "honey", quantity: 1, unit: "tbsp", preparation: null, category: "condiment", raw: "1 tbsp honey" },
   ],
   instructions: ["Scoop", "Drizzle"],
@@ -71,7 +71,7 @@ describe("RecipeEditor", () => {
   it("editing quantity and unit regenerates raw including prep notes", async () => {
     const user = userEvent.setup();
     const result = renderEditor();
-    await user.click(screen.getByRole("button", { name: /Dairy & Eggs · edit/ }));
+    await user.click(screen.getByRole("button", { name: /Dairy & Eggs.*edit/ }));
     await user.type(screen.getByLabelText("Ingredient 1 preparation"), "plain");
     const qty = screen.getByLabelText("Ingredient 1 quantity");
     await user.clear(qty);
@@ -82,10 +82,39 @@ describe("RecipeEditor", () => {
     expect(ing.raw).toBe("2 cup FAGE greek yogurt, plain");
   });
 
+  it("renaming an ingredient drops its now-stale shopping name", async () => {
+    const user = userEvent.setup();
+    const result = renderEditor();
+    const name = screen.getByLabelText("Ingredient 1 name");
+    await user.clear(name);
+    await user.type(name, "skyr");
+    expect(result().ingredients[0].shoppingName).toBeNull();
+    // Typing back to the original name restores it
+    await user.clear(name);
+    await user.type(name, "FAGE greek yogurt");
+    expect(result().ingredients[0].shoppingName).toBe("greek yogurt");
+  });
+
+  it("lets the user set the shopping name directly", async () => {
+    const user = userEvent.setup();
+    const result = renderEditor();
+    await user.click(screen.getByRole("button", { name: /Dairy & Eggs.*edit/ }));
+    const shops = screen.getByLabelText("Ingredient 1 shopping name");
+    await user.clear(shops);
+    await user.type(shops, "Plain Yogurt");
+    expect(shops).toHaveValue("Plain Yogurt"); // spaces survive while typing
+    expect(result().ingredients[0].shoppingName).toBe("plain yogurt"); // normalized on save
+    // quantity/unit edits do not disturb it
+    const qty = screen.getByLabelText("Ingredient 1 quantity");
+    await user.clear(qty);
+    await user.type(qty, "3{Enter}");
+    expect(result().ingredients[0].shoppingName).toBe("plain yogurt");
+  });
+
   it("changing the category is saved", async () => {
     const user = userEvent.setup();
     const result = renderEditor();
-    await user.click(screen.getByRole("button", { name: /Condiments & Sauces · edit/ }));
+    await user.click(screen.getByRole("button", { name: /Condiments & Sauces.*edit/ }));
     await user.selectOptions(screen.getByLabelText("Ingredient 2 category"), "other");
     expect(result().ingredients[1].category).toBe("other");
   });

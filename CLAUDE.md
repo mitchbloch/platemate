@@ -15,7 +15,8 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - **Server components** by default (read-heavy pages)
 - **Client components** only when needed (`"use client"` for forms, auth state, interactive planner)
 - **JSONB ingredients** in recipes table (no normalization until Phase 4)
-- **Single Claude API call** per recipe import (extraction + nutrition in one pass)
+- **Single Claude API call** per recipe import (extraction + nutrition + per-ingredient `shoppingName` in one pass)
+- **Grocery merge key is `shoppingName`** (brand-agnostic, "what you'd write on a paper list"); falls back to the ingredient name for recipes imported before Phase 8C. One-time backfill: `npm run backfill:shopping-names` (needs the service-role key in a git-ignored env file — see the script header)
 - **Dual input mode**: URL scraping for recipe sites, freeform text for video/non-scrapable sources
 - **Video auto-extraction**: TikTok (oEmbed), YouTube (oEmbed + meta tags), Instagram (Brave Search cross-post lookup)
 - **Graceful degradation**: auto-extract → manual text paste fallback for all video platforms
@@ -37,7 +38,8 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/lib/mealPlans.ts` — Meal plan DAL (CRUD, getWeekStart, joined recipe queries)
 - `src/lib/recipeHistory.ts` — Recipe history DAL (idempotent batch logging, last-cooked dates)
 - `src/lib/recommendations.ts` — Suggestion engine (recency scoring + cuisine variety penalty)
-- `src/lib/ingredientMerge.ts` — Ingredient normalization, dedup, quantity merging (Phase 4)
+- `src/lib/ingredientMerge.ts` — Ingredient normalization, dedup, quantity merging (Phase 4); keys on `shoppingName` (Phase 8C)
+- `src/lib/shoppingName.ts` — Shopping-name prompt rules + normalizer shared by the parser and the backfill script
 - `src/lib/categoryMap.ts` — IngredientCategory → GroceryDisplayCategory mapping (Phase 4)
 - `src/lib/groceryList.ts` — Grocery list DAL (generate, save, CRUD) (Phase 4)
 - `src/lib/groceryExport.ts` — Clipboard export formatter for Apple Notes (Phase 4)

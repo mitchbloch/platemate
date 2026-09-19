@@ -238,10 +238,14 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] Follow-up (user report: Recipes search "backspaces and overwrites" fast typing): the URL mirror used `router.replace`, which on this dynamic page is a server round-trip; when it landed after more typing, the adopt-URL logic echoed the older query into the input. Now mirrors via native `history.replaceState` (no navigation) and adopts the URL only on `popstate` (+1 regression test) — PR #35
 
 ### 8C: Brand-agnostic grocery merge
-- [ ] C1 `shoppingName` in `Ingredient`, JSON schema, prompt rules, validator
-- [ ] C2 Dedup keys/displays on `shoppingName`; percent-token + spelling rules; tests
-- [ ] C3 `scripts/backfill-shopping-names.ts` (service-role, Haiku 4.5, idempotent, `--dry-run`); run once; Phase 5B doc marked superseded
-- [ ] Build + lint + tests clean; `/code-review`; PR; verify a real week's list merges yogurt variants
+- [x] C1 `shoppingName` in `Ingredient`, JSON schema (required), `SHOPPING_NAME_RULES` in both import prompts, validator passes it through; editor clears it on rename and exposes a "Shops as" field
+- [x] C2 Dedup keys/displays on `shoppingName` (canonical display wins over longer branded names); `\d+%` tokens stripped; spelling map (yoghurt→yogurt, chilli→chili, aubergine→eggplant, …); 10 new tests
+- [x] C3 `scripts/backfill-shopping-names.ts` via `npm run backfill:shopping-names` (tsx; Haiku 4.5 structured output; batches of 20; idempotent; `--dry-run`, `--limit`); Phase 5B doc marked superseded
+- [x] C3 backfill run 2026-09-19: dry run reviewed (two "odd" mappings were the backfill correcting mislabeled imports — source lines checked), then live: 127/127 recipes updated, 0 skipped; re-run reports 0 pending; 6 blank-named ingredients from bad imports now carry a shopping name. Prompt gained a "never substitute a different ingredient" rule; script retries a recipe solo on a count mismatch
+- [x] `/code-review` (standards + spec): dairy-only percent strip (chocolate/vinegar percentages kept), shops-as typing fix + restore-on-rename-back, backfill never fabricates a canonical name, missing prompt examples added, coriander/scallions map entries removed
+- [x] Build + lint + tests clean (244 tests, 10 new)
+- [x] Dairy fat-level words stripped at merge time for names without a shopping name only; canonical names keep Claude's per-recipe judgment (user question during review) — 6 canonical dairy names in the live library kept a fat level (light cream, nonfat greek yogurt, light coconut milk, light sour cream, fat free ultrafiltered milk, reduced fat cream cheese); editable via "Shops as"
+- [ ] PR opened — user verifies a real week's list merges yogurt variants
 
 ### 8D: Share
 - [ ] D1 Migration 016 `recipe_shares` + `get_shared_recipe` / `record_share_save` RPCs (apply before merge)

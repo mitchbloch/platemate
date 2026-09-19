@@ -1,3 +1,4 @@
+import { normalizeShoppingName } from "./shoppingName";
 import type {
   CuisineType,
   DietaryFlag,
@@ -93,14 +94,22 @@ function validateIngredient(value: unknown, index: number): Ingredient | string 
     return `Ingredient "${name}" has an invalid category`;
   }
 
+  if (v.shoppingName !== undefined && v.shoppingName !== null && typeof v.shoppingName !== "string") {
+    return `Ingredient "${name}" has an invalid shopping name`;
+  }
+
   const unit = typeof v.unit === "string" && v.unit.trim() ? v.unit.trim() : null;
   const preparation = typeof v.preparation === "string" && v.preparation.trim() ? v.preparation.trim() : null;
   const structured = { name, quantity, unit, preparation };
-  return {
+  const ingredient: Ingredient = {
     ...structured,
     category: v.category,
     raw: typeof v.raw === "string" && v.raw.trim() ? v.raw.trim() : ingredientRaw(structured),
   };
+  // Only carry the key when the caller sent it: older recipes have no
+  // shoppingName and the merge falls back to the display name.
+  if ("shoppingName" in v) ingredient.shoppingName = normalizeShoppingName(v.shoppingName);
+  return ingredient;
 }
 
 /**

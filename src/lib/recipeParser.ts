@@ -10,6 +10,7 @@ import {
   asNumber,
   asStringOrNull,
 } from "./recipeValidation";
+import { SHOPPING_NAME_RULES, normalizeShoppingName } from "./shoppingName";
 
 // Lazy so importing this module (e.g. in tests) doesn't require an API key
 let anthropicClient: Anthropic | null = null;
@@ -273,7 +274,7 @@ const RECIPE_JSON_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["name", "quantity", "unit", "preparation", "category", "raw"],
+        required: ["name", "quantity", "unit", "preparation", "category", "raw", "shoppingName"],
         properties: {
           name: { type: "string" },
           quantity: { anyOf: [{ type: "number" }, { type: "null" }] },
@@ -281,6 +282,7 @@ const RECIPE_JSON_SCHEMA = {
           preparation: { anyOf: [{ type: "string" }, { type: "null" }] },
           category: { type: "string", enum: ["produce", "meat", "seafood", "dairy", "grain", "canned", "spice", "oil-vinegar", "condiment", "frozen", "other"] },
           raw: { type: "string" },
+          shoppingName: { type: "string" },
         },
       },
     },
@@ -315,7 +317,9 @@ const COMPLETENESS_RULES = `Completeness is critical:
 - Include EVERY ingredient that appears in the source, in order — do not omit, merge, or deduplicate any, including garnishes, "for serving" items, and sauce/marinade sub-lists.
 - Include EVERY instruction step, in order — do not condense multiple steps into one or drop finishing/serving steps.
 - If the source repeats an ingredient in two components (e.g. sauce and marinade), list it twice with its component noted in "preparation".
-- "raw" must be the ingredient line exactly as written in the source.`;
+- "raw" must be the ingredient line exactly as written in the source.
+
+${SHOPPING_NAME_RULES}`;
 
 
 const NUTRITION_GUIDELINES = `Nutrition estimation guidelines:
@@ -415,6 +419,7 @@ function validateParsedRecipe(data: unknown): ParsedRecipe {
       raw: typeof ing.raw === "string" && ing.raw
         ? ing.raw
         : `${ing.quantity ?? ""} ${ing.unit ?? ""} ${ing.name ?? ""}`.trim(),
+      shoppingName: normalizeShoppingName(ing.shoppingName),
     })),
     instructions: (d.instructions as unknown[]).map(String),
     nutrition: {
