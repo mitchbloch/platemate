@@ -92,6 +92,16 @@ describe("validateRecipeUpdate", () => {
     });
   });
 
+  it("carries a shopping name only when the caller sent one", () => {
+    const withKey = validateRecipeUpdate({ ingredients: [ingredient({ shoppingName: " Greek Yogurt " })] });
+    expect(withKey.ok && withKey.updates.ingredients?.[0].shoppingName).toBe("greek yogurt");
+    const cleared = validateRecipeUpdate({ ingredients: [ingredient({ shoppingName: null })] });
+    expect(cleared.ok && cleared.updates.ingredients?.[0].shoppingName).toBeNull();
+    const absent = validateRecipeUpdate({ ingredients: [ingredient()] });
+    expect(absent.ok && "shoppingName" in absent.updates.ingredients![0]).toBe(false);
+    expect(validateRecipeUpdate({ ingredients: [ingredient({ shoppingName: 5 })] }).ok).toBe(false);
+  });
+
   it("rejects an empty payload and non-object bodies", () => {
     expect(validateRecipeUpdate({})).toEqual({ ok: false, error: "Nothing to update" });
     expect(validateRecipeUpdate(null).ok).toBe(false);

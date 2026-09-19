@@ -76,8 +76,8 @@ export function fromEditableRecipe(recipe: EditableRecipe): Required<RecipeUpdat
     difficulty: recipe.difficulty,
     servings: recipe.servings,
     totalTimeMinutes: recipe.totalTimeMinutes,
-    ingredients: recipe.ingredients.map(({ name, quantity, unit, preparation, category, raw }) => ({
-      name, quantity, unit, preparation, category, raw,
+    ingredients: recipe.ingredients.map(({ name, quantity, unit, preparation, category, raw, shoppingName }) => ({
+      name, quantity, unit, preparation, category, raw, shoppingName,
     })),
     instructions: recipe.instructions.map((s) => s.text),
     tags: recipe.tags,
@@ -116,6 +116,11 @@ export default function RecipeEditor({
       value.ingredients.map((ing) => {
         if (ing.key !== key) return ing;
         const next = { ...ing, ...patch };
+        // A renamed ingredient's canonical shopping name is no longer trustworthy;
+        // drop it so the grocery merge falls back to the new name.
+        if (patch.name !== undefined && patch.name !== ing.name && patch.shoppingName === undefined) {
+          next.shoppingName = null;
+        }
         // raw is derived from the structured fields — they are what the app
         // displays and what the grocery list reads
         return { ...next, raw: ingredientRaw(next) };
@@ -357,7 +362,9 @@ function IngredientRow({
           aria-expanded={showMore}
           className="min-h-9 px-1 text-xs text-text-muted hover:text-text-secondary"
         >
-          {showMore ? "Less" : `${CATEGORY_LABELS[ingredient.category]}${ingredient.preparation ? ` · ${ingredient.preparation}` : ""} · edit`}
+          {showMore
+            ? "Less"
+            : `${CATEGORY_LABELS[ingredient.category]}${ingredient.preparation ? ` · ${ingredient.preparation}` : ""}${ingredient.shoppingName ? ` · shops as ${ingredient.shoppingName}` : ""} · edit`}
         </button>
         {showMore && (
           <>
@@ -377,6 +384,15 @@ function IngredientRow({
               onChange={(e) => onChange({ preparation: e.target.value || null })}
               placeholder="Prep (diced, minced...)"
               aria-label={`Ingredient ${n} preparation`}
+              className={`min-w-0 flex-1 ${small} py-1 text-xs`}
+            />
+            <input
+              type="text"
+              value={ingredient.shoppingName ?? ""}
+              onChange={(e) => onChange({ shoppingName: e.target.value.trim().toLowerCase() || null })}
+              placeholder="Shops as (greek yogurt)"
+              title="Brand-agnostic name used to merge this with other recipes on the grocery list"
+              aria-label={`Ingredient ${n} shopping name`}
               className={`min-w-0 flex-1 ${small} py-1 text-xs`}
             />
           </>

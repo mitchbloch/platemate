@@ -165,11 +165,39 @@ const PLURAL_EXCEPTIONS = new Set([
   "lemongrass",
 ]);
 
+// Marketing/spec tokens that never change what you buy: "100% greek yogurt",
+// "2% milk" (fat level is handled by shoppingName when it matters).
+const PERCENT_TOKEN = /\b\d+(?:\.\d+)?\s*%\s*/g;
+
+// Spelling variants that are the same word
+const SPELLING_VARIANTS: Record<string, string> = {
+  yoghurt: "yogurt",
+  yoghurts: "yogurts",
+  chilli: "chili",
+  chillies: "chilies",
+  chile: "chili",
+  chiles: "chilies",
+  aubergine: "eggplant",
+  courgette: "zucchini",
+  coriander: "cilantro",
+  scallions: "scallion",
+};
+
 export function normalizeIngredientName(name: string): string {
   let normalized = name.toLowerCase().trim();
 
   // Strip parentheticals: "tomatoes (Roma)" → "tomatoes"
   normalized = normalized.replace(/\s*\([^)]*\)/g, "");
+
+  // Strip percent tokens: "100% greek yogurt" → "greek yogurt"
+  normalized = normalized.replace(PERCENT_TOKEN, " ");
+
+  // Unify spellings word by word: "greek yoghurt" → "greek yogurt"
+  normalized = normalized
+    .split(/\s+/)
+    .map((w) => SPELLING_VARIANTS[w] ?? w)
+    .join(" ")
+    .trim();
 
   // Strip trailing commas and whitespace
   normalized = normalized.replace(/[,\s]+$/, "");
@@ -392,9 +420,23 @@ interface MealWithRecipe {
 interface AccumulatorEntry {
   normalizedName: string;
   displayName: string; // keep the first occurrence's casing
+  /** True when displayName came from a canonical shoppingName — it wins
+   *  over longer-but-branded original names when entries merge. */
+  canonicalDisplay: boolean;
   items: { quantity: number | null; unit: string | null }[];
   category: Ingredient["category"];
   recipeIds: Set<string>;
+}
+
+/** The text an ingredient is matched and named by on the grocery list:
+ *  the brand-agnostic shoppingName when the importer produced one, else
+ *  the recipe's own ingredient name. */
+export function groceryNameFor(ingredient: Pick<Ingredient, "name" | "shoppingName">): {
+  text: string;
+  canonical: boolean;
+} {
+  const canonical = ingredient.shoppingName?.trim();
+  return canonical ? { text: canonical, canonical: true } : { text: ingredient.name, canonical: false };
 }
 
 export function deduplicateIngredients(
@@ -413,7 +455,8 @@ export function deduplicateIngredients(
         : 1;
 
     for (const ingredient of recipe.ingredients) {
-      const normalizedName = normalizeIngredientName(ingredient.name);
+      const grocery = groceryNameFor(ingredient);
+      const normalizedName = normalizeIngredientName(grocery.text);
       const matchingKey = stripQualifiers(normalizedName);
       let normalizedUnit = normalizeUnit(ingredient.unit);
 
@@ -439,15 +482,19 @@ export function deduplicateIngredients(
       const existing = accumulator.get(key);
       if (existing) {
         existing.items.push({ quantity: adjustedQuantity, unit: normalizedUnit });
-        existing.displayName = pickDisplayName(
-          existing.displayName,
-          toDisplayName(ingredient.name),
-        );
+        if (grocery.canonical && !existing.canonicalDisplay) {
+          existing.displayName = toDisplayName(grocery.text);
+          existing.canonicalDisplay = true;
+        } else if (!grocery.canonical && !existing.canonicalDisplay) {
+          existing.displayName = pickDisplayName(existing.displayName, toDisplayName(grocery.text));
+        }
+        // canonical + canonical: keep the first (they normalize to the same key)
         existing.recipeIds.add(recipe.id);
       } else {
         accumulator.set(key, {
           normalizedName: matchingKey,
-          displayName: toDisplayName(ingredient.name),
+          displayName: toDisplayName(grocery.text),
+          canonicalDisplay: grocery.canonical,
           items: [{ quantity: adjustedQuantity, unit: normalizedUnit }],
           category: ingredient.category,
           recipeIds: new Set([recipe.id]),

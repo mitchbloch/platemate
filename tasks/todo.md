@@ -238,9 +238,10 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] Follow-up (user report: Recipes search "backspaces and overwrites" fast typing): the URL mirror used `router.replace`, which on this dynamic page is a server round-trip; when it landed after more typing, the adopt-URL logic echoed the older query into the input. Now mirrors via native `history.replaceState` (no navigation) and adopts the URL only on `popstate` (+1 regression test) — PR #35
 
 ### 8C: Brand-agnostic grocery merge
-- [ ] C1 `shoppingName` in `Ingredient`, JSON schema, prompt rules, validator
-- [ ] C2 Dedup keys/displays on `shoppingName`; percent-token + spelling rules; tests
-- [ ] C3 `scripts/backfill-shopping-names.ts` (service-role, Haiku 4.5, idempotent, `--dry-run`); run once; Phase 5B doc marked superseded
+- [x] C1 `shoppingName` in `Ingredient`, JSON schema (required), `SHOPPING_NAME_RULES` in both import prompts, validator passes it through; editor clears it on rename and exposes a "Shops as" field
+- [x] C2 Dedup keys/displays on `shoppingName` (canonical display wins over longer branded names); `\d+%` tokens stripped; spelling map (yoghurt→yogurt, chilli→chili, aubergine→eggplant, …); 10 new tests
+- [x] C3 `scripts/backfill-shopping-names.ts` via `npm run backfill:shopping-names` (tsx; Haiku 4.5 structured output; batches of 20; idempotent; `--dry-run`, `--limit`); Phase 5B doc marked superseded
+- [ ] C3 run the backfill once (dry run reviewed, then live)
 - [ ] Build + lint + tests clean; `/code-review`; PR; verify a real week's list merges yogurt variants
 
 ### 8D: Share
