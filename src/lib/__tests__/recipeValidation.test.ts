@@ -65,8 +65,8 @@ describe("validateRecipeUpdate", () => {
     expect(validateRecipeUpdate({ servings: "4" }).ok).toBe(false);
   });
 
-  it("treats a zero total time as unknown", () => {
-    expect(validateRecipeUpdate({ totalTimeMinutes: 0 })).toEqual({ ok: true, updates: { totalTimeMinutes: null } });
+  it("stores an explicit 0 total time as 0 (validate, never coerce)", () => {
+    expect(validateRecipeUpdate({ totalTimeMinutes: 0 })).toEqual({ ok: true, updates: { totalTimeMinutes: 0 } });
     expect(validateRecipeUpdate({ totalTimeMinutes: null })).toEqual({ ok: true, updates: { totalTimeMinutes: null } });
     expect(validateRecipeUpdate({ totalTimeMinutes: -5 }).ok).toBe(false);
   });

@@ -146,7 +146,7 @@ export function validateRecipeUpdate(body: unknown): ValidationResult {
         return fail("Total time must be a whole number of minutes");
       }
     }
-    updates.totalTimeMinutes = b.totalTimeMinutes === 0 ? null : (b.totalTimeMinutes as number | null);
+    updates.totalTimeMinutes = b.totalTimeMinutes as number | null;
   }
   if ("ingredients" in b) {
     if (!Array.isArray(b.ingredients)) return fail("Ingredients must be a list");

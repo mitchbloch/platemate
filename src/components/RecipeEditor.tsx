@@ -76,7 +76,9 @@ export function fromEditableRecipe(recipe: EditableRecipe): Required<RecipeUpdat
     difficulty: recipe.difficulty,
     servings: recipe.servings,
     totalTimeMinutes: recipe.totalTimeMinutes,
-    ingredients: recipe.ingredients.map(({ key: _key, ...ing }) => ing),
+    ingredients: recipe.ingredients.map(({ name, quantity, unit, preparation, category, raw }) => ({
+      name, quantity, unit, preparation, category, raw,
+    })),
     instructions: recipe.instructions.map((s) => s.text),
     tags: recipe.tags,
     isSlowCooker: recipe.isSlowCooker,

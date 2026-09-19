@@ -216,16 +216,18 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 
 ### 8A: Mobile QoL fixes
 
-> **Resume here (paused 2026-09-14 night):** all code for A1–A4, A6 is written on branch `feature/phase8a-mobile-qol` (uncommitted). Remaining: rerun build + lint, A5 walkthrough, `/code-review`, PR.
+> 2026-09-19: Batch A complete and PR'd from `feature/phase8a-mobile-qol`. Live onboarding walkthrough deferred to the start of Batch B (user decision); flow reviewed by code instead.
 - [x] A1 Recipe pages use `getRecipe`/`listRecipes` (raw-row root cause); single `rowToRecipe`; `recipeValidation.ts` + PATCH 400s; RecipeDetail re-syncs from props
 - [x] A2 Shared `RecipeEditor` (structured ingredient rows, `raw` regenerated, stable keys) used by RecipeForm + RecipeDetail
 - [x] A3 `grid-cols-1` on the 4 mobile grids; NutritionBadge compact wraps; 390px repro before/after (Chrome, 390px: Add button right edge 418px vs 374px content edge before → 344px after, button 44px tall)
 - [x] A4 44px targets; `touch-action: manipulation`; middleware `getClaims()`; `cache()` on auth helpers; `loading.tsx` ×4; `useLinkStatus` nav + optimistic active tab; solid bottom bar; `useResumeRefresh` (≥5 min)
-- [~] A5 `NumberField` replaces the 5 coerce-on-keystroke inputs (HouseholdSettings ×5, RecipeEditor ×3; grocery qty inputs already held strings, got `inputMode="decimal"` only) — walkthrough NOT yet run
-- [ ] A5 walkthrough: throwaway account `mbloch98+platemate-test@gmail.com` (password in git-ignored `.env.test.local`, never printed); confirm whether Supabase email confirmation is on; run signup → household → preferences → tour at 390px via `npm run dev` + Chrome; log fixes here; delete the account + household + `.env.test.local` at the end of Phase 8
-- [ ] A verification still pending: `npm run build` and `npm run lint` were started but killed at the 2026-09-14 pause (tsc clean, 191 tests green) — rerun both before the PR
+- [x] A5 `NumberField` replaces the coerce-on-keystroke inputs (HouseholdSettings ×5, RecipeEditor ×3; grocery qty inputs already held strings, got `inputMode="decimal"` only)
+- [x] A5 code review of the onboarding flow: FIXED tour tooltip rendering off-screen on phones (always placed below its target; on mobile the targets are the bottom tab bar) — now flips above via `positionTooltip` (+4 tests); tour buttons 44px
+- [ ] A5 live walkthrough → moved to start of Batch B: throwaway account `mbloch98+platemate-test@gmail.com` (password in git-ignored `.env.test.local`, never printed); confirm whether Supabase email confirmation is on; signup → household → preferences → tour at phone width; delete account + household + `.env.test.local` at end of Phase 8
+- [x] Verification: tsc clean, `npm run lint` clean, `npm run build` passing, 204 tests (46 new incl. 8 middleware routing tests)
 - [x] A6 Testing Library + jsdom; tests for NumberField (9), RecipeEditor (8), recipeValidation (10), Nav (5), rowToRecipe (1) — 191 total
-- [ ] Build + lint + tests clean; `/code-review`; PR; on-device verification
+- [x] `/code-review` (standards + spec agents): fixed 0-minute time being coerced to null, unused-var warning, stale spec text; added middleware tests for the auth-critical change
+- [ ] PR opened — awaiting user's on-device verification before Batch B
 
 ### 8B: Search + weekly staple editing
 - [ ] B1 `recipeSearch.ts` + tests; `RecipeLibrary` client component with `?q=`; picker search input (Suggestions hidden while searching)

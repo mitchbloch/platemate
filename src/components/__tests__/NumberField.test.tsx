@@ -91,6 +91,16 @@ describe("NumberField", () => {
     expect(screen.getByTestId("committed")).toHaveTextContent("1.5");
   });
 
+  it("strips thousands separators in integer mode instead of turning them into decimals", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={1} min={0} max={5000} integer />);
+    const input = screen.getByLabelText("count");
+    await user.clear(input);
+    await user.type(input, "1,234");
+    await user.tab();
+    expect(screen.getByTestId("committed")).toHaveTextContent("1234");
+  });
+
   it("ignores garbage and keeps the previous value", async () => {
     const user = userEvent.setup();
     render(<Harness initial={2} min={1} integer />);

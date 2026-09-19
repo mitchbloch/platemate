@@ -55,7 +55,7 @@ Routine calls made without asking: search hides the Suggestions banner while a q
 - `recipes/[id]/page.tsx` → `getRecipe(id)`; `recipes/page.tsx` → `listRecipes()` (also fixes the library page not scoping by active household).
 - Delete the duplicate `rowToRecipe` in `mealPlans.ts`; export the one in `recipes.ts`.
 - New `src/lib/recipeValidation.ts`: `validateRecipeUpdate(body): { ok: true; updates } | { ok: false; error }`. Coerces enums (reuse the `asEnum`/`asNumber` helpers by exporting them from `recipeParser.ts`), integer `servings ≥ 1`, `totalTimeMinutes ≥ 0 | null`, ingredient shape (name non-empty, quantity number|null, category enum). PATCH returns 400 with the message; `RecipeDetail` shows it instead of "Failed to save".
-- `RecipeDetail` re-syncs its local state from the `initial` prop after `router.refresh()` (today `useState(initial)` ignores prop updates, so a second edit in the same session starts from stale state).
+- The detail page keys `RecipeDetail` on `recipe.updatedAt`, so after a save + `router.refresh()` it remounts with the fresh row (today `useState(initial)` ignores prop updates, so a second edit in the same session starts from stale state). `updateRecipe` always issues an UPDATE, so `updated_at` changes on every save.
 
 ### A2. Shared `RecipeEditor`
 - `src/components/RecipeEditor.tsx`: props `{ value: EditableRecipe; onChange(next) }` where `EditableRecipe = Pick<ParsedRecipe, title | description | cuisine | mealType | difficulty | servings | totalTimeMinutes | ingredients | instructions | tags | isSlowCooker>`.
@@ -77,9 +77,9 @@ Routine calls made without asking: search hides the Suggestions banner while a q
 - `src/hooks/useResumeRefresh.ts` mounted from a tiny client component in `layout.tsx`: on `visibilitychange` → visible after ≥ 5 min hidden, call `supabase.auth.getSession()` (forces token refresh) then `router.refresh()`.
 
 ### A5. `NumberField` + onboarding walkthrough
-- `src/components/NumberField.tsx`: `{ value: number | null; onChange(n: number | null); min?; max?; integer?: boolean; allowEmpty?: boolean; className?; id?; ariaLabel? }`. Keeps a local string while focused; commits a clamped number on blur and Enter; `inputMode="numeric"` (integer) or `"decimal"`; never re-renders a value the user didn't type.
-- Replaces: meal schedule ×4 and default servings (`HouseholdSettings`), servings and time (`RecipeEditor`), quantity inputs (`GroceryListView` add + inline edit).
-- Walkthrough at 390px: signup → household create/join → preferences → tour → settings. Fix what's found; log each fix in `todo.md` under A5. Needs a throwaway account (deleted afterward).
+- `src/components/NumberField.tsx`: `{ value: number | null; onChange(n: number | null); min?; max?; integer?: boolean; allowEmpty?: boolean; className?; id?; placeholder?; "aria-label"? }`. Integer mode strips thousands separators; decimal mode accepts a comma as the decimal point. Keeps a local string while focused; commits a clamped number on blur and Enter; `inputMode="numeric"` (integer) or `"decimal"`; never re-renders a value the user didn't type.
+- Replaces: meal schedule ×4 and default servings (`HouseholdSettings`), servings and time (`RecipeEditor`), ingredient quantity (`RecipeEditor`). The two `GroceryListView` quantity inputs already held string state and parsed on submit (no coerce-on-keystroke bug), so they only gained `inputMode="decimal"`.
+- Walkthrough: by user decision (2026-09-19) the live phone-width walkthrough moved to the start of Batch B; Batch A reviewed the flow by code instead. Found and fixed: the tour tooltip was always positioned *below* its target, and on phones the targets are the bottom tab bar, so the card rendered off-screen — it now flips above (`positionTooltip`, tested). Tour buttons raised to 44px.
 
 ### A6. Component tests
 - `@testing-library/react`, `@testing-library/user-event`, `jsdom` dev deps; per-file `// @vitest-environment jsdom`.

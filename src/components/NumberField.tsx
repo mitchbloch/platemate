@@ -73,7 +73,11 @@ export default function NumberField({
       placeholder={placeholder}
       aria-label={ariaLabel}
       onFocus={() => setDraft(value === null ? "" : String(value))}
-      onChange={(e) => setDraft(e.target.value.replace(",", "."))}
+      onChange={(e) =>
+        // Integers: "1,234" is a thousands separator. Decimals: a locale
+        // decimal comma ("1,5"). Never let a comma silently change magnitude.
+        setDraft(integer ? e.target.value.replace(/,/g, "") : e.target.value.replace(",", "."))
+      }
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
