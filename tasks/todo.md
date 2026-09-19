@@ -245,7 +245,8 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] `/code-review` (standards + spec): dairy-only percent strip (chocolate/vinegar percentages kept), shops-as typing fix + restore-on-rename-back, backfill never fabricates a canonical name, missing prompt examples added, coriander/scallions map entries removed
 - [x] Build + lint + tests clean (244 tests, 10 new)
 - [x] Dairy fat-level words stripped at merge time for names without a shopping name only; canonical names keep Claude's per-recipe judgment (user question during review) — 6 canonical dairy names in the live library kept a fat level (light cream, nonfat greek yogurt, light coconut milk, light sour cream, fat free ultrafiltered milk, reduced fat cream cheese); editable via "Shops as"
-- [ ] PR opened — user verifies a real week's list merges yogurt variants
+- [x] PR #36 merged 2026-09-19
+- [x] Enhancement (user, 2026-09-19): plan picker rows link to the recipe detail page; picker state (open/query/filters) mirrored into the URL by the new shared `useUrlMirror` hook (RecipeLibrary refactored onto it); detail page shows "← Back to plan" via a same-origin-checked `?from=` param (+4 planner tests, +2 navigation tests)
 
 ### 8D: Share
 - [ ] D1 Migration 016 `recipe_shares` + `get_shared_recipe` / `record_share_save` RPCs (apply before merge)

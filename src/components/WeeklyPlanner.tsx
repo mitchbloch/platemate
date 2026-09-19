@@ -2,8 +2,11 @@
 
 import { useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useUrlMirror } from "@/hooks/useUrlMirror";
 import type { Recipe, MealPlan, MealPlanRecipe, CuisineType, MealType } from "@/lib/types";
 import { CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
+import { CUISINES, MEAL_TYPES } from "@/lib/recipeValidation";
 import { suggestRecipes } from "@/lib/recommendations";
 import { matchesRecipeQuery } from "@/lib/recipeSearch";
 import RecipeSearchInput from "./RecipeSearchInput";
@@ -61,13 +64,39 @@ export default function WeeklyPlanner({
   const [recipes] = useState<Recipe[]>(initialRecipes);
   const [lastCookedDates, setLastCookedDates] = useState(initialLastCookedDates);
   const [loading, setLoading] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
+
+  // Picker state lives in the URL (?add=1&q=&cuisine=&type=) so that opening
+  // a recipe from the picker and coming back lands you where you were.
+  const searchParams = useSearchParams();
+  const urlCuisine = searchParams.get("cuisine");
+  const urlType = searchParams.get("type");
+  const [showPicker, setShowPicker] = useState(searchParams.get("add") === "1");
   const [adding, setAdding] = useState<Set<string>>(new Set()); // recipeIds with adds in flight
 
   // Recipe picker filters
-  const [filterCuisine, setFilterCuisine] = useState<CuisineType | "all">("all");
-  const [filterMealType, setFilterMealType] = useState<MealType | "all">("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCuisine, setFilterCuisine] = useState<CuisineType | "all">(
+    CUISINES.includes(urlCuisine as CuisineType) ? (urlCuisine as CuisineType) : "all",
+  );
+  const [filterMealType, setFilterMealType] = useState<MealType | "all">(
+    MEAL_TYPES.includes(urlType as MealType) ? (urlType as MealType) : "all",
+  );
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
+
+  const pickerParams = {
+    add: showPicker ? "1" : "",
+    q: showPicker ? searchQuery : "",
+    cuisine: showPicker && filterCuisine !== "all" ? filterCuisine : "",
+    type: showPicker && filterMealType !== "all" ? filterMealType : "",
+  };
+  useUrlMirror(pickerParams);
+
+  /** Link to a recipe that knows how to bring you back here. */
+  function recipeHref(recipeId: string): string {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(pickerParams)) if (v) qs.set(k, v);
+    const from = qs.toString() ? `/plan?${qs}` : "/plan";
+    return `/recipes/${recipeId}?from=${encodeURIComponent(from)}`;
+  }
 
   // Completion flow
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
@@ -491,7 +520,7 @@ export default function WeeklyPlanner({
                         className="flex items-center justify-between text-sm"
                       >
                         <span className="text-text-secondary">
-                          <span className="font-medium text-text">{s.recipe.title}</span>
+                          <Link href={recipeHref(s.recipe.id)} className="font-medium text-text hover:text-primary">{s.recipe.title}</Link>
                           {" "}
                           <span className="text-xs text-text-muted">
                             &mdash; {s.reason}
@@ -540,9 +569,14 @@ export default function WeeklyPlanner({
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium text-text truncate">
-                            {r.title}
-                          </div>
+                          <Link
+                            href={recipeHref(r.id)}
+                            className="group flex min-h-9 items-center gap-1 text-sm font-medium text-text hover:text-primary"
+                            title={r.title}
+                          >
+                            <span className="truncate">{r.title}</span>
+                            <span aria-hidden="true" className="shrink-0 text-text-muted group-hover:text-primary">&rsaquo;</span>
+                          </Link>
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             <span className="text-xs text-text-muted">
                               {CUISINE_LABELS[r.cuisine]}

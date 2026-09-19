@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Nav from "@/components/Nav";
 import WeeklyPlanner from "@/components/WeeklyPlanner";
 import { listRecipes } from "@/lib/recipes";
@@ -20,13 +21,16 @@ export default async function PlanPage() {
     <>
       <Nav />
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <WeeklyPlanner
-          initialRecipes={recipes}
-          initialPlan={plan}
-          initialMeals={meals}
-          initialWeekStart={weekStart}
-          lastCookedDates={lastCookedDates}
-        />
+        {/* useSearchParams needs a Suspense boundary */}
+        <Suspense>
+          <WeeklyPlanner
+            initialRecipes={recipes}
+            initialPlan={plan}
+            initialMeals={meals}
+            initialWeekStart={weekStart}
+            lastCookedDates={lastCookedDates}
+          />
+        </Suspense>
       </main>
     </>
   );
