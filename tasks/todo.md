@@ -230,8 +230,8 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] PR #33 merged 2026-09-19 after on-device verification
 
 ### 8B: Search + weekly staple editing
-- [ ] B1 `recipeSearch.ts` + tests; `RecipeLibrary` client component with `?q=`; picker search input (Suggestions hidden while searching)
-- [ ] B2 `PATCH /api/pinned-items` + `updatePinnedItem`; staples editor (all staples, inline edit, skipped → restore); this-week item updated after staple PATCH; delete `PinnedItemsManager.tsx`
+- [x] B1 `recipeSearch.ts` (+8 tests); `RecipeLibrary` + shared `RecipeSearchInput` with `?q=` mirrored via debounced replace (+5 component tests); planner picker search, Suggestions hidden while filtering
+- [x] B2 `PATCH /api/pinned-items` validated by `weeklyStaples.ts` (+6 tests) + `updatePinnedItem`; staples editor lists every staple with Edit / Skip / Restore / Add this week / Remove; edits mirror onto this week's unchecked copy (+5 component tests); fuzzy staple↔item matching via `normalizeForMatching`; `PinnedItemsManager.tsx` deleted
 - [ ] Build + lint + tests clean; `/code-review`; PR; on-device verification
 
 ### 8C: Brand-agnostic grocery merge

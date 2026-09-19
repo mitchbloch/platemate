@@ -66,6 +66,35 @@ export async function addPinnedItem(item: {
   return rowToPinnedItem(data);
 }
 
+export async function updatePinnedItem(
+  id: string,
+  updates: Partial<{
+    name: string;
+    category: string;
+    store: StoreName;
+    quantity: number | null;
+    unit: string | null;
+  }>,
+): Promise<PinnedGroceryItem> {
+  const supabase = await createClient();
+  const row: Record<string, unknown> = {};
+  if (updates.name !== undefined) row.name = updates.name;
+  if (updates.category !== undefined) row.category = updates.category;
+  if (updates.store !== undefined) row.store = updates.store;
+  if (updates.quantity !== undefined) row.quantity = updates.quantity;
+  if (updates.unit !== undefined) row.unit = updates.unit;
+
+  const { data, error } = await supabase
+    .from("pinned_grocery_items")
+    .update(row)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return rowToPinnedItem(data);
+}
+
 export async function removePinnedItem(id: string): Promise<void> {
   const supabase = await createClient();
 

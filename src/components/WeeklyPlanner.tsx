@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { Recipe, MealPlan, MealPlanRecipe, CuisineType, MealType } from "@/lib/types";
 import { CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
 import { suggestRecipes } from "@/lib/recommendations";
+import { matchesRecipeQuery } from "@/lib/recipeSearch";
+import RecipeSearchInput from "./RecipeSearchInput";
 import NutritionBadge from "./NutritionBadge";
 import WeeklyNutritionSummary from "./WeeklyNutritionSummary";
 
@@ -65,6 +67,7 @@ export default function WeeklyPlanner({
   // Recipe picker filters
   const [filterCuisine, setFilterCuisine] = useState<CuisineType | "all">("all");
   const [filterMealType, setFilterMealType] = useState<MealType | "all">("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Completion flow
   const [showCompletePrompt, setShowCompletePrompt] = useState(false);
@@ -103,9 +106,10 @@ export default function WeeklyPlanner({
     return suggestions.filter((s) => {
       if (filterCuisine !== "all" && s.recipe.cuisine !== filterCuisine) return false;
       if (filterMealType !== "all" && s.recipe.mealType !== filterMealType) return false;
-      return true;
+      return matchesRecipeQuery(s.recipe, searchQuery);
     });
-  }, [suggestions, filterCuisine, filterMealType]);
+  }, [suggestions, filterCuisine, filterMealType, searchQuery]);
+  const isFiltering = filterCuisine !== "all" || filterMealType !== "all" || searchQuery.trim() !== "";
 
   // Top suggestions for the banner
   const topSuggestions = suggestions.slice(0, 3);
@@ -438,12 +442,23 @@ export default function WeeklyPlanner({
                 </button>
               </div>
 
+              {/* Search */}
+              <div className="mb-3">
+                <RecipeSearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  resultCount={filteredRecipes.length}
+                  totalCount={recipes.length}
+                />
+              </div>
+
               {/* Filters */}
               <div className="mb-4 flex flex-wrap gap-2">
                 <select
                   value={filterCuisine}
                   onChange={(e) => setFilterCuisine(e.target.value as CuisineType | "all")}
-                  className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+                  aria-label="Filter by cuisine"
+                  className="min-h-11 rounded-lg border border-border bg-surface px-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
                 >
                   <option value="all">All Cuisines</option>
                   {Object.entries(CUISINE_LABELS).map(([val, label]) => (
@@ -453,7 +468,8 @@ export default function WeeklyPlanner({
                 <select
                   value={filterMealType}
                   onChange={(e) => setFilterMealType(e.target.value as MealType | "all")}
-                  className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
+                  aria-label="Filter by meal type"
+                  className="min-h-11 rounded-lg border border-border bg-surface px-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
                 >
                   <option value="all">All Types</option>
                   {Object.entries(MEAL_TYPE_LABELS).map(([val, label]) => (
@@ -463,7 +479,7 @@ export default function WeeklyPlanner({
               </div>
 
               {/* Suggestions Banner */}
-              {topSuggestions.length > 0 && filterCuisine === "all" && filterMealType === "all" && (
+              {topSuggestions.length > 0 && !isFiltering && (
                 <div className="mb-4 rounded-xl bg-accent-light/50 p-3">
                   <h3 className="mb-1.5 text-xs font-medium text-accent">
                     Suggestions
@@ -499,7 +515,7 @@ export default function WeeklyPlanner({
               {/* Recipe Grid */}
               {filteredRecipes.length === 0 ? (
                 <p className="py-4 text-center text-sm text-text-muted">
-                  No recipes match your filters.
+                  {searchQuery.trim() ? `No recipes match “${searchQuery.trim()}”.` : "No recipes match your filters."}
                   {recipes.length === 0 && (
                     <>
                       {" "}
