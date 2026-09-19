@@ -223,11 +223,11 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] A4 44px targets; `touch-action: manipulation`; middleware `getClaims()`; `cache()` on auth helpers; `loading.tsx` ×4; `useLinkStatus` nav + optimistic active tab; solid bottom bar; `useResumeRefresh` (≥5 min)
 - [x] A5 `NumberField` replaces the coerce-on-keystroke inputs (HouseholdSettings ×5, RecipeEditor ×3; grocery qty inputs already held strings, got `inputMode="decimal"` only)
 - [x] A5 code review of the onboarding flow: FIXED tour tooltip rendering off-screen on phones (always placed below its target; on mobile the targets are the bottom tab bar) — now flips above via `positionTooltip` (+4 tests); tour buttons 44px
-- [ ] A5 live walkthrough → moved to start of Batch B: throwaway account `mbloch98+platemate-test@gmail.com` (password in git-ignored `.env.test.local`, never printed); confirm whether Supabase email confirmation is on; signup → household → preferences → tour at phone width; delete account + household + `.env.test.local` at end of Phase 8
+- [x] A5 live walkthrough (done at start of Batch B, 2026-09-19, throwaway account + household "Platemate Test Household" created; phone width via a 390px iframe harness behind a header-stripping localhost proxy). Findings: (1) FIXED — tour tooltip stuck at 0,0 with no spotlight: the tour measured its target once per step, but each step navigates and the new instant loading skeletons unmount that nav before ResizeObserver fires; it now re-locates the target on DOM mutations (+2 DOM tests). (2) Email confirmation is OFF on the Supabase project — signup signs in immediately (security observation, surfaced to user). (3) Preference pills are 30px tall (minor, left as is). Signup, household, preferences, tour and Settings all render correctly at 390px; NumberField verified live (clear → "", type 4 → "4"). Cleanup of the throwaway account + env file still due at end of Phase 8.
 - [x] Verification: tsc clean, `npm run lint` clean, `npm run build` passing, 204 tests (46 new incl. 8 middleware routing tests)
 - [x] A6 Testing Library + jsdom; tests for NumberField (9), RecipeEditor (8), recipeValidation (10), Nav (5), rowToRecipe (1) — 191 total
 - [x] `/code-review` (standards + spec agents): fixed 0-minute time being coerced to null, unused-var warning, stale spec text; added middleware tests for the auth-critical change
-- [ ] PR opened — awaiting user's on-device verification before Batch B
+- [x] PR #33 merged 2026-09-19 after on-device verification
 
 ### 8B: Search + weekly staple editing
 - [ ] B1 `recipeSearch.ts` + tests; `RecipeLibrary` client component with `?q=`; picker search input (Suggestions hidden while searching)
