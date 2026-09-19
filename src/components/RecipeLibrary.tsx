@@ -1,25 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { readUrlParam, useUrlMirror } from "@/hooks/useUrlMirror";
 import type { Recipe } from "@/lib/types";
 import { matchesRecipeQuery } from "@/lib/recipeSearch";
 import RecipeCard from "./RecipeCard";
 import RecipeSearchInput from "./RecipeSearchInput";
-
-const URL_DEBOUNCE_MS = 250;
-
-function readUrlQuery(): string {
-  return new URLSearchParams(window.location.search).get("q") ?? "";
-}
-
-function urlWithQuery(query: string): string {
-  const params = new URLSearchParams(window.location.search);
-  if (query) params.set("q", query);
-  else params.delete("q");
-  const qs = params.toString();
-  return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
-}
 
 /** The recipe grid with a search box. The query lives in `?q=` so that
  *  going back from a recipe returns to the same filtered view. */
@@ -28,28 +15,15 @@ export default function RecipeLibrary({ recipes }: { recipes: Recipe[] }) {
   // the query and the URL merely mirrors it.
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Mirror the query into the URL with the native history API: no server
-  // round-trip (this page is dynamic, so a router navigation would refetch
-  // and re-render on every keystroke), and no echo back into `query` that
-  // could overwrite characters typed in the meantime.
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      if (readUrlQuery() !== query) {
-        window.history.replaceState(window.history.state, "", urlWithQuery(query));
-      }
-    }, URL_DEBOUNCE_MS);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [query]);
+  // Mirror the query into the URL (native history API: no server round-trip
+  // on this dynamic page, no echo of stale text into the input)
+  useUrlMirror({ q: query });
 
   // Back/forward is the only time the URL should drive the input.
   useEffect(() => {
     function onPopState() {
-      setQuery(readUrlQuery());
+      setQuery(readUrlParam("q"));
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);

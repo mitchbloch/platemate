@@ -11,7 +11,13 @@ import { CUISINE_LABELS, DIETARY_FLAG_LABELS, MEAL_TYPE_LABELS } from "@/lib/typ
 const secondaryButton =
   "inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm text-text-secondary transition-colors hover:bg-border-light";
 
-export default function RecipeDetail({ recipe }: { recipe: Recipe }) {
+export default function RecipeDetail({
+  recipe,
+  back = { href: "/recipes", label: "Back to recipes" },
+}: {
+  recipe: Recipe;
+  back?: { href: string; label: string };
+}) {
   // The page keys this component on recipe.updatedAt, so after a save +
   // router.refresh() it remounts with the fresh row — no stale local copy.
   const [draft, setDraft] = useState<EditableRecipe | null>(null);
@@ -64,8 +70,8 @@ export default function RecipeDetail({ recipe }: { recipe: Recipe }) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <Link href="/recipes" className="text-sm text-text-muted transition-colors hover:text-text-secondary">
-            &larr; Back to recipes
+          <Link href={back.href} className="inline-flex min-h-11 items-center text-sm text-text-muted transition-colors hover:text-text-secondary">
+            &larr; {back.label}
           </Link>
           <div className="flex gap-2">
             <button type="button" onClick={() => setDraft(null)} className={secondaryButton}>
@@ -97,8 +103,8 @@ export default function RecipeDetail({ recipe }: { recipe: Recipe }) {
   return (
     <div className="animate-fade-in">
       <div className="mb-4 flex items-center justify-between">
-        <Link href="/recipes" className="text-sm text-text-muted transition-colors hover:text-text-secondary">
-          &larr; Back to recipes
+        <Link href={back.href} className="inline-flex min-h-11 items-center text-sm text-text-muted transition-colors hover:text-text-secondary">
+          &larr; {back.label}
         </Link>
         <div className="flex gap-2">
           <button type="button" onClick={() => setDraft(toEditableRecipe(recipe))} className={secondaryButton}>
