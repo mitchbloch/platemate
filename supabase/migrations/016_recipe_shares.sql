@@ -78,7 +78,7 @@ BEGIN
       'ingredients', r.ingredients,
       'instructions', r.instructions,
       'nutrition', r.nutrition,
-      'dietaryFlags', COALESCE(r.dietary_flags, '{}'::text[]),
+      'dietaryFlags', COALESCE(r.dietary_flags, '[]'::jsonb),
       'tags', r.tags,
       'imageUrl', r.image_url,
       'isSlowCooker', r.is_slow_cooker,
