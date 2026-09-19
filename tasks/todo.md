@@ -257,8 +257,8 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [ ] Build + lint + tests clean; `/security-review`; `/code-review`; PR; end-to-end with a second account
 
 ### 8E: Recipe generation
-- [ ] E1 Migration 017 `recipe_generations` (apply before merge)
-- [ ] E2 `POST /api/generate` (Sonnet 5, structured turns: options | draft, library matches, household prefs, 20-turn cap) + list/get/delete/save routes
-- [ ] E3 `/recipes/generate` page: drafts strip, thread, photo picker with client downscale, option chips, draft card with Save, match cards with View + Add to plan; entry link on `/recipes/add`; "How this was generated" on detail
-- [ ] E4 Tests: prompt builder, validator, digest, route with mocked client
+- [x] E1 Migration 018 `recipe_generations` (applied 2026-09-19 via CLI; real-row probe: insert, anon blocked, updated_at trigger, delete)
+- [x] E2 `POST /api/generate` (Sonnet 5, structured turns: options | draft + library matches + seenIngredients, household prefs, cached library digest, 20-turn cap, refusal → 422) + GET list, GET/DELETE by id, POST save
+- [x] E3 `/recipes/generate` page (`?g=` mirrored to the URL): drafts strip, thread, photo picker with canvas downscale to 1280px JPEG, option chips, draft card with Save/Discard, library matches with View (`?from=` back) + Add to this week; entry link on `/recipes/add`; "See the conversation" on detail
+- [x] E4 Tests: engine (17), route (6), component (6); `npm run eval:generate` live eval script
 - [ ] Build + lint + tests clean; `/code-review`; PR; live eval with the real API

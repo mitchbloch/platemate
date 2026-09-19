@@ -16,6 +16,7 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - **Client components** only when needed (`"use client"` for forms, auth state, interactive planner)
 - **JSONB ingredients** in recipes table (no normalization until Phase 4)
 - **Single Claude API call** per recipe import (extraction + nutrition + per-ingredient `shoppingName` in one pass)
+- **Recipe generation** (`/recipes/generate`): Sonnet 5 chat, one structured-output call per turn returning either up to 3 options or a full `ParsedRecipe` draft plus library matches; household dietary/nutrient priorities in the system prompt; the library digest is the last system block with `cache_control`; photos downscaled client-side and never stored
 - **Grocery merge key is `shoppingName`** (brand-agnostic, "what you'd write on a paper list"); falls back to the ingredient name for recipes imported before Phase 8C. One-time backfill: `npm run backfill:shopping-names` (needs the service-role key in a git-ignored env file — see the script header)
 - **Dual input mode**: URL scraping for recipe sites, freeform text for video/non-scrapable sources
 - **Video auto-extraction**: TikTok (oEmbed), YouTube (oEmbed + meta tags), Instagram (Brave Search cross-post lookup)
@@ -46,13 +47,17 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - `src/lib/pinnedItems.ts` — Pinned grocery staples DAL (Phase 4)
 - `src/lib/pantryItems.ts` — Pantry staples DAL: auto-exclude items you always have (Phase 4)
 - `src/lib/recipeShares.ts` — Share links DAL: one active token per (recipe, sharer), public read via RPC, view/save counts (Phase 8D)
+- `src/lib/recipeGeneration.ts` — Generation engine: prompt blocks (household constraints + cached library digest), structured-output schema, response validation (Phase 8E)
+- `src/lib/recipeGenerations.ts` — Generation chats DAL (household-scoped; saved chats link to their recipe)
+- `src/components/RecipeGenerator.tsx` — Chat UI: drafts strip, options/draft/library-match turns, photo attach with client-side downscale
+- `scripts/eval-generate.ts` — `npm run eval:generate`: 3-turn live eval of the generation prompt (real API, a few cents)
 - `src/lib/navigation.ts` — Same-origin `next`/`from` path validation for deep links
 - `src/lib/supabase/` — Client (browser), server, middleware, auth helpers
 - `src/components/RecipeDetail.tsx` — Recipe view/edit/delete (client component)
 - `src/components/RecipeForm.tsx` — Recipe import flow (URL or text → parse → review → save)
 - `src/components/WeeklyPlanner.tsx` — Meal planner (week nav, picker with filters, suggestions, optimistic add/remove)
 - `src/components/WeeklyNutritionSummary.tsx` — Aggregated weekly nutrition with color-coded flags
-- `supabase/migrations/` — DB schema (001 initial … 015 servings check, 016 recipe shares, 017 share RPC jsonb fix)
+- `supabase/migrations/` — DB schema (001 initial … 016 recipe shares, 017 share RPC jsonb fix, 018 recipe generations)
 
 ## Auth
 - Self-service sign-up; users belong to households (multi-household since migration 009)

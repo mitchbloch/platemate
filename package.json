@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "backfill:shopping-names": "tsx scripts/backfill-shopping-names.ts"
+    "backfill:shopping-names": "tsx scripts/backfill-shopping-names.ts",
+    "eval:generate": "tsx scripts/eval-generate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

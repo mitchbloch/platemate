@@ -244,6 +244,52 @@ export interface SharedRecipe {
   recipe: Omit<Recipe, "id" | "householdId" | "createdAt" | "updatedAt">;
 }
 
+// ── Recipe generation (Phase 8E) ──
+
+export interface GenerationOption {
+  title: string;
+  summary: string;
+}
+
+export interface LibraryMatch {
+  recipeId: string;
+  title: string;
+  reason: string;
+}
+
+export type GenerationMessage =
+  | {
+      role: "user";
+      content: string;
+      /** Photos are not stored; keep how many there were and what Claude saw. */
+      photoCount: number;
+      seenIngredients: string[];
+      at: string;
+    }
+  | {
+      role: "assistant";
+      reply: string;
+      options: GenerationOption[] | null;
+      recipe: ParsedRecipe | null;
+      libraryMatches: LibraryMatch[];
+      at: string;
+    };
+
+export type GenerationStatus = "active" | "saved";
+
+export interface RecipeGeneration {
+  id: string;
+  householdId: string;
+  createdBy: string;
+  title: string;
+  messages: GenerationMessage[];
+  draft: ParsedRecipe | null;
+  status: GenerationStatus;
+  savedRecipeId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GroceryListWithItems {
   list: GroceryList;
   items: GroceryListItem[];

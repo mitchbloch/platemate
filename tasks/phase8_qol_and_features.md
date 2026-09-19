@@ -165,7 +165,7 @@ create unique index recipe_shares_active_unique on recipe_shares(recipe_id, crea
 
 ## Batch E — Recipe generation
 
-### E1. Schema (migration 017)
+### E1. Schema (migration 018 — 017 was taken by the share-RPC hotfix)
 ```sql
 create table recipe_generations (
   id uuid primary key default gen_random_uuid(),
@@ -183,16 +183,16 @@ create table recipe_generations (
 ```
 
 ### E2. API
-- `POST /api/generate` `{ generationId?, message, images?: base64jpeg[] (≤3, ≤600KB each) }` → load/create conversation → build Claude messages (persisted photo turns replaced by `[photo] ingredients seen: …`) → Sonnet 5, `maxDuration = 60`, structured output:
-  `{ reply: string, options: [{ title, summary }] | null, recipe: ParsedRecipe | null, libraryMatches: [{ recipeId, reason }] }`
+- `POST /api/generate` `{ generationId?, message, images?: base64jpeg[] (≤3, ≤600KB each) }` → load/create conversation → build Claude messages (persisted photo turns replaced by `[N photos attached earlier. Ingredients seen: …]`) → Sonnet 5, `maxDuration = 60`, structured output:
+  `{ reply: string, options: [{ title, summary }] | null, recipe: ParsedRecipe | null, libraryMatches: [{ recipeId, reason }], seenIngredients: string[] }` — `seenIngredients` is how photo content survives without storing bytes
   → validate (`validateParsedRecipe` for the draft; `libraryMatches` filtered to real household recipe ids) → append assistant message, persist, return the turn. 20-turn cap → 409.
 - System prompt: role, household dietary preferences, nutrition priorities with the app's thresholds, default servings, the shopping-name rules, and the library digest (`id | title | ingredient names`) as a cached block.
 - `GET /api/generate` (active list), `GET /api/generate/[id]`, `DELETE /api/generate/[id]`, `POST /api/generate/[id]/save` → `createRecipe(draft)` + status saved + link.
 
 ### E3. UI
 - `/recipes/generate` (client page): "Your drafts" strip (resume/discard), thread, composer with photo picker (`accept="image/*" multiple`, canvas downscale to 1280px JPEG q0.8, thumbnails), send. Assistant turns render reply text, option chips (tap sends "Let's make: <title>"), the draft card (collapsible ingredients/instructions + `NutritionBadge`) with Save, and library match cards with View and Add to this week's plan (existing `/api/meal-plans/recipes`).
-- Entry points: "Generate a recipe with AI →" on `/recipes/add`; back link to Recipes. Detail page shows "How this was generated" when a saved generation links to it.
-- Tests: prompt builder (pure, with household prefs), response validator (drops unknown match ids, rejects both options and recipe null when reply empty), library digest builder, route with mocked Anthropic client (cap, persistence shape).
+- Entry points: "generate a recipe with AI →" on `/recipes/add` (and "Import instead" back). Detail page shows "Generated with Platemate. See the conversation →" when a saved generation links to it; library-match links carry `?from=` back to the chat.
+- Tests: prompt builder (pure, with household prefs), response validator (drops unknown match ids, rejects empty answers, options/recipe exclusivity), library digest builder (deterministic), request validator, route with mocked Anthropic client (cap, persistence shape, refusal), generator component (options → next turn, save, discard, library match add-to-plan, errors, read-only when saved). Plus `npm run eval:generate` for a live 3-turn check.
 
 ### E4. Cost posture
 - Full-draft turn ≈ 3–5k output tokens on Sonnet 5 (a few cents); options turn ≈ 300. Library digest cached. Behind auth; per-household use only.

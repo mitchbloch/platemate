@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useUrlMirror } from "@/hooks/useUrlMirror";
+import { getCurrentWeekStart, toLocalDateString } from "@/lib/weekDates";
 import type { Recipe, MealPlan, MealPlanRecipe, CuisineType, MealType } from "@/lib/types";
 import { CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
 import { CUISINES, MEAL_TYPES } from "@/lib/recipeValidation";
@@ -29,26 +30,11 @@ function formatWeekLabel(weekStart: string): string {
   return `Week of ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
-/** Format a Date as YYYY-MM-DD using local time (avoids UTC shift from toISOString) */
-function toLocalDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 /** Shift a week start by N weeks */
 function shiftWeek(weekStart: string, weeks: number): string {
   const date = new Date(weekStart + "T00:00:00");
   date.setDate(date.getDate() + weeks * 7);
   return toLocalDateString(date);
-}
-
-/** Get Sunday of current week */
-function getCurrentWeekStart(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - d.getDay());
-  return toLocalDateString(d);
 }
 
 export default function WeeklyPlanner({
