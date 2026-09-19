@@ -131,7 +131,12 @@ async function main() {
     const names = await assignShoppingNames(batch);
 
     for (const r of batch) {
-      const assigned = names.get(r.id);
+      let assigned = names.get(r.id);
+      if (!assigned || assigned.length !== r.ingredients.length) {
+        // Long lists occasionally come back one short in a batch; a solo
+        // call for that recipe almost always lines up.
+        assigned = (await assignShoppingNames([r])).get(r.id);
+      }
       if (!assigned || assigned.length !== r.ingredients.length) {
         console.warn(`  skip ${r.id} "${r.title}": got ${assigned?.length ?? 0} names for ${r.ingredients.length} ingredients`);
         skipped += 1;

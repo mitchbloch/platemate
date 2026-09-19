@@ -103,20 +103,18 @@ describe("normalizeIngredientName", () => {
   });
 
   it("normalizes compound word variants", () => {
-    expect(normalizeIngredientName("nonfat greek yogurt")).toBe(
-      "nonfat greek yogurt",
-    );
-    expect(normalizeIngredientName("non fat greek yogurt")).toBe(
-      "nonfat greek yogurt",
-    );
-    expect(normalizeIngredientName("non-fat greek yogurt")).toBe(
-      "nonfat greek yogurt",
-    );
-    expect(normalizeIngredientName("low fat milk")).toBe("lowfat milk");
-    expect(normalizeIngredientName("low-fat milk")).toBe("lowfat milk");
+    // Dairy: the compound fat word is unified, then dropped (Phase 8C —
+    // one carton covers every fat level), so all spellings meet at the item
+    expect(normalizeIngredientName("nonfat greek yogurt")).toBe("greek yogurt");
+    expect(normalizeIngredientName("non fat greek yogurt")).toBe("greek yogurt");
+    expect(normalizeIngredientName("non-fat greek yogurt")).toBe("greek yogurt");
+    expect(normalizeIngredientName("low fat milk")).toBe("milk");
+    expect(normalizeIngredientName("low-fat milk")).toBe("milk");
+    // Non-dairy compounds are unified but kept
     expect(normalizeIngredientName("semi-sweet chocolate chips")).toBe(
       "semisweet chocolate chip",
     );
+    expect(normalizeIngredientName("low-sodium soy sauce")).toBe("lowsodium soy sauce");
   });
 });
 

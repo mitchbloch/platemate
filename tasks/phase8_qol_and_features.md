@@ -117,7 +117,7 @@ Routine calls made without asking: search hides the Suggestions banner while a q
 
 ### C2. Merge on it
 - `deduplicateIngredients`: matching key = `normalizeForMatching(ing.shoppingName ?? ing.name)`; display name = capitalized `shoppingName` when present, else today's `pickDisplayName` behavior. When entries with and without `shoppingName` merge, the canonical name wins.
-- Rule engine: strip standalone percent tokens (`\b\d+(\.\d+)?%`), spelling map (`yoghurt → yogurt`, `chilli → chili`) applied in `normalizeIngredientName`.
+- Rule engine: on dairy words only, strip percent tokens and fat-level words (`nonfat`, `whole`, `2%`, `fat free`, …) so legacy names without a shopping name match their plain forms; chocolate/vinegar percentages are the product and stay. Spelling map (`yoghurt → yogurt`, `chilli → chili`, `aubergine → eggplant`, `courgette → zucchini`). These dairy rules are NOT applied to canonical shopping names (`trustFatLevel`): Claude already judged per recipe whether the fat level is essential, and the rules must not second-guess a kept "whole milk".
 - Tests: new normalizer cases; dedup with mixed shoppingName/none; canonical display wins; existing 158 stay green.
 
 ### C3. Backfill

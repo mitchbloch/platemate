@@ -31,7 +31,16 @@ describe("rule-only normalization improvements", () => {
   it("strips percent tokens on dairy only and unifies spelling variants", () => {
     expect(normalizeIngredientName("100% greek yoghurt")).toBe("greek yogurt");
     expect(normalizeIngredientName("2% milk")).toBe("milk");
-    expect(normalizeIngredientName("nonfat 0% yogurt")).toBe("nonfat yogurt");
+    expect(normalizeIngredientName("nonfat 0% yogurt")).toBe("yogurt");
+    expect(normalizeIngredientName("nonfat greek yogurt")).toBe("greek yogurt");
+    expect(normalizeIngredientName("whole milk")).toBe("milk");
+    expect(normalizeIngredientName("fat free evaporated milk")).toBe("evaporated milk");
+    expect(normalizeIngredientName("low fat cottage cheese")).toBe("cottage cheese");
+    expect(normalizeIngredientName("light sour cream")).toBe("sour cream");
+    // Fat words outside dairy are product names — untouched
+    expect(normalizeIngredientName("light brown sugar")).toBe("light brown sugar");
+    expect(normalizeIngredientName("whole wheat flour")).toBe("whole wheat flour");
+    expect(normalizeIngredientName("heavy cream")).toBe("heavy cream");
     // The percentage is the product here — keep it
     expect(normalizeIngredientName("70% dark chocolate")).toBe("70% dark chocolate");
     expect(normalizeIngredientName("70% dark chocolate")).not.toBe(normalizeIngredientName("85% dark chocolate"));
@@ -42,13 +51,14 @@ describe("rule-only normalization improvements", () => {
     expect(normalizeIngredientName("aubergine")).toBe("eggplant");
   });
 
-  it("merges '100% greek yoghurt' with 'greek yogurt' without any shoppingName", () => {
+  it("merges '100% greek yoghurt', 'nonfat greek yogurt' and 'greek yogurt' without any shoppingName", () => {
     const merged = deduplicateIngredients([
       meal(recipe("a", [ing("100% greek yoghurt")])),
       meal(recipe("b", [ing("greek yogurt")])),
+      meal(recipe("c", [ing("nonfat greek yogurt")])),
     ]);
     expect(merged).toHaveLength(1);
-    expect(merged[0].quantity).toBe(2);
+    expect(merged[0].quantity).toBe(3);
   });
 });
 
@@ -80,6 +90,19 @@ describe("shoppingName as the merge key", () => {
       meal(recipe("b", [ing("vine tomatoes", { shoppingName: "tomatoes", category: "produce" })])),
     ]);
     expect(merged.map((m) => m.displayName).sort()).toEqual(["Canned tomatoes", "Tomatoes"]);
+  });
+
+  it("respects a canonical name that kept the fat level on purpose", () => {
+    // Claude judged whole milk essential for the custard; the rules must not
+    // second-guess it — but a legacy "2% milk" with no shoppingName still
+    // gets the fat-agnostic default and merges with plain "milk".
+    const merged = deduplicateIngredients([
+      meal(recipe("custard", [ing("whole milk", { shoppingName: "whole milk" })])),
+      meal(recipe("latte", [ing("milk", { shoppingName: "milk" })])),
+      meal(recipe("legacy", [ing("2% milk")])),
+    ]);
+    expect(merged.map((m) => m.displayName).sort()).toEqual(["Milk", "Whole milk"]);
+    expect(merged.find((m) => m.displayName === "Milk")!.recipeIds.sort()).toEqual(["latte", "legacy"]);
   });
 
   it("falls back to the ingredient name when shoppingName is null or blank", () => {

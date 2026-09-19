@@ -170,6 +170,19 @@ const PLURAL_EXCEPTIONS = new Set([
 // percentage on "70% dark chocolate" or "5% vinegar" IS the product.
 const PERCENT_TOKEN = /\b\d+(?:\.\d+)?\s*%\s*/g;
 const DAIRY_WORD = /\b(?:milk|yogurt|yoghurt|cream|kefir|cottage cheese)s?\b/;
+// Fat-level words on dairy: one carton covers "whole" and "2%" alike.
+// Only applied when DAIRY_WORD matches — "light brown sugar" keeps "light" —
+// and only to names the rules have to judge themselves (see
+// NormalizeOptions.trustFatLevel): a canonical shoppingName already encodes
+// whether the recipe depends on the fat level.
+const DAIRY_FAT_WORD = /\b(?:nonfat|lowfat|fullfat|fatfree|reducedfat|skim|skimmed|whole|light|lite)\b\s*/g;
+
+export interface NormalizeOptions {
+  /** Keep dairy fat-level words and percentages instead of stripping them.
+   *  Used for canonical shopping names, where Claude has already decided
+   *  whether "whole milk" is essential to the recipe. Default false. */
+  trustFatLevel?: boolean;
+}
 
 // Spelling variants that are the same word. Deliberately excludes regional
 // names that are different products (coriander = the spice in US usage).
@@ -184,14 +197,18 @@ const SPELLING_VARIANTS: Record<string, string> = {
   courgette: "zucchini",
 };
 
-export function normalizeIngredientName(name: string): string {
+export function normalizeIngredientName(name: string, options: NormalizeOptions = {}): string {
+  const dairyFatAgnostic = !options.trustFatLevel;
   let normalized = name.toLowerCase().trim();
 
   // Strip parentheticals: "tomatoes (Roma)" → "tomatoes"
   normalized = normalized.replace(/\s*\([^)]*\)/g, "");
 
-  // Strip percent tokens on dairy only: "100% greek yogurt" → "greek yogurt"
-  if (DAIRY_WORD.test(normalized)) normalized = normalized.replace(PERCENT_TOKEN, " ");
+  // Dairy only, when the rules have to judge it themselves: drop percent
+  // tokens so "100% greek yogurt" and "2% milk" match their plain forms
+  if (dairyFatAgnostic && DAIRY_WORD.test(normalized)) {
+    normalized = normalized.replace(PERCENT_TOKEN, " ");
+  }
 
   // Unify spellings word by word: "greek yoghurt" → "greek yogurt"
   normalized = normalized
@@ -217,9 +234,15 @@ export function normalizeIngredientName(name: string): string {
     "low sodium": "lowsodium",
     "semi sweet": "semisweet",
     "half and half": "halfandhalf",
+    "fat free": "fatfree",
+    "reduced fat": "reducedfat",
   };
   for (const [spaced, joined] of Object.entries(COMPOUND_WORDS)) {
     normalized = normalized.replace(spaced, joined);
+  }
+
+  if (dairyFatAgnostic && DAIRY_WORD.test(normalized)) {
+    normalized = normalized.replace(DAIRY_FAT_WORD, "").replace(/\s+/g, " ").trim();
   }
 
   // Strip trailing 's' for simple plurals, but not words ending in 'ss', 'us', etc.
@@ -350,8 +373,8 @@ export function stripQualifiers(normalizedName: string): string {
 /**
  * Full fuzzy matching pipeline: normalize name then strip qualifiers.
  */
-export function normalizeForMatching(name: string): string {
-  return stripQualifiers(normalizeIngredientName(name));
+export function normalizeForMatching(name: string, options: NormalizeOptions = {}): string {
+  return stripQualifiers(normalizeIngredientName(name, options));
 }
 
 /**
@@ -457,7 +480,9 @@ export function deduplicateIngredients(
 
     for (const ingredient of recipe.ingredients) {
       const grocery = groceryNameFor(ingredient);
-      const normalizedName = normalizeIngredientName(grocery.text);
+      // A canonical name is Claude's per-recipe judgment (incl. whether the
+      // fat level matters); a plain name gets the rules' fat-agnostic default
+      const normalizedName = normalizeIngredientName(grocery.text, { trustFatLevel: grocery.canonical });
       const matchingKey = stripQualifiers(normalizedName);
       let normalizedUnit = normalizeUnit(ingredient.unit);
 
