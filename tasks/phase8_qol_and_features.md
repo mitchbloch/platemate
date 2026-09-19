@@ -1,6 +1,6 @@
 # Phase 8: Mobile QoL + Share, Search, Staples, Generation
 
-> Spec agreed 2026-09-14 after a full-codebase review and a grilling session.
+> **Shipped 2026-09-19** (PRs #33–#40, migrations 016–018). Spec agreed 2026-09-14 after a full-codebase review and a grilling session.
 > Five batches, one PR each, merged and deployed in order A → E so each can be
 > verified on-device before the next stacks on it. Production is at PR #32 and
 > migrations 001–015 are applied (verified live: `join_household_by_code` and
