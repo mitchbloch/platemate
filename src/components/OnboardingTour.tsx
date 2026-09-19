@@ -64,6 +64,29 @@ function findVisibleTarget(selector: string): HTMLElement | null {
   return null;
 }
 
+const TOOLTIP_GAP = 12;
+const VIEWPORT_PADDING = 16;
+
+/** Place the tooltip below its target, or above it when below would run off
+ *  the bottom of the viewport — on phones the targets are the bottom tab
+ *  bar, so "below" is always off-screen there. Exported for tests. */
+export function positionTooltip(
+  target: { top: number; bottom: number; left: number; width: number },
+  tooltip: { width: number; height: number; viewportWidth: number; viewportHeight: number },
+): TooltipPosition {
+  let left = target.left + target.width / 2 - tooltip.width / 2;
+  if (left < VIEWPORT_PADDING) left = VIEWPORT_PADDING;
+  if (left + tooltip.width > tooltip.viewportWidth - VIEWPORT_PADDING) {
+    left = tooltip.viewportWidth - VIEWPORT_PADDING - tooltip.width;
+  }
+
+  let top = target.bottom + TOOLTIP_GAP;
+  if (top + tooltip.height > tooltip.viewportHeight - VIEWPORT_PADDING) {
+    top = Math.max(VIEWPORT_PADDING, target.top - TOOLTIP_GAP - tooltip.height);
+  }
+  return { top, left };
+}
+
 // Returns false during SSR and the server snapshot of hydration, true once
 // rendered on the client. Lets us safely gate `createPortal(document.body)`
 // without an effect. React team's recommended pattern.
@@ -111,16 +134,14 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
       const rect = el.getBoundingClientRect();
       setTargetRect(rect);
 
-      const tooltipWidth = 320;
-      let left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      const top = rect.bottom + 12;
-
-      const padding = 16;
-      if (left < padding) left = padding;
-      if (left + tooltipWidth > window.innerWidth - padding) {
-        left = window.innerWidth - padding - tooltipWidth;
-      }
-      setTooltipPos({ top, left });
+      setTooltipPos(
+        positionTooltip(rect, {
+          width: 320,
+          height: tooltipRef.current?.offsetHeight ?? 200,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        }),
+      );
     }
 
     const observer = new ResizeObserver(update);
@@ -203,13 +224,13 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
           <div className="flex items-center justify-between">
             <button
               onClick={onSkip}
-              className="text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
+              className="min-h-11 text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
             >
               Skip tour
             </button>
             <button
               onClick={handleNext}
-              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+              className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90"
             >
               Take the tour →
             </button>
@@ -274,7 +295,7 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
         <div className="flex items-center justify-between">
           <button
             onClick={onSkip}
-            className="text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
+            className="min-h-11 text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
           >
             Skip tour
           </button>
@@ -282,14 +303,14 @@ export default function OnboardingTour({ onComplete, onSkip }: OnboardingTourPro
             {currentStep > 1 && (
               <button
                 onClick={handleBack}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-border-light"
+                className="min-h-11 rounded-lg px-3 text-sm font-medium text-text-secondary transition-colors hover:bg-border-light"
               >
                 Back
               </button>
             )}
             <button
               onClick={handleNext}
-              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+              className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90"
             >
               {isLast ? "Done" : "Next"}
             </button>

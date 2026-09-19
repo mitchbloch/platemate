@@ -305,7 +305,7 @@ export default function WeeklyPlanner({
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigateWeek(-1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
+          className="min-h-11 rounded-lg border border-border px-3 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
         >
           &larr; Prev
         </button>
@@ -324,7 +324,7 @@ export default function WeeklyPlanner({
         </div>
         <button
           onClick={() => navigateWeek(1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
+          className="min-h-11 rounded-lg border border-border px-3 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
         >
           Next &rarr;
         </button>
@@ -398,7 +398,7 @@ export default function WeeklyPlanner({
                     <h2 className="mb-2 text-sm font-medium text-text-muted">
                       {group.label} ({group.items.length})
                     </h2>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {group.items.map((meal) => (
                         <MealCard
                           key={meal.id}
@@ -432,7 +432,7 @@ export default function WeeklyPlanner({
                 </h2>
                 <button
                   onClick={() => setShowPicker(false)}
-                  className="text-sm text-text-muted hover:text-text-secondary transition-colors"
+                  className="min-h-11 px-2 text-sm text-text-muted hover:text-text-secondary transition-colors"
                 >
                   Close
                 </button>
@@ -485,7 +485,7 @@ export default function WeeklyPlanner({
                           <button
                             onClick={() => addMeal(s.recipe)}
                             disabled={adding.has(s.recipe.id)}
-                            className="ml-2 shrink-0 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+                            className="ml-2 min-h-9 shrink-0 rounded-md bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
                           >
                             {adding.has(s.recipe.id) ? "..." : "Add"}
                           </button>
@@ -510,7 +510,7 @@ export default function WeeklyPlanner({
                   )}
                 </p>
               ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {filteredRecipes.map((suggestion) => {
                     const r = suggestion.recipe;
                     const isPlanned = currentPlanRecipeIds.has(r.id);
@@ -561,7 +561,7 @@ export default function WeeklyPlanner({
                           <button
                             onClick={() => addMeal(r)}
                             disabled={adding.has(r.id)}
-                            className="ml-2 shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white shadow-warm transition-colors hover:bg-primary-dark disabled:opacity-50"
+                            className="ml-2 min-h-11 shrink-0 rounded-lg bg-primary px-4 text-xs font-medium text-white shadow-warm transition-colors hover:bg-primary-dark disabled:opacity-50"
                           >
                             {adding.has(r.id) ? "..." : "Add"}
                           </button>
@@ -617,7 +617,7 @@ function MealCard({
     <div className="card-hover relative rounded-2xl border border-border bg-surface p-4 shadow-warm">
       <button
         onClick={onRemove}
-        className="absolute right-2 top-2 rounded p-1 text-text-muted transition-colors hover:bg-border-light hover:text-danger focus:outline-none focus:ring-2 focus:ring-danger"
+        className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-2xl text-lg text-text-muted transition-colors hover:bg-border-light hover:text-danger focus:outline-none focus:ring-2 focus:ring-danger"
         title="Remove from this week"
         aria-label="Remove from this week"
       >

@@ -3,6 +3,7 @@ import { DM_Sans, Fraunces } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import OnboardingWrapper from "@/components/OnboardingWrapper";
+import ResumeRefresh from "@/components/ResumeRefresh";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -61,6 +62,7 @@ export default function RootLayout({
         {/* pb-20 gives clearance for the fixed mobile bottom tab bar (incl. safe-area inset) */}
         <div className="pb-20 sm:pb-0">{children}</div>
         <OnboardingWrapper />
+        <ResumeRefresh />
         <Analytics />
         <SpeedInsights />
       </body>

@@ -31,7 +31,7 @@ export default function NutritionBadge({
     if (!hasWarning) return null;
 
     return (
-      <div className="flex gap-1">
+      <div className="flex flex-wrap gap-1">
         {cholesterolFlag !== "ok" && (
           <span className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${FLAG_STYLES[cholesterolFlag]}`}>
             Chol {nutrition.cholesterol}mg

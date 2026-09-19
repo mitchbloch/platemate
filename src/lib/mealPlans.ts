@@ -1,5 +1,6 @@
 import { createClient } from "./supabase/server";
 import { getActiveHouseholdId } from "./supabase/auth";
+import { rowToRecipe } from "./recipes";
 import type { MealPlan, MealPlanRecipe, Recipe, MealType } from "./types";
 
 // ── Row Converters ──
@@ -24,31 +25,6 @@ function rowToMealPlanRecipe(row: Record<string, unknown>): MealPlanRecipe {
     dayOfWeek: row.day_of_week as number,
     mealType: row.meal_type as MealType,
     servingsOverride: row.servings_override as number | null,
-  };
-}
-
-function rowToRecipe(row: Record<string, unknown>): Recipe {
-  return {
-    id: row.id as string,
-    householdId: row.household_id as string,
-    title: row.title as string,
-    sourceUrl: row.source_url as string | null,
-    sourceName: row.source_name as string | null,
-    description: row.description as string | null,
-    cuisine: row.cuisine as Recipe["cuisine"],
-    mealType: row.meal_type as Recipe["mealType"],
-    difficulty: row.difficulty as Recipe["difficulty"],
-    servings: row.servings as number,
-    totalTimeMinutes: row.total_time_minutes as number | null,
-    ingredients: row.ingredients as Recipe["ingredients"],
-    instructions: row.instructions as string[],
-    nutrition: row.nutrition as Recipe["nutrition"],
-    dietaryFlags: (row.dietary_flags as Recipe["dietaryFlags"]) ?? [],
-    tags: row.tags as string[],
-    imageUrl: row.image_url as string | null,
-    isSlowCooker: row.is_slow_cooker as boolean,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
   };
 }
 

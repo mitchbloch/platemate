@@ -3,7 +3,7 @@ import { getActiveHouseholdId } from "./supabase/auth";
 import type { Recipe, ParsedRecipe } from "./types";
 
 /** Convert Supabase row (snake_case) to Recipe (camelCase) */
-function rowToRecipe(row: Record<string, unknown>): Recipe {
+export function rowToRecipe(row: Record<string, unknown>): Recipe {
   return {
     id: row.id as string,
     householdId: row.household_id as string,

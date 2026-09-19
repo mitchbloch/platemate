@@ -15,7 +15,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Link
             href="/recipes"
             className="animate-fade-in-up stagger-1 card-hover group rounded-2xl border border-border bg-surface p-6 shadow-warm"

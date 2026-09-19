@@ -863,6 +863,7 @@ export default function GroceryListView({
             onChange={(e) => setNewItemQuantity(e.target.value)}
             placeholder="Qty"
             type="number"
+            inputMode="decimal"
             min="0"
             step="any"
             className="w-16 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
@@ -935,7 +936,7 @@ export default function GroceryListView({
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigateWeek(-1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
+          className="min-h-11 rounded-lg border border-border px-3 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
         >
           &larr; Prev
         </button>
@@ -959,7 +960,7 @@ export default function GroceryListView({
         </div>
         <button
           onClick={() => navigateWeek(1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
+          className="min-h-11 rounded-lg border border-border px-3 text-sm text-text-secondary transition-colors hover:bg-border-light hover:text-text"
         >
           Next &rarr;
         </button>
@@ -1459,7 +1460,7 @@ function GroceryItemRow({
       <div
         onClick={onToggle}
         role="button"
-        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+        className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition-colors ${
           item.checked ? "opacity-50" : "hover:bg-border-light"
         }`}
       >
@@ -1515,7 +1516,7 @@ function GroceryItemRow({
       <div className="relative" ref={storeMenuRef}>
         <button
           onClick={() => setShowStoreMenu(!showStoreMenu)}
-          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors ${storeBadgeClasses(item.store)} hover:opacity-80`}
+          className={`min-h-10 shrink-0 rounded-md px-2 text-[10px] font-medium transition-colors ${storeBadgeClasses(item.store)} hover:opacity-80`}
           title="Change store"
         >
           {STORE_LABELS[item.store]}
@@ -1548,7 +1549,7 @@ function GroceryItemRow({
       <div className="relative" ref={actionsRef}>
         <button
           onClick={() => setShowActions(!showActions)}
-          className="shrink-0 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-border-light hover:text-text"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-xs text-text-secondary transition-colors hover:bg-border-light hover:text-text"
           title="Actions"
         >
           <MoreIcon />
@@ -1682,6 +1683,7 @@ function ItemEditForm({
           onChange={(e) => setQuantity(e.target.value)}
           placeholder="Qty"
           type="number"
+          inputMode="decimal"
           min="0"
           step="any"
           className="w-16 rounded-lg border border-border bg-bg px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"

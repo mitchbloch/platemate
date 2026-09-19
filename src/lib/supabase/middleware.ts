@@ -30,10 +30,13 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Refresh the session — important for Server Components
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verify the session locally against the project's published signing key
+  // (ES256 JWKS) instead of round-tripping to the auth server on every
+  // request. getClaims() still refreshes an expired token via the cookie
+  // flow above, so Server Components keep seeing a live session.
+  const { data: claims, error: claimsError } = await supabase.auth.getClaims();
+  const userId = !claimsError && claims?.claims?.sub ? claims.claims.sub : null;
+  const user = userId ? { id: userId } : null;
 
   // Public routes that don't require auth
   const pathname = request.nextUrl.pathname;
