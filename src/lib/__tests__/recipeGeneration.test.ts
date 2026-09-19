@@ -19,8 +19,8 @@ const household = {
   ],
 };
 const library = [
-  { id: "b", title: "Lentil Soup", ingredients: [{ name: "lentils", quantity: 1, unit: "cup", preparation: null, category: "grain" as const, raw: "" }] },
-  { id: "a", title: "Chicken Tacos", ingredients: [{ name: "FAGE yogurt", shoppingName: "greek yogurt", quantity: 1, unit: "cup", preparation: null, category: "dairy" as const, raw: "" }] },
+  { id: "b", title: "Lentil Soup", mealType: "lunch" as const, ingredients: [{ name: "lentils", quantity: 1, unit: "cup", preparation: null, category: "grain" as const, raw: "" }] },
+  { id: "a", title: "Chicken Tacos", mealType: "dinner" as const, ingredients: [{ name: "FAGE yogurt", shoppingName: "greek yogurt", quantity: 1, unit: "cup", preparation: null, category: "dairy" as const, raw: "" }] },
 ];
 const draft: ParsedRecipe = {
   title: "Yogurt Chicken", description: null, cuisine: "mediterranean", mealType: "dinner", difficulty: "easy", servings: 2,
@@ -58,7 +58,7 @@ describe("toApiMessages", () => {
   it("replays photo turns as a marker with what was seen, and assistant turns as their JSON", () => {
     const history: GenerationMessage[] = [
       { role: "user", content: "What can I make?", photoCount: 2, seenIngredients: ["eggs", "spinach"], at: "" },
-      { role: "assistant", reply: "A few ideas", options: [{ title: "Frittata", summary: "Quick" }], recipe: null, libraryMatches: [{ recipeId: "a", title: "Chicken Tacos", reason: "uses yogurt" }], at: "" },
+      { role: "assistant", reply: "A few ideas", options: [{ title: "Frittata", summary: "Quick" }], recipe: null, libraryMatches: [{ recipeId: "a", title: "Chicken Tacos", mealType: "dinner", reason: "uses yogurt" }], at: "" },
     ];
     const msgs = toApiMessages(history);
     expect(msgs[0]).toEqual({ role: "user", content: "What can I make?\n\n[2 photos attached earlier. Ingredients seen: eggs, spinach]" });
@@ -93,8 +93,8 @@ describe("validateGenerationResponse", () => {
       ],
     }, library);
     expect(result.libraryMatches).toEqual([
-      { recipeId: "a", reason: "yes", title: "Chicken Tacos" },
-      { recipeId: "b", reason: "soup", title: "Lentil Soup" },
+      { recipeId: "a", reason: "yes", title: "Chicken Tacos", mealType: "dinner" },
+      { recipeId: "b", reason: "soup", title: "Lentil Soup", mealType: "lunch" },
     ]);
   });
 
@@ -126,7 +126,8 @@ describe("validateGenerateRequest", () => {
     expect(validateGenerateRequest({ message: "x".repeat(4001) }).ok).toBe(false);
     expect(validateGenerateRequest({ message: "hi", images: ["QUJD", "QUJD", "QUJD", "QUJD"] }).ok).toBe(false);
     expect(validateGenerateRequest({ message: "hi", images: ["not base64!"] }).ok).toBe(false);
-    expect(validateGenerateRequest({ message: "hi", images: ["A".repeat(600_001)] }).ok).toBe(false);
+    expect(validateGenerateRequest({ message: "hi", images: ["A".repeat(800_001)] }).ok).toBe(false);
+    expect(validateGenerateRequest({ message: "hi", images: ["A".repeat(800_000)] }).ok).toBe(true);
     expect(validateGenerateRequest({ message: "hi", generationId: "g1" })).toEqual({ ok: true, request: { generationId: "g1", message: "hi", images: [] } });
   });
 });

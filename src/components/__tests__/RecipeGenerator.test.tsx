@@ -84,14 +84,25 @@ describe("RecipeGenerator", () => {
   it("links library matches to the recipe (with a way back) and adds them to this week's plan", async () => {
     const user = userEvent.setup();
     mockFetch(() => new Response(JSON.stringify({ planId: "p", id: "m" }), { status: 201 }));
-    render(<RecipeGenerator drafts={[]} initial={gen({ messages: [{ role: "assistant", reply: "You already have:", options: null, recipe: null, libraryMatches: [{ recipeId: "r1", title: "Chicken Tacos", reason: "uses chicken" }], at: "" }] })} />);
+    render(<RecipeGenerator drafts={[]} initial={gen({ messages: [{ role: "assistant", reply: "You already have:", options: null, recipe: null, libraryMatches: [{ recipeId: "r1", title: "Chicken Tacos", mealType: "lunch", reason: "uses chicken" }], at: "" }] })} />);
     const link = screen.getByRole("link", { name: "Chicken Tacos" });
     expect(link.getAttribute("href")).toBe("/recipes/r1?from=%2Frecipes%2Fgenerate%3Fg%3Dg1");
     await user.click(screen.getByRole("button", { name: "Add to this week" }));
     await waitFor(() => expect(calls[0].url).toBe("/api/meal-plans/recipes"));
-    expect(calls[0].body).toMatchObject({ recipeId: "r1", mealType: "dinner" });
+    expect(calls[0].body).toMatchObject({ recipeId: "r1", mealType: "lunch" }); // the recipe's own slot, not a hardcoded one
     expect(String(calls[0].body!.weekStart)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(await screen.findByText("Added to this week's plan")).toBeInTheDocument();
+  });
+
+  it("restores the chat if discarding fails", async () => {
+    const user = userEvent.setup();
+    mockFetch(() => new Response(JSON.stringify({ error: "nope" }), { status: 500 }));
+    const g = gen({ draft, messages: [{ role: "assistant", reply: "Here", options: null, recipe: draft, libraryMatches: [], at: "" }] });
+    render(<RecipeGenerator drafts={[g]} initial={g} />);
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(await screen.findByText("Couldn't discard that chat")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chicken" })).toBeInTheDocument();
+    expect(screen.getByText("Here")).toBeInTheDocument();
   });
 
   it("shows the server's error and keeps the text so you can retry", async () => {
@@ -101,6 +112,23 @@ describe("RecipeGenerator", () => {
     await user.type(screen.getByLabelText("Message"), "hello{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("The assistant declined that request");
     expect(screen.getByLabelText("Message")).toHaveValue("hello");
+  });
+
+  it("does not clobber the chat you switched to while a send was in flight", async () => {
+    const user = userEvent.setup();
+    let release!: (r: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+    const other = gen({ id: "g2", title: "soup", messages: [{ role: "assistant", reply: "Soup thread", options: null, recipe: null, libraryMatches: [], at: "" }] });
+    render(<RecipeGenerator drafts={[other]} initial={null} />);
+    await user.type(screen.getByLabelText("Message"), "chicken{Enter}");
+    // While waiting, open the other draft
+    await user.click(screen.getByRole("button", { name: "soup" }));
+    expect(screen.getByText("Soup thread")).toBeInTheDocument();
+    // The late answer for the new chat must not replace the soup thread
+    release(new Response(JSON.stringify(gen({ id: "g-new", title: "chicken", messages: [{ role: "assistant", reply: "Chicken answer", options: null, recipe: null, libraryMatches: [], at: "" }] })), { status: 200 }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "chicken" })).toBeInTheDocument()); // it lands in the drafts strip
+    expect(screen.getByText("Soup thread")).toBeInTheDocument();
+    expect(screen.queryByText("Chicken answer")).toBeNull();
   });
 
   it("is read-only once saved", () => {

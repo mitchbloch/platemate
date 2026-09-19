@@ -8,6 +8,8 @@ const state = {
   created: [] as string[],
   appended: [] as unknown[],
   lastRequest: null as Record<string, unknown> | null,
+  turnsToday: 0,
+  appendThrows: null as Error | null,
 };
 
 vi.mock("@anthropic-ai/sdk", () => ({
@@ -15,14 +17,20 @@ vi.mock("@anthropic-ai/sdk", () => ({
     messages = { create: async (req: Record<string, unknown>) => { state.lastRequest = req; return state.claude; } };
   },
 }));
-vi.mock("@/lib/recipes", () => ({ listRecipes: async () => [{ id: "a", title: "Chicken Tacos", ingredients: [] }] }));
+vi.mock("@/lib/recipes", () => ({ listRecipes: async () => [{ id: "a", title: "Chicken Tacos", mealType: "dinner", ingredients: [] }] }));
 vi.mock("@/lib/household", () => ({ getHousehold: async () => ({ defaultServings: 2, dietaryPreferences: [], nutritionPriorities: [] }) }));
 vi.mock("@/lib/supabase/auth", () => ({ getActiveHouseholdId: async () => "h1" }));
 vi.mock("@/lib/recipeGenerations", () => ({
+  GenerationConflictError: class extends Error { constructor() { super("Someone else just added to this chat — reload to see it"); } },
   listActiveGenerations: async () => [],
   getGeneration: async () => state.generation,
+  countHouseholdTurnsSince: async () => state.turnsToday,
   createGeneration: async (msg: string) => { state.created.push(msg); return { ...base(), id: "g-new" }; },
-  appendTurn: async (id: string, turn: unknown, draft: unknown) => { state.appended.push({ id, turn, draft }); return { ...base(), id }; },
+  appendTurn: async (gen: { id: string }, turn: unknown, draft: unknown) => {
+    if (state.appendThrows) throw state.appendThrows;
+    state.appended.push({ id: gen.id, turn, draft });
+    return { ...base(), id: gen.id };
+  },
 }));
 
 import { POST } from "../route";
@@ -40,6 +48,8 @@ describe("POST /api/generate", () => {
     state.created = [];
     state.appended = [];
     state.lastRequest = null;
+    state.turnsToday = 0;
+    state.appendThrows = null;
     state.claude = { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ reply: "Sure", options: [{ title: "A", summary: "a" }], recipe: null, libraryMatches: [{ recipeId: "a", reason: "fits" }], seenIngredients: [] }) }] };
   });
 
@@ -83,6 +93,29 @@ describe("POST /api/generate", () => {
     expect((await post({ generationId: "missing", message: "x" })).status).toBe(404);
     state.generation = { ...base(), status: "saved", savedRecipeId: "r1" };
     expect((await post({ generationId: "g1", message: "x" })).status).toBe(409);
+  });
+
+  it("429s once the household has used its daily budget, before calling Claude", async () => {
+    state.turnsToday = 100;
+    expect((await post({ message: "x" })).status).toBe(429);
+    expect(state.lastRequest).toBeNull();
+  });
+
+  it("409s (not 500) when a partner appended to the same chat first", async () => {
+    const { GenerationConflictError } = await import("@/lib/recipeGenerations");
+    state.appendThrows = new GenerationConflictError();
+    const res = await post({ message: "x" });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/reload/);
+  });
+
+  it("hides internal error detail behind a generic 500", async () => {
+    state.appendThrows = new Error('duplicate key value violates unique constraint "recipe_generations_pkey"');
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await post({ message: "x" });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).not.toMatch(/constraint/);
+    spy.mockRestore();
   });
 
   it("surfaces a refusal without persisting anything", async () => {

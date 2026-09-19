@@ -17,9 +17,9 @@ for (const line of fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf8
 const client = new Anthropic();
 const household = { defaultServings: 2, dietaryPreferences: [] as string[], nutritionPriorities: [{ nutrient: "cholesterol" as const, rank: 1 }, { nutrient: "saturatedFat" as const, rank: 2 }] };
 const library = [
-  { id: "lib-1", title: "Chicken Tacos", ingredients: [{ name: "chicken thighs", shoppingName: "chicken thighs", quantity: 1, unit: "lb", preparation: null, category: "meat" as const, raw: "" }, { name: "tortillas", quantity: 8, unit: null, preparation: null, category: "grain" as const, raw: "" }] },
-  { id: "lib-2", title: "Lentil Soup", ingredients: [{ name: "lentils", quantity: 1, unit: "cup", preparation: null, category: "grain" as const, raw: "" }] },
-  { id: "lib-3", title: "Greek Yogurt Bowl", ingredients: [{ name: "greek yogurt", quantity: 1, unit: "cup", preparation: null, category: "dairy" as const, raw: "" }] },
+  { id: "lib-1", title: "Chicken Tacos", mealType: "dinner" as const, ingredients: [{ name: "chicken thighs", shoppingName: "chicken thighs", quantity: 1, unit: "lb", preparation: null, category: "meat" as const, raw: "" }, { name: "tortillas", quantity: 8, unit: null, preparation: null, category: "grain" as const, raw: "" }] },
+  { id: "lib-2", title: "Lentil Soup", mealType: "lunch" as const, ingredients: [{ name: "lentils", quantity: 1, unit: "cup", preparation: null, category: "grain" as const, raw: "" }] },
+  { id: "lib-3", title: "Greek Yogurt Bowl", mealType: "breakfast" as const, ingredients: [{ name: "greek yogurt", quantity: 1, unit: "cup", preparation: null, category: "dairy" as const, raw: "" }] },
 ];
 const history: GenerationMessage[] = [];
 async function turn(message: string) {

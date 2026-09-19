@@ -19,8 +19,12 @@ import type {
 
 export const GENERATION_MODEL = "claude-sonnet-5";
 export const MAX_TURNS = 20;
+/** Household-wide ceiling on generation turns per rolling day — bounds
+ *  spend even if someone keeps starting fresh chats. */
+export const MAX_TURNS_PER_DAY = 100;
 export const MAX_PHOTOS = 3;
-export const MAX_PHOTO_BYTES = 600_000; // base64 length, ≈450KB of JPEG
+/** Base64 length cap: 800K chars ≈ 600KB of JPEG (base64 inflates by 4/3). */
+export const MAX_PHOTO_BASE64_CHARS = 800_000;
 export const MAX_OPTIONS = 3;
 export const MAX_LIBRARY_MATCHES = 5;
 export const MAX_MESSAGE_CHARS = 4_000;
@@ -173,7 +177,7 @@ function asOptions(value: unknown): GenerationOption[] | null {
  *  validation is dropped (the reply still goes through). */
 export function validateGenerationResponse(
   data: unknown,
-  library: Pick<Recipe, "id" | "title">[],
+  library: Pick<Recipe, "id" | "title" | "mealType">[],
 ): GenerationTurnResult {
   if (!data || typeof data !== "object") throw new Error("Generator returned no answer");
   const d = data as Record<string, unknown>;
@@ -192,13 +196,13 @@ export function validateGenerationResponse(
   // Options and a recipe are mutually exclusive; a full recipe wins.
   const options = recipe ? null : asOptions(d.options);
 
-  const byId = new Map(library.map((r) => [r.id, r.title]));
+  const byId = new Map(library.map((r) => [r.id, r]));
   const seen = new Set<string>();
   const libraryMatches: LibraryMatch[] = (Array.isArray(d.libraryMatches) ? d.libraryMatches : [])
     .filter((m): m is { recipeId: unknown; reason: unknown } => !!m && typeof m === "object")
     .map((m) => ({ recipeId: String(m.recipeId ?? ""), reason: String(m.reason ?? "").trim() }))
     .filter((m) => byId.has(m.recipeId) && !seen.has(m.recipeId) && seen.add(m.recipeId))
-    .map((m) => ({ ...m, title: byId.get(m.recipeId)! }))
+    .map((m) => ({ ...m, title: byId.get(m.recipeId)!.title, mealType: byId.get(m.recipeId)!.mealType }))
     .slice(0, MAX_LIBRARY_MATCHES);
 
   const seenIngredients = (Array.isArray(d.seenIngredients) ? d.seenIngredients : [])
@@ -230,10 +234,15 @@ export function validateGenerateRequest(body: unknown): { ok: true; request: Gen
   if (images.length > MAX_PHOTOS) return { ok: false, error: `Up to ${MAX_PHOTOS} photos per message` };
   for (const img of images) {
     if (typeof img !== "string" || !/^[A-Za-z0-9+/=]+$/.test(img)) return { ok: false, error: "Photos must be base64 JPEG" };
-    if (img.length > MAX_PHOTO_BYTES) return { ok: false, error: "A photo is too large — try a smaller one" };
+    if (img.length > MAX_PHOTO_BASE64_CHARS) return { ok: false, error: "A photo is too large — try a smaller one" };
   }
   const generationId = typeof b.generationId === "string" && b.generationId ? b.generationId : null;
   return { ok: true, request: { generationId, message: message || "(see photo)", images: images as string[] } };
+}
+
+/** User turns in a chat (the unit the per-chat and per-day caps count). */
+export function countUserTurns(messages: Pick<GenerationMessage, "role">[]): number {
+  return messages.filter((m) => m.role === "user").length;
 }
 
 /** Dietary flag labels, for showing constraints in the UI. */

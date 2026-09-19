@@ -254,6 +254,7 @@ export interface GenerationOption {
 export interface LibraryMatch {
   recipeId: string;
   title: string;
+  mealType: MealType;
   reason: string;
 }
 

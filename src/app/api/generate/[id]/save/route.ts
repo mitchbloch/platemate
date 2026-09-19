@@ -17,7 +17,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     await markGenerationSaved(id, recipeId);
     return NextResponse.json({ id: recipeId }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to save recipe";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[POST /api/generate/[id]/save]", error);
+    return NextResponse.json({ error: "Couldn't save the recipe — please try again" }, { status: 500 });
   }
 }

@@ -1,6 +1,14 @@
 import { createClient } from "./supabase/server";
 import { getActiveHouseholdId, getUser } from "./supabase/auth";
+import { countUserTurns } from "./recipeGeneration";
 import type { GenerationMessage, ParsedRecipe, RecipeGeneration } from "./types";
+
+export class GenerationConflictError extends Error {
+  constructor() {
+    super("Someone else just added to this chat — reload to see it");
+    this.name = "GenerationConflictError";
+  }
+}
 
 export const GENERATION_TITLE_MAX = 80;
 
@@ -78,36 +86,61 @@ export async function createGeneration(firstMessage: string): Promise<RecipeGene
   return rowToGeneration(data);
 }
 
-/** Append a completed turn (user + assistant) and refresh the draft. */
+/** User turns across the household's chats touched in the last `hours`
+ *  (the per-day spend cap counts every chat, not just the current one). */
+export async function countHouseholdTurnsSince(hours: number): Promise<number> {
+  const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
+  const since = new Date(Date.now() - hours * 3_600_000).toISOString();
+  const { data, error } = await supabase
+    .from("recipe_generations")
+    .select("messages")
+    .eq("household_id", householdId)
+    .gte("updated_at", since);
+  if (error) throw error;
+  return (data ?? []).reduce((n, row) => n + countUserTurns((row.messages as GenerationMessage[]) ?? []), 0);
+}
+
+/** Append a completed turn (user + assistant) and refresh the draft.
+ *  Optimistically locked on updated_at: if a partner appended to the same
+ *  chat meanwhile, nothing is overwritten and the caller gets a conflict. */
 export async function appendTurn(
-  id: string,
+  current: RecipeGeneration,
   turn: { user: GenerationMessage; assistant: GenerationMessage },
   draft: ParsedRecipe | null,
 ): Promise<RecipeGeneration> {
-  const current = await getGeneration(id);
-  if (!current) throw new Error("Conversation not found");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("recipe_generations")
     .update({ messages: [...current.messages, turn.user, turn.assistant], draft: draft ?? current.draft })
-    .eq("id", id)
+    .eq("id", current.id)
+    .eq("household_id", current.householdId)
+    .eq("updated_at", current.updatedAt)
     .select("*")
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new GenerationConflictError();
   return rowToGeneration(data);
 }
 
 export async function markGenerationSaved(id: string, recipeId: string): Promise<void> {
   const supabase = await createClient();
+  const householdId = await getActiveHouseholdId();
   const { error } = await supabase
     .from("recipe_generations")
     .update({ status: "saved", saved_recipe_id: recipeId })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("household_id", householdId);
   if (error) throw error;
 }
 
 export async function deleteGeneration(id: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.from("recipe_generations").delete().eq("id", id);
+  const householdId = await getActiveHouseholdId();
+  const { error } = await supabase
+    .from("recipe_generations")
+    .delete()
+    .eq("id", id)
+    .eq("household_id", householdId);
   if (error) throw error;
 }

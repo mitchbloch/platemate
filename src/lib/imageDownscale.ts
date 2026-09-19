@@ -4,7 +4,8 @@ export const MAX_EDGE_PX = 1280;
 export const JPEG_QUALITY = 0.8;
 
 export async function downscaleToJpegBase64(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
+  // from-image: apply the EXIF rotation so portrait iPhone shots stay upright
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   const scale = Math.min(1, MAX_EDGE_PX / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);

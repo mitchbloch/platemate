@@ -4,7 +4,9 @@ import { listRecipes } from "@/lib/recipes";
 import { getHousehold } from "@/lib/household";
 import { getActiveHouseholdId } from "@/lib/supabase/auth";
 import {
+  GenerationConflictError,
   appendTurn,
+  countHouseholdTurnsSince,
   createGeneration,
   getGeneration,
   listActiveGenerations,
@@ -13,7 +15,9 @@ import {
   GENERATION_MODEL,
   GENERATION_RESPONSE_SCHEMA,
   MAX_TURNS,
+  MAX_TURNS_PER_DAY,
   buildSystemBlocks,
+  countUserTurns,
   toApiMessages,
   userTurnContent,
   validateGenerateRequest,
@@ -34,8 +38,8 @@ export async function GET() {
   try {
     return NextResponse.json(await listActiveGenerations());
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load conversations";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/generate]", error);
+    return NextResponse.json({ error: "Couldn't load your conversations" }, { status: 500 });
   }
 }
 
@@ -49,9 +53,12 @@ export async function POST(request: NextRequest) {
     let generation = generationId ? await getGeneration(generationId) : null;
     if (generationId && !generation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     if (generation?.status === "saved") return NextResponse.json({ error: "This recipe was already saved" }, { status: 409 });
-    const userTurns = generation?.messages.filter((m) => m.role === "user").length ?? 0;
-    if (userTurns >= MAX_TURNS) {
+    if (countUserTurns(generation?.messages ?? []) >= MAX_TURNS) {
       return NextResponse.json({ error: `This chat has reached ${MAX_TURNS} messages — save the draft or start a new one` }, { status: 409 });
+    }
+    // Spend ceiling: every turn is a Sonnet call; new chats don't reset it
+    if ((await countHouseholdTurnsSince(24)) >= MAX_TURNS_PER_DAY) {
+      return NextResponse.json({ error: "Your household has hit today's limit for recipe generation — try again tomorrow" }, { status: 429 });
     }
 
     const [householdId, recipes] = await Promise.all([getActiveHouseholdId(), listRecipes()]);
@@ -84,11 +91,14 @@ export async function POST(request: NextRequest) {
     const assistantMessage: GenerationMessage = { role: "assistant", reply: result.reply, options: result.options, recipe: result.recipe, libraryMatches: result.libraryMatches, at: now };
 
     generation ??= await createGeneration(message);
-    const updated = await appendTurn(generation.id, { user: userMessage, assistant: assistantMessage }, result.recipe);
+    const updated = await appendTurn(generation, { user: userMessage, assistant: assistantMessage }, result.recipe);
     return NextResponse.json(updated);
   } catch (error) {
+    if (error instanceof GenerationConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    // Internal detail (Postgres, SDK) stays in the logs
     console.error("[POST /api/generate]", error);
-    const message = error instanceof Error ? error.message : "Failed to generate";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "The assistant couldn't answer right now — please try again" }, { status: 500 });
   }
 }

@@ -8,8 +8,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!generation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     return NextResponse.json(generation);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load conversation";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/generate/[id]]", error);
+    return NextResponse.json({ error: "Couldn't load that conversation" }, { status: 500 });
   }
 }
 
@@ -23,7 +23,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     await deleteGeneration(id);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to discard conversation";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[DELETE /api/generate/[id]]", error);
+    return NextResponse.json({ error: "Couldn't discard that conversation" }, { status: 500 });
   }
 }

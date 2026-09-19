@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { GenerationMessage, ParsedRecipe, RecipeGeneration } from "@/lib/types";
 import { CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
-import { MAX_PHOTOS, MAX_TURNS } from "@/lib/recipeGeneration";
+import { MAX_PHOTOS, MAX_TURNS, countUserTurns } from "@/lib/recipeGeneration";
 import { downscaleToJpegBase64 } from "@/lib/imageDownscale";
 import { getCurrentWeekStart } from "@/lib/weekDates";
 import { useUrlMirror } from "@/hooks/useUrlMirror";
@@ -34,6 +34,14 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Which chat is on screen, readable from an in-flight send's callback
+  const activeChatId = useRef<string | null>(initial?.id ?? null);
+
+  function selectChat(next: RecipeGeneration | null) {
+    activeChatId.current = next?.id ?? null;
+    setChat(next);
+    setError(null);
+  }
 
   useUrlMirror({ g: chat?.id ?? "" }, 0);
 
@@ -41,13 +49,14 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
     bottomRef.current?.scrollIntoView?.({ block: "end" });
   }, [chat?.messages.length, sending]);
 
-  const userTurns = chat?.messages.filter((m) => m.role === "user").length ?? 0;
+  const userTurns = countUserTurns(chat?.messages ?? []);
   const readOnly = chat?.status === "saved";
   const atCap = userTurns >= MAX_TURNS;
 
   async function send(message: string, attached: Photo[] = photos) {
     if (sending || readOnly) return;
-    const body = { generationId: chat?.id ?? null, message, images: attached.map((p) => p.base64) };
+    const targetId = chat?.id ?? null;
+    const body = { generationId: targetId, message, images: attached.map((p) => p.base64) };
     setSending(true);
     setError(null);
     try {
@@ -55,12 +64,16 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Something went wrong");
       const updated: RecipeGeneration = data;
-      setChat(updated);
       setDrafts((prev) => [updated, ...prev.filter((d) => d.id !== updated.id)]);
-      setText("");
-      setPhotos([]);
+      // Only show the answer if the user is still looking at the chat it
+      // belongs to (a brand-new chat counts while no other chat was opened)
+      if (activeChatId.current === targetId) {
+        selectChat(updated);
+        setText("");
+        setPhotos([]);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (activeChatId.current === targetId) setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setSending(false);
     }
@@ -80,7 +93,7 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
       );
       setPhotos((prev) => [...prev, ...next]);
     } catch {
-      showToast("Couldn't read that photo");
+      showToast("Couldn't read that photo — try a JPEG or a screenshot");
     } finally {
       if (fileInput.current) fileInput.current.value = "";
     }
@@ -102,11 +115,16 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
 
   async function discard() {
     if (!chat) return;
-    const id = chat.id;
-    setChat(null);
-    setDrafts((prev) => prev.filter((d) => d.id !== id));
-    const res = await fetch(`/api/generate/${id}`, { method: "DELETE" });
-    if (!res.ok) showToast("Couldn't discard that chat");
+    const previous = chat;
+    selectChat(null);
+    setDrafts((prev) => prev.filter((d) => d.id !== previous.id));
+    const res = await fetch(`/api/generate/${previous.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      // Put it back exactly where it was
+      setDrafts((prev) => [previous, ...prev.filter((d) => d.id !== previous.id)]);
+      selectChat(previous);
+      showToast("Couldn't discard that chat");
+    }
   }
 
   async function addToPlan(recipeId: string, mealType: string) {
@@ -124,14 +142,14 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
     <div className="space-y-4">
       {/* Drafts strip */}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => { setChat(null); setError(null); }} className={`${secondaryBtn} ${!chat ? "border-primary text-primary" : ""}`}>
+        <button type="button" onClick={() => selectChat(null)} className={`${secondaryBtn} ${!chat ? "border-primary text-primary" : ""}`}>
           + New chat
         </button>
         {drafts.map((d) => (
           <button
             key={d.id}
             type="button"
-            onClick={() => { setChat(d); setError(null); }}
+            onClick={() => selectChat(d)}
             className={`inline-flex min-h-11 max-w-[60vw] items-center truncate rounded-full border px-3 text-sm transition-colors sm:max-w-xs ${chat?.id === d.id ? "border-primary bg-primary-light/40 text-primary" : "border-border text-text-secondary hover:bg-border-light"}`}
             title={d.title}
           >
@@ -279,7 +297,7 @@ function MessageView({
                   <Link href={`/recipes/${m.recipeId}?from=${encodeURIComponent(`/recipes/generate?g=${chatId}`)}`} className="font-medium text-text hover:text-primary">{m.title}</Link>
                   <span className="block text-xs text-text-muted">{m.reason}</span>
                 </div>
-                <button type="button" onClick={() => onAddToPlan(m.recipeId, "dinner")} className="min-h-9 shrink-0 rounded-md border border-accent/30 px-2 text-xs text-accent hover:bg-surface">
+                <button type="button" onClick={() => onAddToPlan(m.recipeId, m.mealType)} className="min-h-9 shrink-0 rounded-md border border-accent/30 px-2 text-xs text-accent hover:bg-surface">
                   Add to this week
                 </button>
               </li>
