@@ -195,6 +195,7 @@ export function validateParsedRecipe(data: unknown): ParsedRecipe {
 // Leave room to serialize the response before the function's maxDuration
 const RESPONSE_MARGIN_MS = 3_000;
 const TOO_SLOW_MESSAGE = "Importing took too long — try again";
+const UNAVAILABLE_MESSAGE = "Couldn't read the recipe right now — try again in a minute";
 
 /** The user message: images first (the vision guidance in Anthropic's docs),
  *  then each labeled section. */
@@ -240,7 +241,9 @@ export async function parseRecipe(source: ImportSource, deadline: Deadline): Pro
     if (err instanceof APIConnectionTimeoutError || err instanceof APIUserAbortError) {
       throw new Error(TOO_SLOW_MESSAGE);
     }
-    throw err;
+    // Anything else from the call (missing key, outage, rate limit) is ours
+    // to fix, not the user's to read; the original rides along for the logs
+    throw new Error(UNAVAILABLE_MESSAGE, { cause: err });
   }
 
   if (message.stop_reason === "refusal") {

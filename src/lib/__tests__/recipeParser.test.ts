@@ -157,6 +157,14 @@ describe("parseRecipe", () => {
     await expect(parseRecipe(source(), createDeadline(30_000))).rejects.toThrow("Importing took too long — try again");
   });
 
+  it("hides raw SDK/API errors behind a plain message, keeping them as the cause (seen on the Vercel preview)", async () => {
+    const missingKey = new Error("Could not resolve authentication method. Expected one of apiKey, authToken, ...");
+    state.error = missingKey;
+    const err = await parseRecipe(source(), budget()).then(() => null, (e: Error) => e);
+    expect(err?.message).toBe("Couldn't read the recipe right now — try again in a minute");
+    expect(err?.cause).toBe(missingKey);
+  });
+
   it("surfaces refusals and truncation as errors", async () => {
     state.response = reply({}, "refusal");
     await expect(parseRecipe(source(), budget())).rejects.toThrow("declined");
