@@ -1,56 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseRecipeFromUrl, parseRecipeFromText, isVideoUrl, extractVideoContent } from "@/lib/recipeParser";
+import { parseRecipe } from "@/lib/recipeParser";
+import { extractImportSource } from "@/lib/import";
+import { detectSource, stripTracking } from "@/lib/import/platforms";
+import { createDeadline, ImportFailure, importFailureBody, logImport, subDeadline } from "@/lib/import/fetchPage";
 
-// Recipe extraction calls Claude with thinking enabled — allow up to 60s
+// Extraction (page, transcript) + one Claude call
 export const maxDuration = 60;
 
+// One budget for the whole import, inside maxDuration. Extraction gets at
+// most EXTRACT_BUDGET_MS so Claude always has time left.
+const IMPORT_BUDGET_MS = 57_000;
+const EXTRACT_BUDGET_MS = 15_000;
+
 export async function POST(request: NextRequest) {
+  let url: unknown;
   try {
-    const { url } = await request.json();
+    ({ url } = await request.json());
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
-    if (!url || typeof url !== "string") {
-      return NextResponse.json(
-        { error: "Missing required field: url" },
-        { status: 400 },
-      );
-    }
+  if (!url || typeof url !== "string") {
+    return NextResponse.json({ error: "Missing required field: url" }, { status: 400 });
+  }
+  try {
+    new URL(url);
+  } catch {
+    return NextResponse.json({ error: "Invalid URL format" }, { status: 400 });
+  }
 
-    // Basic URL validation
-    try {
-      new URL(url);
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid URL format" },
-        { status: 400 },
-      );
-    }
+  const source = detectSource(url);
+  const started = Date.now();
+  const deadline = createDeadline(IMPORT_BUDGET_MS);
+  let stage: "extract" | "parse" = "extract";
 
-    // Video platforms: try auto-extraction first, fall back to manual text paste
-    if (isVideoUrl(url)) {
-      try {
-        const extracted = await extractVideoContent(url);
-        if (extracted) {
-          const parsed = await parseRecipeFromText(extracted.text, url);
-          return NextResponse.json(parsed);
-        }
-      } catch (err) {
-        console.error("Video content extraction failed:", err);
-      }
-      // Extraction failed or insufficient content — ask user to paste text
-      return NextResponse.json(
-        {
-          error: "Couldn't auto-extract the recipe from this video. Paste the recipe text instead.",
-          isVideoUrl: true,
-        },
-        { status: 422 },
-      );
-    }
-
-    const parsed = await parseRecipeFromUrl(url);
+  try {
+    const extracted = await extractImportSource(url, subDeadline(deadline, EXTRACT_BUDGET_MS));
+    stage = "parse";
+    const parsed = await parseRecipe(extracted, deadline);
+    logImport({ source, outcome: "ok", stage, ms: Date.now() - started });
     return NextResponse.json(parsed);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to parse recipe";
+    if (error instanceof ImportFailure) {
+      logImport({ source, outcome: "failed", stage, ms: Date.now() - started, reason: error.reason, detail: error.detail });
+      return NextResponse.json(importFailureBody(error, stripTracking(url)), { status: 422 });
+    }
+    logImport({ source, outcome: "error", stage, ms: Date.now() - started });
     console.error("Recipe parse error:", error);
+    const message = error instanceof Error ? error.message : "Failed to parse recipe";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -32,6 +32,24 @@ export class ImportFailure extends Error {
   }
 }
 
+/** 422 body for a failed import: the form switches to Paste Text (with
+ *  screenshots) and keeps the link as the recipe's source. */
+export function importFailureBody(err: ImportFailure, sourceUrl: string | null) {
+  return { error: err.message, reason: err.reason, canPaste: true as const, sourceUrl };
+}
+
+/** One structured line per import attempt, for diagnosing source drift */
+export function logImport(event: {
+  source: string;
+  outcome: "ok" | "failed" | "error";
+  stage: "extract" | "parse";
+  ms: number;
+  reason?: ImportFailureReason;
+  detail?: string;
+}): void {
+  console.info("[import]", JSON.stringify(event));
+}
+
 // ── Time budget ──
 
 /** One budget for a whole request, so extraction + Claude fit maxDuration */

@@ -15,7 +15,7 @@ type FormState =
   | { step: "parsing" }
   | { step: "review"; parsed: ParsedRecipe }
   | { step: "saving" }
-  | { step: "error"; message: string; isVideoUrl?: boolean };
+  | { step: "error"; message: string; canPaste?: boolean };
 
 export default function RecipeForm() {
   const [inputMode, setInputMode] = useState<InputMode>("url");
@@ -56,13 +56,13 @@ export default function RecipeForm() {
 
       if (!res.ok) {
         const data = await res.json();
-        // If the API tells us it's a video URL, switch to text mode
-        if (data.isVideoUrl) {
+        // Import failed for a reason the user can work around: switch to text mode
+        if (data.canPaste) {
           setInputMode("text");
           setFormState({
             step: "error",
             message: data.error,
-            isVideoUrl: true,
+            canPaste: true,
           });
           return;
         }
@@ -197,7 +197,7 @@ export default function RecipeForm() {
           {formState.step === "error" && (
             <div
               className={`rounded-xl border p-3 text-sm ${
-                formState.isVideoUrl
+                formState.canPaste
                   ? "border-gold-light bg-gold-light/50 text-gold"
                   : "border-danger-light bg-danger-light/50 text-danger"
               }`}
