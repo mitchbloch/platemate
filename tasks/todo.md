@@ -270,3 +270,19 @@ Spec: [phase8_qol_and_features.md](phase8_qol_and_features.md). One PR per batch
 - [x] All five batches merged: #33 A, #34 B, #35 search fix, #36 C, #37 picker links, #38 D, #39 share hotfix, #40 E. Migrations 016–018 applied. 301 tests.
 - [ ] User: turn on email confirmation in Supabase Auth (Dashboard → Authentication → Providers → Email → "Confirm email") — shared links now send strangers to signup
 - [ ] Build + lint + tests clean; `/code-review`; PR; live eval with the real API
+
+## Phase 9: Recipe Import Pipeline + Screenshot Import (2026-11-01)
+Spec: `tasks/phase9_recipe_import.md`. Branch `feature/recipe-import-pipeline`, one PR.
+Trigger: user report — TikTok `tiktok.com/t/ZPLPoL8uG/` won't auto-import. Root cause: TikTok oEmbed stopped returning captions (~2026-10-19); audit found JSON-LD stripped + 60k truncation on sites, 160-char YouTube descriptions, blocked sites surfacing as 500s.
+- [x] Live audit (TikTok, YouTube, Instagram, Pinterest, 13 recipe sites) + design review; decisions locked with the user
+- [x] Docs: phase 9 spec, PRD, CLAUDE.md
+- [ ] `platforms.ts` (source detection, tracking strip) + RecipeForm off its regex
+- [ ] `fetchPage.ts`: per-hop SSRF + DNS check, deadline, streamed size cap, charset, block detection, `ImportFailure`
+- [ ] `text.ts` + `jsonLd.ts`; web path sends JSON-LD; unified prompt; `no_recipe` guard
+- [ ] TikTok (rehydration caption + ASR transcript) — fixes the outage
+- [ ] YouTube (full description + ASR transcript, consent/bot-check fallback)
+- [ ] Pinterest outbound hop; Instagram cross-post kept
+- [ ] Route 422 contract + structured logs + RecipeForm fallback UX
+- [ ] Screenshot import (≤5, shared image validation, 1568px downscale)
+- [ ] `npm run eval:import` live drift check
+- [ ] Build + lint + tests clean; `/code-review`; live eval with `--parse`; browser walkthrough; draft PR; verify on Vercel preview
