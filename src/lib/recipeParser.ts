@@ -12,6 +12,7 @@ import {
 } from "./recipeValidation";
 import { SHOPPING_NAME_RULES, normalizeShoppingName } from "./shoppingName";
 import { detectSource, isVideoSource } from "./import/platforms";
+import { createDeadline, fetchPage } from "./import/fetchPage";
 
 // Lazy so importing this module (e.g. in tests) doesn't require an API key
 let anthropicClient: Anthropic | null = null;
@@ -21,57 +22,6 @@ function getAnthropic(): Anthropic {
 
 /** Timeout for all outbound fetches — a hung site shouldn't hold the request. */
 const FETCH_TIMEOUT_MS = 10_000;
-
-/** Reject URLs that don't point at a public http(s) host (SSRF guard). */
-export function assertPublicHttpUrl(url: string): URL {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error("Invalid URL");
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Only http(s) URLs are supported");
-  }
-
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-
-  // Internal hostnames: localhost, single-label names, .local/.internal
-  if (
-    host === "localhost" ||
-    !host.includes(".") ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal")
-  ) {
-    throw new Error("URL host is not allowed");
-  }
-
-  // IPv4 literals in loopback/private/link-local/reserved ranges
-  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-    if (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224
-    ) {
-      throw new Error("URL host is not allowed");
-    }
-  }
-
-  // IPv6 loopback / link-local / unique-local
-  if (host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) {
-    throw new Error("URL host is not allowed");
-  }
-
-  return parsed;
-}
 
 type VideoPlatform = "tiktok" | "youtube" | "instagram";
 
@@ -152,13 +102,8 @@ async function fetchTikTokOEmbed(
 /** Follow redirects and return the final URL (for vm.tiktok.com short links) */
 async function resolveRedirect(url: string): Promise<string | null> {
   try {
-    assertPublicHttpUrl(url);
-    const response = await fetch(url, {
-      redirect: "follow",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
-    return response.url || null;
+    const page = await fetchPage(url, { deadline: createDeadline(FETCH_TIMEOUT_MS) });
+    return page.url;
   } catch {
     return null;
   }
@@ -327,22 +272,7 @@ ${NUTRITION_GUIDELINES}`;
 
 /** Fetch HTML from a recipe URL */
 async function fetchRecipeHtml(url: string): Promise<string> {
-  assertPublicHttpUrl(url);
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml",
-    },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    redirect: "follow",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch recipe page: ${response.status}`);
-  }
-
-  const html = await response.text();
+  const { text: html } = await fetchPage(url, { deadline: createDeadline(FETCH_TIMEOUT_MS) });
 
   // Strip scripts, styles, and excessive whitespace to reduce tokens
   const cleaned = html
