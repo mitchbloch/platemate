@@ -11,6 +11,7 @@ import {
   asStringOrNull,
 } from "./recipeValidation";
 import { SHOPPING_NAME_RULES, normalizeShoppingName } from "./shoppingName";
+import { detectSource, isVideoSource } from "./import/platforms";
 
 // Lazy so importing this module (e.g. in tests) doesn't require an API key
 let anthropicClient: Anthropic | null = null;
@@ -74,30 +75,14 @@ export function assertPublicHttpUrl(url: string): URL {
 
 type VideoPlatform = "tiktok" | "youtube" | "instagram";
 
-const PLATFORM_HOSTNAMES: Record<VideoPlatform, string[]> = {
-  tiktok: ["tiktok.com", "www.tiktok.com", "vm.tiktok.com", "m.tiktok.com"],
-  instagram: ["instagram.com", "www.instagram.com"],
-  youtube: ["youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com"],
-};
-
 /** Detect which video platform a URL belongs to, or null if not a video platform */
 function detectVideoPlatform(url: string): VideoPlatform | null {
-  try {
-    const hostname = new URL(url).hostname;
-    for (const [platform, hostnames] of Object.entries(PLATFORM_HOSTNAMES)) {
-      if (hostnames.some((h) => hostname === h || hostname.endsWith(`.${h}`))) {
-        return platform as VideoPlatform;
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  return isVideoSource(url) ? (detectSource(url) as VideoPlatform) : null;
 }
 
 /** Check if a URL points to a video platform that can't be HTML-scraped */
 export function isVideoUrl(url: string): boolean {
-  return detectVideoPlatform(url) !== null;
+  return isVideoSource(url);
 }
 
 /** Extract og:description or meta description from HTML */

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ParsedRecipe } from "@/lib/types";
 import { DIETARY_FLAG_LABELS } from "@/lib/types";
+import { isVideoSource } from "@/lib/import/platforms";
 import NutritionBadge from "./NutritionBadge";
 import RecipeEditor, { toEditableRecipe, fromEditableRecipe, type EditableRecipe } from "./RecipeEditor";
 
@@ -218,7 +219,7 @@ export default function RecipeForm() {
 
   // ── Parsing step ──
   if (formState.step === "parsing") {
-    const isVideo = /tiktok\.com|instagram\.com|youtube\.com|youtu\.be/.test(url);
+    const isVideo = isVideoSource(url);
     return (
       <div className="py-12 text-center">
         <div className="spinner mx-auto mb-4 h-8 w-8" />
