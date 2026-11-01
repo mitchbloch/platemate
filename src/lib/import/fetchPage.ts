@@ -202,6 +202,9 @@ export interface FetchPageOptions {
   deadline: Deadline;
   maxBytes?: number;
   accept?: string;
+  /** Skip the binary content-type rejection, for CDNs that mislabel text
+   *  (TikTok serves WebVTT as video/mp4). Caller must validate the body. */
+  ignoreContentType?: boolean;
 }
 
 function failureForStatus(status: number): ImportFailure | null {
@@ -262,7 +265,12 @@ function isAbort(err: unknown): boolean {
 /** GET a public page: SSRF-checked on every redirect hop, bounded in time
  *  and size, decoded with the right charset, blocks reported as failures. */
 export async function fetchPage(url: string, options: FetchPageOptions): Promise<FetchedPage> {
-  const { deadline, maxBytes = DEFAULT_MAX_BYTES, accept = "text/html,application/xhtml+xml" } = options;
+  const {
+    deadline,
+    maxBytes = DEFAULT_MAX_BYTES,
+    accept = "text/html,application/xhtml+xml",
+    ignoreContentType = false,
+  } = options;
   const visited = new Set<string>();
   let current = url;
 
@@ -298,7 +306,7 @@ export async function fetchPage(url: string, options: FetchPageOptions): Promise
     }
 
     const contentType = res.headers.get("content-type") ?? "";
-    if (BINARY_CONTENT_TYPE.test(contentType)) {
+    if (!ignoreContentType && BINARY_CONTENT_TYPE.test(contentType)) {
       await res.body?.cancel().catch(() => {});
       throw new ImportFailure("unsupported", `content-type ${contentType}`);
     }

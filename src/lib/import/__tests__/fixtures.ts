@@ -61,5 +61,53 @@ export const blogPostPage = `<!doctype html><html><head><title>High Protein Chil
 <h3>Ingredients</h3><ul><li>1 lb 93% lean ground turkey</li><li>1 can kidney beans</li></ul>
 <h3>Instructions</h3><ol><li>Brown the turkey.</li><li>Add beans and simmer 20 minutes.</li></ol></div></body></html>`;
 
+// ── TikTok video page (`__UNIVERSAL_DATA_FOR_REHYDRATION__` shape) ──
+
+export const TIKTOK_VTT_URL = "https://v16m-webapp.tiktokcdn-us.com/abc/subtitle.vtt?expire=1793722032";
+
+export function tiktokPage(opts: {
+  statusCode?: number;
+  statusMsg?: string;
+  desc?: string;
+  subtitles?: { Url: string; Source: string; LanguageCodeName: string; Format?: string }[];
+  imagePost?: boolean;
+  privateItem?: boolean;
+  omitScope?: boolean;
+} = {}): string {
+  const item = {
+    id: "7641621946563661078",
+    desc: opts.desc ?? "High Protein Sheetpan Chicken Kebabs! 🔥 Chicken Kebabs - 1kg lean ground chicken - 2 tsp paprika };{ Oven Bake: 190°C | 20-25 minutes",
+    textLanguage: "en",
+    privateItem: opts.privateItem ?? false,
+    author: { uniqueId: "panaceapalm", nickname: "Panacea Palm" },
+    video: {
+      cover: "https://p16-common-sign.tiktokcdn-us.com/cover.jpeg?x-expires=1",
+      subtitleInfos: opts.subtitles ?? [
+        { Url: TIKTOK_VTT_URL, Source: "ASR", LanguageCodeName: "eng-US", Format: "webvtt" },
+      ],
+    },
+    ...(opts.imagePost ? { imagePost: { images: [] } } : {}),
+  };
+  const scope = opts.omitScope
+    ? { "webapp.app-context": {} }
+    : {
+        "webapp.app-context": {},
+        "webapp.video-detail": { statusCode: opts.statusCode ?? 0, statusMsg: opts.statusMsg ?? "", itemInfo: { itemStruct: item } },
+      };
+  return `<!DOCTYPE html><html><head><title>TikTok</title></head><body><div id="app"></div>
+<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">${JSON.stringify({ __DEFAULT_SCOPE__: scope })}</script></body></html>`;
+}
+
+export const tiktokVtt = `WEBVTT
+
+00:00:00.000 --> 00:00:01.800
+Get your onions, bell pepper and garlic
+
+00:00:01.800 --> 00:00:03.000
+Get your onions, bell pepper and garlic
+
+00:00:03.000 --> 00:00:05.000
+and blitz them in a food processor`;
+
 export const cloudflareChallenge = `<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title></head>
 <body><script>window._cf_chl_opt={cvId: '3',cType: 'managed'};</script></body></html>`;

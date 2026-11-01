@@ -2,6 +2,7 @@ import { detectSource, stripTracking } from "./platforms";
 import { createDeadline, fetchPage, ImportFailure, type Deadline } from "./fetchPage";
 import { extractRecipeJsonLd } from "./jsonLd";
 import { extractMeta, htmlToText } from "./text";
+import { extractTikTok } from "./tiktok";
 
 export type SectionLabel = "STRUCTURED DATA" | "PAGE TEXT" | "CAPTION" | "TRANSCRIPT" | "USER TEXT";
 
@@ -80,27 +81,8 @@ async function searchForCrossPost(url: string): Promise<string | null> {
   return results?.find((r) => ["tiktok", "youtube"].includes(detectSource(r.url)))?.url ?? null;
 }
 
-async function fetchTikTokOEmbed(url: string): Promise<{ title?: string; author_name?: string } | null> {
-  const response = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`, {
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) return null;
-  return response.json();
-}
-
 async function extractVideo(url: string): Promise<{ text: string; sourceName: string | null } | null> {
   const platform = detectSource(url);
-
-  if (platform === "tiktok") {
-    let data = await fetchTikTokOEmbed(url);
-    if (!data?.title) {
-      const resolved = await fetchPage(url, { deadline: createDeadline(FETCH_TIMEOUT_MS) }).then((p) => p.url, () => null);
-      if (resolved && resolved !== url && detectSource(resolved) === "tiktok") data = await fetchTikTokOEmbed(resolved);
-    }
-    const text = data?.title;
-    if (!text || text.length < MIN_CONTENT_LENGTH) return null;
-    return { text, sourceName: data?.author_name ? `TikTok — ${data.author_name}` : "TikTok" };
-  }
 
   if (platform === "youtube") {
     const parts: string[] = [];
@@ -136,6 +118,7 @@ async function extractVideo(url: string): Promise<{ text: string; sourceName: st
 export async function extractImportSource(url: string, deadline: Deadline): Promise<ImportSource> {
   const kind = detectSource(url);
   if (kind === "web" || kind === "pinterest") return extractWeb(url, deadline);
+  if (kind === "tiktok") return extractTikTok(url, deadline);
 
   const video = await extractVideo(url);
   if (!video) throw new ImportFailure("no_recipe", `no caption from ${kind}`);

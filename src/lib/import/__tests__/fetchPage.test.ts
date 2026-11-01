@@ -228,6 +228,12 @@ describe("fetchPage", () => {
       expect((await failure(fetchPage("https://site.com/menu.pdf", opts()))).reason).toBe("unsupported");
     });
 
+    it("reads a mislabeled body when the caller opts out of the content-type check", async () => {
+      routes["https://cdn.example/sub.vtt"] = () => new Response("WEBVTT\n\nhi", { headers: { "content-type": "video/mp4" } });
+      const page = await fetchPage("https://cdn.example/sub.vtt", { ...opts(), ignoreContentType: true });
+      expect(page.text).toBe("WEBVTT\n\nhi");
+    });
+
     it("tolerates a missing content-type", async () => {
       routes["https://site.com/"] = () => new Response("<h1>ok</h1>", { status: 200 });
       expect((await fetchPage("https://site.com/", opts())).text).toBe("<h1>ok</h1>");
