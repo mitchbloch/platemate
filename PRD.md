@@ -74,8 +74,8 @@ Full spec and root-cause table: `tasks/phase8_qol_and_features.md`.
 ## Phase 9: Recipe Import Pipeline — Design Decisions
 Full spec, audit evidence and root-cause table: `tasks/phase9_recipe_import.md`.
 - **Layered extraction, one Claude call**: deterministic extraction first (schema.org Recipe JSON-LD on sites; caption + auto-transcript on TikTok/YouTube; Pinterest follows the pin to its source), then a single Claude call normalizes it (shopping names, categories, nutrition fill-in). Site-provided nutrition is used as given.
-- **Transcripts always included** for TikTok and YouTube so spoken-only recipes import; best-effort with a short timeout.
-- **Respect blocks**: sites that refuse automated access (Cloudflare challenges, publisher blocks) and private posts get a clear message and drop the user into Paste Text with the link kept — never bypassed. Requests keep a browser identity (NYT Cooking needs it) but make exactly one fetch per pasted link and never retry under another identity.
+- **Transcripts always included** for TikTok so spoken-only recipes import; best-effort with a short timeout. YouTube sends its full description only — its transcripts sit behind a bot check we don't defeat.
+- **Respect blocks**: sites that refuse automated access (Cloudflare challenges, publisher blocks) and private posts get a clear message and drop the user into Paste Text with the link kept — never bypassed. Requests identify honestly as Platemate, make exactly one fetch per pasted link, and never retry under another identity.
 - **Screenshot import**: up to 5 screenshots/photos (caption, recipe card, cookbook page) in Paste Text mode, read in the same single call, downscaled in the browser, never stored. This is also the fallback for Instagram and blocked sites.
 - **No invented recipes**: when the source has no recipe ("recipe in bio"), import says so instead of guessing.
 - **Drift check**: `npm run eval:import` runs one real link per source and reports each stage, so the next silent platform change is caught by a script.
@@ -83,7 +83,7 @@ Full spec, audit evidence and root-cause table: `tasks/phase9_recipe_import.md`.
 ## Success Metrics
 - Can import a recipe from any major cooking site in <10 seconds
 - Imports are complete: every ingredient and step the source lists (structured data preferred over page text)
-- TikTok and YouTube links auto-import, including recipes that are only spoken; Instagram and blocked sites fall back to paste or screenshots with a clear reason
+- TikTok and YouTube links auto-import (TikTok including recipes that are only spoken); Instagram and blocked sites fall back to paste or screenshots with a clear reason
 - Nutrition flags correctly identify high-cholesterol recipes
 - Weekly planning takes <5 minutes (vs 30+ manual)
 - Grocery list generation from meal plan in <2 seconds

@@ -152,13 +152,23 @@ function prune(recipe: Json, ingredients: string[], instructions: unknown[]): Js
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined && v !== ""));
 }
 
+/** Every parseable `application/ld+json` block on the page; malformed ones are skipped */
+export function parseJsonLdBlocks(html: string): unknown[] {
+  const blocks: unknown[] = [];
+  for (const m of html.matchAll(/<script\b[^>]*type\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi)) {
+    const parsed = parseBlock(m[1]);
+    if (parsed !== null) blocks.push(parsed);
+  }
+  return blocks;
+}
+
 /** The page's Recipe JSON-LD, or null when there is none worth using
  *  (no ingredients or no instructions → caller falls back to page text). */
 export function extractRecipeJsonLd(html: string, pageUrl: string): JsonLdRecipe | null {
   const candidates: { recipe: Json; ingredients: string[]; instructions: unknown[] }[] = [];
-  for (const m of html.matchAll(/<script\b[^>]*type\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi)) {
+  for (const block of parseJsonLdBlocks(html)) {
     const found: Json[] = [];
-    collectRecipes(parseBlock(m[1]), found);
+    collectRecipes(block, found);
     for (const recipe of found) {
       const ingredients = ingredientsOf(recipe);
       const instructions = instructionsOf(recipe.recipeInstructions);

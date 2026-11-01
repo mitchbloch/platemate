@@ -1,8 +1,9 @@
 import { detectSource, stripTracking } from "./platforms";
-import { createDeadline, fetchPage, ImportFailure, type Deadline } from "./fetchPage";
-import { extractRecipeJsonLd } from "./jsonLd";
-import { extractMeta, htmlToText } from "./text";
+import { fetchPage, ImportFailure, subDeadline, type Deadline } from "./fetchPage";
+import { extractRecipeJsonLd, parseJsonLdBlocks } from "./jsonLd";
+import { cleanInlineText, extractMeta, htmlToText } from "./text";
 import { extractTikTok } from "./tiktok";
+import { extractYouTube } from "./youtube";
 
 export type SectionLabel = "STRUCTURED DATA" | "PAGE TEXT" | "CAPTION" | "TRANSCRIPT" | "USER TEXT";
 
@@ -60,73 +61,102 @@ async function extractWeb(url: string, deadline: Deadline): Promise<ImportSource
   return { ...base, sections: [{ label: "PAGE TEXT", text: text.slice(0, PAGE_TEXT_LIMIT) }] };
 }
 
-// ── Video platforms (pre-Phase 9 logic, replaced platform by platform) ──
+// ── Sources that point somewhere else ──
 
-const FETCH_TIMEOUT_MS = 10_000;
-const MIN_CONTENT_LENGTH = 50;
+/** Pinterest/Instagram resolve to another URL; follow at most this many */
+const MAX_HOPS = 1;
+const CROSS_POST_BUDGET_MS = 5_000;
+const MIN_PIN_DESCRIPTION = 200;
 
-async function searchForCrossPost(url: string): Promise<string | null> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!apiKey) return null;
-  const response = await fetch(
-    `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(url)}&count=10`,
-    {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { Accept: "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": apiKey },
-    },
-  );
-  if (!response.ok) return null;
-  const data = await response.json();
-  const results = data?.web?.results as Array<{ url: string }> | undefined;
-  return results?.find((r) => ["tiktok", "youtube"].includes(detectSource(r.url)))?.url ?? null;
+interface SocialPosting {
+  articleBody?: string;
+  author?: { name?: string };
+  sharedContent?: { url?: string };
 }
 
-async function extractVideo(url: string): Promise<{ text: string; sourceName: string | null } | null> {
-  const platform = detectSource(url);
-
-  if (platform === "youtube") {
-    const parts: string[] = [];
-    let sourceName: string | null = "YouTube";
-    const oembedRes = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (oembedRes.ok) {
-      const oembedData = await oembedRes.json();
-      if (oembedData?.title) parts.push(`Title: ${oembedData.title}`);
-      if (oembedData?.author_name) sourceName = `YouTube — ${oembedData.author_name}`;
+/** The pin's schema.org SocialMediaPosting: its `sharedContent.url` is the
+ *  recipe the pin links to, `articleBody` the pin's own description. */
+function findSocialPosting(html: string): SocialPosting | null {
+  for (const block of parseJsonLdBlocks(html)) {
+    for (const node of Array.isArray(block) ? block : [block]) {
+      if (node && typeof node === "object" && (node as { "@type"?: unknown })["@type"] === "SocialMediaPosting") {
+        return node as SocialPosting;
+      }
     }
-    try {
-      const page = await fetchPage(url, { deadline: createDeadline(FETCH_TIMEOUT_MS) });
-      const description = extractMeta(page.text, "og:description") ?? extractMeta(page.text, "description");
-      if (description) parts.push(`Description: ${description}`);
-    } catch {
-      // continue with what we have
-    }
-    const text = parts.join("\n\n");
-    return text.length < MIN_CONTENT_LENGTH ? null : { text, sourceName };
   }
-
-  if (platform === "instagram") {
-    const crossPostUrl = await searchForCrossPost(url);
-    return crossPostUrl ? extractVideo(crossPostUrl) : null;
-  }
-
   return null;
 }
 
-/** Extract importable content from any supported URL */
-export async function extractImportSource(url: string, deadline: Deadline): Promise<ImportSource> {
-  const kind = detectSource(url);
-  if (kind === "web" || kind === "pinterest") return extractWeb(url, deadline);
-  if (kind === "tiktok") return extractTikTok(url, deadline);
+async function extractPinterest(url: string, deadline: Deadline, hops: number): Promise<ImportSource> {
+  const page = await fetchPage(url, { deadline }); // pin.it short links redirect here
+  const post = findSocialPosting(page.text);
+  const outbound = absoluteUrl(post?.sharedContent?.url ?? null, page.url);
 
-  const video = await extractVideo(url);
-  if (!video) throw new ImportFailure("no_recipe", `no caption from ${kind}`);
-  return {
-    sections: [{ label: "CAPTION", text: video.text }],
-    images: [],
-    sourceName: video.sourceName,
-    imageUrl: null,
-    sourceUrl: stripTracking(url),
-  };
+  let outboundFailure: ImportFailure | null = null;
+  if (outbound && detectSource(outbound) !== "pinterest" && hops < MAX_HOPS) {
+    try {
+      return await extractImportSource(outbound, deadline, hops + 1);
+    } catch (err) {
+      if (!(err instanceof ImportFailure)) throw err;
+      outboundFailure = err; // e.g. the recipe site blocks us — try the pin itself
+    }
+  }
+
+  const description = cleanInlineText(post?.articleBody ?? "");
+  if (description.length >= MIN_PIN_DESCRIPTION) {
+    return {
+      sections: [{ label: "CAPTION", text: description }],
+      images: [],
+      sourceName: post?.author?.name ? `Pinterest — ${cleanInlineText(post.author.name)}` : "Pinterest",
+      imageUrl: null,
+      sourceUrl: stripTracking(page.url),
+    };
+  }
+  throw outboundFailure ?? new ImportFailure("no_recipe", "pin has no outbound link or description");
+}
+
+/** Brave Search for the same video cross-posted to TikTok/YouTube */
+async function searchForCrossPost(url: string, deadline: Deadline): Promise<string | null> {
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const response = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(url)}&count=10`,
+      {
+        signal: subDeadline(deadline, CROSS_POST_BUDGET_MS).signal,
+        headers: { Accept: "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": apiKey },
+      },
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    const results = data?.web?.results as Array<{ url?: unknown }> | undefined;
+    const match = results?.find((r) => typeof r.url === "string" && ["tiktok", "youtube"].includes(detectSource(r.url)));
+    return (match?.url as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Instagram serves no caption without a login, so look for the same
+ *  video on TikTok/YouTube; otherwise the user pastes or screenshots it */
+async function extractInstagram(url: string, deadline: Deadline, hops: number): Promise<ImportSource> {
+  const crossPost = hops < MAX_HOPS ? await searchForCrossPost(url, deadline) : null;
+  if (crossPost) return extractImportSource(crossPost, deadline, hops + 1);
+  throw new ImportFailure("blocked", "Instagram requires login; no cross-post found");
+}
+
+/** Extract importable content from any supported URL */
+export async function extractImportSource(url: string, deadline: Deadline, hops = 0): Promise<ImportSource> {
+  switch (detectSource(url)) {
+    case "tiktok":
+      return extractTikTok(url, deadline);
+    case "youtube":
+      return extractYouTube(url, deadline);
+    case "pinterest":
+      return extractPinterest(url, deadline, hops);
+    case "instagram":
+      return extractInstagram(url, deadline, hops);
+    case "web":
+      return extractWeb(url, deadline);
+  }
 }

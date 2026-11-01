@@ -128,11 +128,13 @@ describe("fetchPage", () => {
     expect(page).toMatchObject({ url: "https://site.com/r", status: 200, text: "<h1>Soup</h1>" });
   });
 
-  it("sends a browser identity and never retries under another", async () => {
+  it("identifies as Platemate and never retries under another identity", async () => {
     routes["https://site.com/r"] = () => html("x", { status: 403 });
     await failure(fetchPage("https://site.com/r", opts()));
     expect(calls).toHaveLength(1);
-    expect((calls[0].init.headers as Record<string, string>)["User-Agent"]).toMatch(/Chrome/);
+    const ua = (calls[0].init.headers as Record<string, string>)["User-Agent"];
+    expect(ua).toContain("Platemate/1.0");
+    expect(ua).not.toMatch(/Chrome|Safari/);
   });
 
   describe("redirects", () => {

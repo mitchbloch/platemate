@@ -109,5 +109,46 @@ Get your onions, bell pepper and garlic
 00:00:03.000 --> 00:00:05.000
 and blitz them in a food processor`;
 
+// ── YouTube watch page (`ytInitialPlayerResponse` shape) ──
+
+export const YT_ID = "8j5Z9IHEAj8";
+export const YT_WATCH = `https://www.youtube.com/watch?v=${YT_ID}`;
+export const YT_OEMBED = `https://www.youtube.com/oembed?url=${encodeURIComponent(YT_WATCH)}&format=json`;
+export const YT_DESCRIPTION =
+  "This easy skillet mushroom chicken is dinner in 20 minutes! 🍄 };\n\nIngredients:\n- 2 chicken breasts\n- 8 oz mushrooms\n\nMethod: sear, deglaze, simmer.";
+
+export function youTubePage(opts: { status?: string; reason?: string; description?: string } = {}): string {
+  const player = {
+    playabilityStatus: { status: opts.status ?? "OK", ...(opts.reason ? { reason: opts.reason } : {}) },
+    videoDetails: {
+      videoId: YT_ID,
+      title: "20-Minute Dinner Recipe (Easy Chicken Recipe!) #shorts",
+      author: "The Mediterranean Dish",
+      shortDescription: opts.description ?? YT_DESCRIPTION,
+    },
+    captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ baseUrl: "/api/timedtext?v=x&exp=xpe", kind: "asr" }] } },
+  };
+  return `<!DOCTYPE html><html><head>
+<meta property="og:description" content="This easy skillet mushroom chicken is dinner in 20 minutes! Made with simply seasoned juicy chicken breast cutlets...">
+</head><body><script>var ytInitialPlayerResponse = ${JSON.stringify(player)};var meta = document.createElement('meta');</script></body></html>`;
+}
+
+// ── Pinterest pin page (schema.org SocialMediaPosting shape) ──
+
+export function pinPage(opts: { outbound?: string | null; articleBody?: string } = {}): string {
+  const posting = {
+    "@context": "https://schema.org",
+    "@type": "SocialMediaPosting",
+    author: { "@type": "Person", name: "Jenn Fishkind" },
+    headline: "Easy Lentil Soup",
+    articleBody: opts.articleBody ?? "Cozy lentil soup for busy weeknights.",
+    ...(opts.outbound === null
+      ? {}
+      : { sharedContent: { "@type": "WebPage", url: opts.outbound ?? "https://www.example.com/recipes/lentil-soup/?utm_source=pinterest" } }),
+  };
+  return `<!DOCTYPE html><html><head><script type="application/ld+json">${JSON.stringify(posting)}</script></head>
+<body><script id="__PWS_DATA__" type="application/json">{"props":{"link":"https://unrelated.example/other-pin"}}</script></body></html>`;
+}
+
 export const cloudflareChallenge = `<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title></head>
 <body><script>window._cf_chl_opt={cvId: '3',cType: 'managed'};</script></body></html>`;

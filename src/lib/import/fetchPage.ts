@@ -173,12 +173,11 @@ async function assertPublicHost(hostname: string): Promise<void> {
 
 // ── Fetch ──
 
-// A browser identity: NYT Cooking and BBC Good Food 404 an honest UA.
-// Decision 5 in tasks/phase9_recipe_import.md: exactly one fetch per link
+// An honest identity (decision 5 in tasks/phase9_recipe_import.md): every
+// tested source serves it the same page a browser gets. One fetch per link
 // the user pasted, never retried under another identity, challenges never
 // solved — a block is reported, not worked around.
-const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const USER_AGENT = "Mozilla/5.0 (compatible; Platemate/1.0; +https://platemate-psi.vercel.app)";
 
 const MAX_REDIRECTS = 5;
 const DEFAULT_MAX_BYTES = 4_000_000; // YouTube watch pages run ~2MB
