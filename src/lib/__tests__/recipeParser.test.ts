@@ -19,7 +19,7 @@ vi.mock("@anthropic-ai/sdk", () => ({
   },
 }));
 
-import { buildRecipeRequestContent, parseRecipe, parseRecipeFromText } from "../recipeParser";
+import { buildRecipeRequestContent, parseRecipe, parseRecipeFromUserInput } from "../recipeParser";
 import { createDeadline, ImportFailure } from "../import/fetchPage";
 
 const recipeJson = (overrides: Record<string, unknown> = {}) => ({
@@ -137,11 +137,25 @@ describe("parseRecipe", () => {
   });
 });
 
-describe("parseRecipeFromText", () => {
+describe("parseRecipeFromUserInput", () => {
   it("sends pasted text as a USER TEXT section", async () => {
-    await parseRecipeFromText("2 eggs, scrambled", "https://instagram.com/p/x");
+    await parseRecipeFromUserInput({ text: "2 eggs, scrambled", images: [], sourceUrl: "https://instagram.com/p/x" });
     const messages = state.lastRequest?.messages as { content: string }[];
     expect(messages[0].content).toContain("=== USER TEXT ===\n2 eggs, scrambled");
     expect(messages[0].content).toContain("Source URL: https://instagram.com/p/x");
+  });
+
+  it("sends screenshots alone as image blocks with no empty text section", async () => {
+    await parseRecipeFromUserInput({ text: "", images: ["AAAA"], sourceUrl: null });
+    const content = (state.lastRequest?.messages as { content: { type: string; text?: string }[] }[])[0].content;
+    expect(content.map((b) => b.type)).toEqual(["image", "text"]);
+    expect(content[1].text).toBe("Extract the recipe.");
+  });
+
+  it("sends screenshots and text together", async () => {
+    await parseRecipeFromUserInput({ text: "serves 4", images: ["AAAA", "BBBB"], sourceUrl: null });
+    const content = (state.lastRequest?.messages as { content: { type: string; text?: string }[] }[])[0].content;
+    expect(content.map((b) => b.type)).toEqual(["image", "image", "text"]);
+    expect(content[2].text).toContain("=== USER TEXT ===\nserves 4");
   });
 });

@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ParsedRecipe } from "@/lib/types";
 import { DIETARY_FLAG_LABELS } from "@/lib/types";
 import { isVideoSource } from "@/lib/import/platforms";
+import { MAX_IMPORT_SCREENSHOTS } from "@/lib/imageInput";
+import { SCREENSHOT_MAX_EDGE_PX } from "@/lib/imageDownscale";
+import { usePhotoAttachments } from "@/hooks/usePhotoAttachments";
+import AttachedPhotos from "./AttachedPhotos";
 import NutritionBadge from "./NutritionBadge";
 import RecipeEditor, { toEditableRecipe, fromEditableRecipe, type EditableRecipe } from "./RecipeEditor";
 
 type InputMode = "url" | "text";
 
-const FALLBACK_HINT = "Paste the recipe text below instead.";
+const FALLBACK_HINT = "Paste the recipe text or add screenshots below instead.";
 
 type FormState =
   | { step: "input" }
@@ -26,13 +30,31 @@ export default function RecipeForm() {
   const [formState, setFormState] = useState<FormState>({ step: "input" });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editedRecipe, setEditedRecipe] = useState<EditableRecipe | null>(null);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
+  const screenshots = usePhotoAttachments(MAX_IMPORT_SCREENSHOTS, SCREENSHOT_MAX_EDGE_PX);
+  const fileInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  async function addScreenshots(files: FileList | null) {
+    const problem = await screenshots.add(files);
+    setAttachNote(
+      problem === "too_many"
+        ? `Up to ${MAX_IMPORT_SCREENSHOTS} screenshots`
+        : problem === "unreadable"
+          ? "Couldn't read that image — try a PNG or JPEG screenshot"
+          : null,
+    );
+    if (fileInput.current) fileInput.current.value = "";
+  }
 
   async function handleParse(e: React.FormEvent) {
     e.preventDefault();
 
     if (inputMode === "url" && !url.trim()) return;
-    if (inputMode === "text" && !recipeText.trim()) return;
+    if (inputMode === "text" && !recipeText.trim() && screenshots.photos.length === 0) {
+      setFormState({ step: "error", message: "Paste the recipe text or add a screenshot.", canPaste: true });
+      return;
+    }
 
     setFormState({ step: "parsing" });
 
@@ -45,6 +67,7 @@ export default function RecipeForm() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: recipeText.trim(),
+            images: screenshots.photos.map((p) => p.base64),
             sourceUrl: url.trim() || undefined,
           }),
         });
@@ -164,12 +187,29 @@ export default function RecipeForm() {
                   value={recipeText}
                   onChange={(e) => setRecipeText(e.target.value)}
                   placeholder="Paste the recipe here — ingredients, instructions, whatever you have. It doesn't need to be perfectly formatted."
-                  required
                   rows={8}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-light"
                 />
+                <div className="mt-2 space-y-2">
+                  <AttachedPhotos photos={screenshots.photos} onRemove={screenshots.remove} noun="screenshot" />
+                  <label
+                    className={`inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-border px-4 text-sm text-text-secondary transition-colors hover:bg-border-light ${screenshots.full ? "pointer-events-none opacity-50" : ""}`}
+                  >
+                    📷 Add screenshots ({screenshots.photos.length}/{MAX_IMPORT_SCREENSHOTS})
+                    <input
+                      ref={fileInput}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => addScreenshots(e.target.files)}
+                      disabled={screenshots.full}
+                    />
+                  </label>
+                  {attachNote && <p role="alert" className="text-xs text-danger">{attachNote}</p>}
+                </div>
                 <p className="mt-1.5 text-xs text-text-muted">
-                  For recipes from screenshots, texts, or videos that couldn&apos;t be auto-imported.{" "}
+                  For captions, screenshots of a post or recipe card, or anything that couldn&apos;t be auto-imported.{" "}
                   <button
                     type="button"
                     onClick={() => setInputMode("url")}
@@ -231,7 +271,9 @@ export default function RecipeForm() {
         <div className="spinner mx-auto mb-4 h-8 w-8" />
         <p className="text-text-secondary">
           {inputMode === "text"
-            ? "Analyzing recipe text..."
+            ? screenshots.photos.length
+              ? "Reading screenshots..."
+              : "Analyzing recipe text..."
             : isVideo
               ? "Extracting recipe from video..."
               : "Fetching recipe and analyzing nutrition..."}

@@ -268,13 +268,18 @@ export async function parseRecipe(source: ImportSource, deadline?: Deadline): Pr
   };
 }
 
-/** Parse freeform text the user pasted (captions, notes, messages) */
-export async function parseRecipeFromText(text: string, sourceUrl?: string): Promise<ParsedRecipe> {
+/** Parse what the user supplied by hand: pasted text (captions, notes,
+ *  messages) and/or screenshots. At least one must be present. */
+export async function parseRecipeFromUserInput(input: {
+  text: string;
+  images: string[];
+  sourceUrl: string | null;
+}): Promise<ParsedRecipe> {
   return parseRecipe({
-    sections: [{ label: "USER TEXT", text }],
-    images: [],
+    sections: input.text ? [{ label: "USER TEXT", text: input.text }] : [],
+    images: input.images,
     sourceName: null,
     imageUrl: null,
-    sourceUrl: sourceUrl ?? null,
+    sourceUrl: input.sourceUrl,
   });
 }

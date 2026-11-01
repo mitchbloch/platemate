@@ -6,6 +6,14 @@ import type { ParsedRecipe } from "@/lib/types";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const downscaled = vi.hoisted(() => ({ maxEdges: [] as (number | undefined)[] }));
+vi.mock("@/lib/imageDownscale", () => ({
+  SCREENSHOT_MAX_EDGE_PX: 1568,
+  downscaleToJpegBase64: async (file: File, maxEdge?: number) => {
+    downscaled.maxEdges.push(maxEdge);
+    return btoa(file.name);
+  },
+}));
 
 import RecipeForm from "../RecipeForm";
 
@@ -32,6 +40,7 @@ let calls: Call[];
 let responses: Record<string, () => Response>;
 
 beforeEach(() => {
+  downscaled.maxEdges = [];
   calls = [];
   responses = {};
   push.mockReset();
@@ -69,7 +78,7 @@ describe("RecipeForm — URL import", () => {
     await importUrl("https://www.budgetbytes.com/x/?utm_source=pinterest");
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "This site doesn't allow automatic import. Paste the recipe text below instead.",
+      "This site doesn't allow automatic import. Paste the recipe text or add screenshots below instead.",
     );
     expect(screen.getByLabelText("Recipe Text")).toBeInTheDocument();
     expect(screen.getByLabelText(/Source URL/)).toHaveValue("https://www.budgetbytes.com/x/");
@@ -86,7 +95,7 @@ describe("RecipeForm — URL import", () => {
     await user.click(screen.getByRole("button", { name: "Import Recipe" }));
     expect(calls[1]).toEqual({
       url: "/api/recipes/parse-text",
-      body: { text: "1kg lean ground chicken", sourceUrl: "https://www.instagram.com/reel/x/" },
+      body: { text: "1kg lean ground chicken", images: [], sourceUrl: "https://www.instagram.com/reel/x/" },
     });
 
     await user.click(await screen.findByRole("button", { name: "Save Recipe" }));
@@ -99,5 +108,66 @@ describe("RecipeForm — URL import", () => {
     await importUrl("https://example.com/r");
     expect(await screen.findByRole("status")).toHaveTextContent("Claude declined to process this content");
     expect(screen.getByLabelText("Recipe URL")).toBeInTheDocument();
+  });
+});
+
+const png = (name: string) => new File(["x"], name, { type: "image/png" });
+
+async function openPasteText() {
+  const user = userEvent.setup();
+  render(<RecipeForm />);
+  await user.click(screen.getByRole("button", { name: "Or paste recipe text instead" }));
+  return user;
+}
+
+describe("RecipeForm — screenshots", () => {
+  it("imports from screenshots alone, downscaled for legible text", async () => {
+    responses["/api/recipes/parse-text"] = () => json(parsed);
+    const user = await openPasteText();
+    await user.upload(screen.getByLabelText(/Add screenshots/), [png("caption.png"), png("comments.png")]);
+
+    expect(await screen.findByAltText("Attached screenshot 2")).toBeInTheDocument();
+    expect(screen.getByText(/Add screenshots \(2\/5\)/)).toBeInTheDocument();
+    expect(downscaled.maxEdges).toEqual([1568, 1568]);
+
+    await user.click(screen.getByRole("button", { name: "Import Recipe" }));
+    expect(await screen.findByDisplayValue("Sheetpan Chicken Kebabs")).toBeInTheDocument();
+    expect(calls[0]).toEqual({ url: "/api/recipes/parse-text", body: { text: "", images: [btoa("caption.png"), btoa("comments.png")] } });
+  });
+
+  it("removes a screenshot before import", async () => {
+    responses["/api/recipes/parse-text"] = () => json(parsed);
+    const user = await openPasteText();
+    await user.upload(screen.getByLabelText(/Add screenshots/), [png("a.png"), png("b.png")]);
+    await user.click(await screen.findByRole("button", { name: "Remove screenshot 1" }));
+    await user.type(screen.getByLabelText("Recipe Text"), "serves 4");
+    await user.click(screen.getByRole("button", { name: "Import Recipe" }));
+    await screen.findByDisplayValue("Sheetpan Chicken Kebabs");
+    expect(calls[0].body).toEqual({ text: "serves 4", images: [btoa("b.png")] });
+  });
+
+  it("caps at 5 screenshots and says so", async () => {
+    const user = await openPasteText();
+    await user.upload(screen.getByLabelText(/Add screenshots/), ["1", "2", "3", "4", "5", "6"].map((n) => png(`${n}.png`)));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Up to 5 screenshots");
+    expect(screen.getAllByAltText(/Attached screenshot/)).toHaveLength(5);
+    expect(screen.getByLabelText(/Add screenshots/)).toBeDisabled();
+  });
+
+  it("asks for text or a screenshot instead of submitting nothing", async () => {
+    const user = await openPasteText();
+    await user.click(screen.getByRole("button", { name: "Import Recipe" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Paste the recipe text or add a screenshot.");
+    expect(calls).toEqual([]);
+  });
+
+  it("keeps attached screenshots after a no-recipe answer so the user can add more", async () => {
+    responses["/api/recipes/parse-text"] = () =>
+      json({ error: "Couldn't find a full recipe there (it may be behind a paywall).", reason: "no_recipe", canPaste: true, sourceUrl: null }, 422);
+    const user = await openPasteText();
+    await user.upload(screen.getByLabelText(/Add screenshots/), [png("teaser.png")]);
+    await user.click(screen.getByRole("button", { name: "Import Recipe" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Couldn't find a full recipe there");
+    expect(screen.getByAltText("Attached screenshot 1")).toBeInTheDocument();
   });
 });
