@@ -1,4 +1,5 @@
-import { fetchPage, ImportFailure, type Deadline } from "./fetchPage";
+import { fetchPage, type Deadline } from "./fetchPage";
+import { ImportFailure } from "./failure";
 import { stripTracking } from "./platforms";
 import { extractEmbeddedJson, extractMeta } from "./text";
 import type { ImportSource } from ".";

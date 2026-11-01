@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "93.184.216.34", family: 4 }] }));
 
 import { extractImportSource } from "..";
-import { createDeadline, ImportFailure } from "../fetchPage";
+import { createDeadline } from "../fetchPage";
+import { ImportFailure } from "../failure";
 import { youTubeVideoId } from "../youtube";
 import {
   YT_DESCRIPTION,

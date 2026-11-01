@@ -11,7 +11,8 @@ import {
   asStringOrNull,
 } from "./recipeValidation";
 import { SHOPPING_NAME_RULES, normalizeShoppingName } from "./shoppingName";
-import { ImportFailure, type Deadline } from "./import/fetchPage";
+import type { Deadline } from "./import/fetchPage";
+import { ImportFailure } from "./import/failure";
 import type { ImportSource } from "./import";
 
 // Lazy so importing this module (e.g. in tests) doesn't require an API key

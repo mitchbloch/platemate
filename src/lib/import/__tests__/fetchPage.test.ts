@@ -9,14 +9,8 @@ vi.mock("node:dns/promises", () => ({
   },
 }));
 
-import {
-  assertPublicHttpUrl,
-  createDeadline,
-  fetchPage,
-  ImportFailure,
-  isPrivateAddress,
-  subDeadline,
-} from "../fetchPage";
+import { assertPublicHttpUrl, createDeadline, fetchPage, isPrivateAddress, subDeadline } from "../fetchPage";
+import { ImportFailure } from "../failure";
 
 type Route = (init: RequestInit) => Response | Promise<Response>;
 let routes: Record<string, Route>;

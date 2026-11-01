@@ -15,7 +15,7 @@ vi.mock("@/lib/recipeParser", () => ({
 }));
 
 import { POST } from "../route";
-import { ImportFailure } from "@/lib/import/fetchPage";
+import { ImportFailure } from "@/lib/import/failure";
 import { MAX_IMAGE_BASE64_CHARS } from "@/lib/imageInput";
 
 function post(body: unknown) {

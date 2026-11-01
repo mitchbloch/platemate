@@ -33,7 +33,8 @@ vi.mock("@anthropic-ai/sdk", () => ({
 }));
 
 import { buildRecipeRequestContent, parseRecipe, parseRecipeFromUserInput } from "../recipeParser";
-import { createDeadline, ImportFailure } from "../import/fetchPage";
+import { createDeadline } from "../import/fetchPage";
+import { ImportFailure } from "../import/failure";
 
 const recipeJson = (overrides: Record<string, unknown> = {}) => ({
   title: "Sheetpan Chicken Kebabs",

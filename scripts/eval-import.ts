@@ -15,7 +15,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { EXTRACT_BUDGET_MS, IMPORT_BUDGET_MS, extractImportSource, type SectionLabel } from "../src/lib/import";
-import { createDeadline, ImportFailure, subDeadline, type ImportFailureReason } from "../src/lib/import/fetchPage";
+import { createDeadline, subDeadline } from "../src/lib/import/fetchPage";
+import { ImportFailure, type ImportFailureReason } from "../src/lib/import/failure";
 import { parseRecipe } from "../src/lib/recipeParser";
 
 const envFile = path.join(process.cwd(), ".env.local");

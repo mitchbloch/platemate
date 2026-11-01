@@ -1,5 +1,6 @@
 import { detectSource, stripTracking } from "./platforms";
-import { fetchPage, ImportFailure, subDeadline, type Deadline } from "./fetchPage";
+import { fetchPage, subDeadline, type Deadline } from "./fetchPage";
+import { ImportFailure } from "./failure";
 import { extractRecipeJsonLd, parseJsonLdBlocks } from "./jsonLd";
 import { cleanInlineText, extractMeta, htmlToText } from "./text";
 import { extractTikTok } from "./tiktok";

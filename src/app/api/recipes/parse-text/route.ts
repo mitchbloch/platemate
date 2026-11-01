@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseRecipeFromUserInput } from "@/lib/recipeParser";
-import { ImportFailure, importFailureBody, logImport } from "@/lib/import/fetchPage";
+import { ImportFailure, importFailureBody, logImport } from "@/lib/import/failure";
 import { stripTracking } from "@/lib/import/platforms";
 import { MAX_IMPORT_SCREENSHOTS, validateBase64Images } from "@/lib/imageInput";
 

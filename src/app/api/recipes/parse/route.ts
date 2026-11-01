@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseRecipe } from "@/lib/recipeParser";
 import { EXTRACT_BUDGET_MS, IMPORT_BUDGET_MS, extractImportSource } from "@/lib/import";
 import { detectSource, stripTracking } from "@/lib/import/platforms";
-import { createDeadline, ImportFailure, importFailureBody, logImport, subDeadline } from "@/lib/import/fetchPage";
+import { createDeadline, subDeadline } from "@/lib/import/fetchPage";
+import { ImportFailure, importFailureBody, logImport } from "@/lib/import/failure";
 
 // Extraction (page, transcript) + one Claude call, within IMPORT_BUDGET_MS
 export const maxDuration = 60;

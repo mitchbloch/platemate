@@ -11,7 +11,7 @@ vi.mock("@/lib/import", () => ({ IMPORT_BUDGET_MS: 57_000, EXTRACT_BUDGET_MS: 15
 vi.mock("@/lib/recipeParser", () => ({ parseRecipe: (source: unknown) => state.parse!(source) }));
 
 import { POST } from "../route";
-import { ImportFailure } from "@/lib/import/fetchPage";
+import { ImportFailure } from "@/lib/import/failure";
 
 const extracted: ImportSource = {
   sections: [{ label: "CAPTION", text: "1kg chicken" }],
