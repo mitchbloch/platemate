@@ -1,8 +1,8 @@
-import { detectSource, stripTracking } from "./platforms";
+import { absoluteHttpUrl, creditedSourceName, detectSource, stripTracking } from "./platforms";
 import { fetchPage, subDeadline, type Deadline } from "./fetchPage";
 import { ImportFailure } from "./failure";
-import { extractRecipeJsonLd, parseJsonLdBlocks } from "./jsonLd";
-import { cleanInlineText, extractMeta, htmlToText } from "./text";
+import { extractRecipeJsonLd, extractSocialPosting } from "./jsonLd";
+import { extractMeta, htmlToText } from "./text";
 import { extractTikTok } from "./tiktok";
 import { extractYouTube } from "./youtube";
 
@@ -33,16 +33,6 @@ export const EXTRACT_BUDGET_MS = 15_000;
 const PAGE_TEXT_LIMIT = 60_000;
 const MIN_PAGE_TEXT = 200;
 
-function absoluteUrl(raw: string | null, base: string): string | null {
-  if (!raw) return null;
-  try {
-    const url = new URL(raw, base);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 /** A recipe web page: its Recipe JSON-LD when present, else its text */
 async function extractWeb(url: string, deadline: Deadline): Promise<ImportSource> {
   const page = await fetchPage(url, { deadline });
@@ -50,7 +40,7 @@ async function extractWeb(url: string, deadline: Deadline): Promise<ImportSource
   const base = {
     images: [],
     sourceName: extractMeta(page.text, "og:site_name"),
-    imageUrl: ld?.imageUrl ?? absoluteUrl(extractMeta(page.text, "og:image"), page.url),
+    imageUrl: ld?.imageUrl ?? absoluteHttpUrl(extractMeta(page.text, "og:image"), page.url),
     sourceUrl: stripTracking(page.url),
   };
 
@@ -74,29 +64,10 @@ const MAX_HOPS = 1;
 const CROSS_POST_BUDGET_MS = 5_000;
 const MIN_PIN_DESCRIPTION = 200;
 
-interface SocialPosting {
-  articleBody?: string;
-  author?: { name?: string };
-  sharedContent?: { url?: string };
-}
-
-/** The pin's schema.org SocialMediaPosting: its `sharedContent.url` is the
- *  recipe the pin links to, `articleBody` the pin's own description. */
-function findSocialPosting(html: string): SocialPosting | null {
-  for (const block of parseJsonLdBlocks(html)) {
-    for (const node of Array.isArray(block) ? block : [block]) {
-      if (node && typeof node === "object" && (node as { "@type"?: unknown })["@type"] === "SocialMediaPosting") {
-        return node as SocialPosting;
-      }
-    }
-  }
-  return null;
-}
-
 async function extractPinterest(url: string, deadline: Deadline, hops: number): Promise<ImportSource> {
   const page = await fetchPage(url, { deadline }); // pin.it short links redirect here
-  const post = findSocialPosting(page.text);
-  const outbound = absoluteUrl(post?.sharedContent?.url ?? null, page.url);
+  const post = extractSocialPosting(page.text, page.url);
+  const outbound = post?.linkedUrl;
 
   let outboundFailure: ImportFailure | null = null;
   if (outbound && detectSource(outbound) !== "pinterest" && hops < MAX_HOPS) {
@@ -108,12 +79,11 @@ async function extractPinterest(url: string, deadline: Deadline, hops: number): 
     }
   }
 
-  const description = cleanInlineText(post?.articleBody ?? "");
-  if (description.length >= MIN_PIN_DESCRIPTION) {
+  if (post && post.description.length >= MIN_PIN_DESCRIPTION) {
     return {
-      sections: [{ label: "CAPTION", text: description }],
+      sections: [{ label: "CAPTION", text: post.description }],
       images: [],
-      sourceName: post?.author?.name ? `Pinterest — ${cleanInlineText(post.author.name)}` : "Pinterest",
+      sourceName: creditedSourceName("Pinterest", post.author),
       imageUrl: null,
       sourceUrl: stripTracking(page.url),
     };

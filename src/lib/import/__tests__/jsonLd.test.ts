@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractRecipeJsonLd } from "../jsonLd";
+import { extractRecipeJsonLd, extractSocialPosting } from "../jsonLd";
 
 const PAGE = "https://www.example.com/recipes/lentil-soup/";
 const ld = (data: unknown, attrs = 'type="application/ld+json"') => `<script ${attrs}>${typeof data === "string" ? data : JSON.stringify(data)}</script>`;
@@ -123,5 +123,37 @@ describe("extractRecipeJsonLd", () => {
     const html = filler + ld({ ...soup, recipeIngredient: [...soup.recipeIngredient, lastIngredient] });
     expect(html.length).toBeGreaterThan(100_000);
     expect(extractRecipeJsonLd(html, PAGE)?.recipe.recipeIngredient).toContain(lastIngredient);
+  });
+});
+
+describe("extractSocialPosting", () => {
+  const PIN = "https://www.pinterest.com/pin/1/";
+  const posting = {
+    "@type": "SocialMediaPosting",
+    articleBody: "Cozy &amp; quick <b>lentil</b> soup",
+    author: { "@type": "Person", name: "Jenn Fishkind" },
+    sharedContent: { "@type": "WebPage", url: "https://example.com/soup/?utm_source=pinterest" },
+  };
+
+  it("reads the linked page, description and author", () => {
+    expect(extractSocialPosting(ld(posting), PIN)).toEqual({
+      linkedUrl: "https://example.com/soup/?utm_source=pinterest",
+      description: "Cozy & quick lentil soup",
+      author: "Jenn Fishkind",
+    });
+  });
+
+  it("finds postings inside @graph and with @type arrays", () => {
+    expect(extractSocialPosting(ld({ "@graph": [{ "@type": "WebPage" }, posting] }), PIN)?.author).toBe("Jenn Fishkind");
+    expect(extractSocialPosting(ld({ ...posting, "@type": ["SocialMediaPosting", "CreativeWork"] }), PIN)?.author).toBe("Jenn Fishkind");
+  });
+
+  it("ignores non-http links and missing fields", () => {
+    expect(extractSocialPosting(ld({ "@type": "SocialMediaPosting", sharedContent: { url: "javascript:alert(1)" } }), PIN)).toEqual({
+      linkedUrl: null,
+      description: "",
+      author: null,
+    });
+    expect(extractSocialPosting(ld({ "@type": "Recipe" }), PIN)).toBeNull();
   });
 });

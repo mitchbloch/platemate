@@ -276,13 +276,16 @@ Spec: `tasks/phase9_recipe_import.md`. Branch `feature/recipe-import-pipeline`, 
 Trigger: user report — TikTok `tiktok.com/t/ZPLPoL8uG/` won't auto-import. Root cause: TikTok oEmbed stopped returning captions (~2026-10-19); audit found JSON-LD stripped + 60k truncation on sites, 160-char YouTube descriptions, blocked sites surfacing as 500s.
 - [x] Live audit (TikTok, YouTube, Instagram, Pinterest, 13 recipe sites) + design review; decisions locked with the user
 - [x] Docs: phase 9 spec, PRD, CLAUDE.md
-- [ ] `platforms.ts` (source detection, tracking strip) + RecipeForm off its regex
-- [ ] `fetchPage.ts`: per-hop SSRF + DNS check, deadline, streamed size cap, charset, block detection, `ImportFailure`
-- [ ] `text.ts` + `jsonLd.ts`; web path sends JSON-LD; unified prompt; `no_recipe` guard
-- [ ] TikTok (rehydration caption + ASR transcript) — fixes the outage
-- [ ] YouTube (full description + ASR transcript, consent/bot-check fallback)
-- [ ] Pinterest outbound hop; Instagram cross-post kept
-- [ ] Route 422 contract + structured logs + RecipeForm fallback UX
-- [ ] Screenshot import (≤5, shared image validation, 1568px downscale)
-- [ ] `npm run eval:import` live drift check
-- [ ] Build + lint + tests clean; `/code-review`; live eval with `--parse`; browser walkthrough; draft PR; verify on Vercel preview
+- [x] `platforms.ts` (source detection, tracking strip) + RecipeForm off its regex
+- [x] `fetchPage.ts`: per-hop SSRF + DNS check, deadline, streamed size cap, charset, block detection; `failure.ts` (`ImportFailure`, shared route error result)
+- [x] `text.ts` + `jsonLd.ts`; web path sends JSON-LD; unified prompt; `no_recipe` guard
+- [x] TikTok (rehydration caption + ASR transcript) — fixes the outage. Live: the CDN labels VTT as video/mp4; body validated as WEBVTT instead
+- [x] YouTube full description (consent/bot-check fallback). No transcript: caption tracks need a proof-of-origin token from YouTube's bot check (decision 2 amended)
+- [x] Pinterest outbound hop (schema.org `sharedContent.url`); Instagram cross-post kept, else `blocked`
+- [x] Route 422 contract + structured logs + RecipeForm fallback UX; success returns the clean canonical `sourceUrl`
+- [x] Screenshot import (≤5, shared image validation/hook/thumbnails with the generation chat, 1568px downscale)
+- [x] `npm run eval:import` live drift check — 15/15 with `--parse` (2026-11-01)
+- [x] Honest `Platemate/1.0` User-Agent (decision 5 re-made after a corrected test). Budget Bytes, Half Baked Harvest and Cookie and Kate, which challenged the fake Chrome UA, now import
+- [x] Build + lint + tests clean (502 tests); `npm run build` caught Node modules leaking into a client bundle — fixed with `failure.ts` + a regression test
+- [x] `/code-review` (standards + spec): FIXED successful imports saving the raw pasted link; FIXED paste/screenshot path with no time budget (50s + SDK retries could pass maxDuration); FIXED abort check matching the wrong SDK error; FIXED NAT64/6to4 IPv6 forms passing the SSRF guard; restored "per message" in the generation photo error; DRY: shared route error result, URL/credit helpers, Pinterest lookup moved into jsonLd.ts, one `.env.local` loader for scripts; form error `tone` instead of overloading `canPaste`; spec/docs aligned (Instagram → `blocked`, messages, module list)
+- [ ] Browser walkthrough (local); draft PR; verify TikTok/YouTube/NYT on the Vercel preview (datacenter IPs)

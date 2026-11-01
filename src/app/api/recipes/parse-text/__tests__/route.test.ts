@@ -5,11 +5,13 @@ type Input = { text: string; images: string[]; sourceUrl: string | null };
 const state = vi.hoisted(() => ({
   parse: null as null | ((input: Input) => Promise<unknown>),
   calls: [] as Input[],
+  deadlines: [] as { remainingMs(): number }[],
 }));
 
 vi.mock("@/lib/recipeParser", () => ({
-  parseRecipeFromUserInput: (input: Input) => {
+  parseRecipeFromUserInput: (input: Input, deadline: { remainingMs(): number }) => {
     state.calls.push(input);
+    state.deadlines.push(deadline);
     return state.parse!(input);
   },
 }));
@@ -25,6 +27,7 @@ function post(body: unknown) {
 let info: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   state.calls = [];
+  state.deadlines = [];
   state.parse = async () => ({ title: "Chili" });
   info = vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -32,10 +35,18 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("POST /api/recipes/parse-text", () => {
-  it("parses trimmed text with a cleaned source URL", async () => {
+  it("parses trimmed text and returns the cleaned source URL to save", async () => {
     const res = await post({ text: "  1 lb turkey  ", sourceUrl: "https://www.instagram.com/reel/x/?igsh=abc" });
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ title: "Chili", sourceUrl: "https://www.instagram.com/reel/x/" });
     expect(state.calls).toEqual([{ text: "1 lb turkey", images: [], sourceUrl: "https://www.instagram.com/reel/x/" }]);
+  });
+
+  it("gives Claude the import time budget (regression: no deadline meant 50s + retries past maxDuration)", async () => {
+    await post({ text: "1 lb turkey" });
+    expect(state.deadlines).toHaveLength(1);
+    expect(state.deadlines[0].remainingMs()).toBeGreaterThan(50_000);
+    expect(state.deadlines[0].remainingMs()).toBeLessThanOrEqual(57_000);
   });
 
   it("parses screenshots with no text", async () => {

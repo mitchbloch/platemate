@@ -1,4 +1,4 @@
-import Anthropic, { APIConnectionTimeoutError } from "@anthropic-ai/sdk";
+import Anthropic, { APIConnectionTimeoutError, APIUserAbortError } from "@anthropic-ai/sdk";
 import type { ParsedRecipe, Ingredient, DietaryFlag } from "./types";
 import {
   CUISINES,
@@ -192,8 +192,6 @@ export function validateParsedRecipe(data: unknown): ParsedRecipe {
   };
 }
 
-// Seconds Claude may spend when the caller has no deadline (pasted text)
-const DEFAULT_CLAUDE_TIMEOUT_MS = 50_000;
 // Leave room to serialize the response before the function's maxDuration
 const RESPONSE_MARGIN_MS = 3_000;
 const TOO_SLOW_MESSAGE = "Importing took too long — try again";
@@ -215,8 +213,8 @@ export function buildRecipeRequestContent(source: ImportSource): Anthropic.Messa
 
 /** One Claude call: extracted source → validated ParsedRecipe. Throws
  *  ImportFailure("no_recipe") when the content holds no recipe. */
-export async function parseRecipe(source: ImportSource, deadline?: Deadline): Promise<ParsedRecipe> {
-  const timeout = deadline ? deadline.remainingMs() - RESPONSE_MARGIN_MS : DEFAULT_CLAUDE_TIMEOUT_MS;
+export async function parseRecipe(source: ImportSource, deadline: Deadline): Promise<ParsedRecipe> {
+  const timeout = deadline.remainingMs() - RESPONSE_MARGIN_MS;
   if (timeout <= 0) throw new Error(TOO_SLOW_MESSAGE);
 
   let message: Anthropic.Message;
@@ -234,11 +232,12 @@ export async function parseRecipe(source: ImportSource, deadline?: Deadline): Pr
         },
         messages: [{ role: "user", content: buildRecipeRequestContent(source) }],
       },
-      { timeout, signal: deadline?.signal, maxRetries: deadline ? 0 : undefined },
+      // No retries: a retry can't finish inside the function's maxDuration
+      { timeout, signal: deadline.signal, maxRetries: 0 },
     );
   } catch (err) {
     // A slow model response shouldn't surface as "Request timed out."
-    if (err instanceof APIConnectionTimeoutError || (err instanceof Error && err.name === "AbortError")) {
+    if (err instanceof APIConnectionTimeoutError || err instanceof APIUserAbortError) {
       throw new Error(TOO_SLOW_MESSAGE);
     }
     throw err;
@@ -283,16 +282,15 @@ export async function parseRecipe(source: ImportSource, deadline?: Deadline): Pr
 
 /** Parse what the user supplied by hand: pasted text (captions, notes,
  *  messages) and/or screenshots. At least one must be present. */
-export async function parseRecipeFromUserInput(input: {
-  text: string;
-  images: string[];
-  sourceUrl: string | null;
-}): Promise<ParsedRecipe> {
+export async function parseRecipeFromUserInput(
+  input: { text: string; images: string[]; sourceUrl: string | null },
+  deadline: Deadline,
+): Promise<ParsedRecipe> {
   return parseRecipe({
     sections: input.text ? [{ label: "USER TEXT", text: input.text }] : [],
     images: input.images,
     sourceName: null,
     imageUrl: null,
     sourceUrl: input.sourceUrl,
-  });
+  }, deadline);
 }

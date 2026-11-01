@@ -11,26 +11,17 @@
  * Idempotent: only recipes with at least one ingredient missing `shoppingName`
  * are sent to Claude; re-running touches nothing that is already filled.
  */
-import fs from "node:fs";
-import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { SHOPPING_NAME_RULES, normalizeShoppingName } from "../src/lib/shoppingName";
 import type { Ingredient } from "../src/lib/types";
+import { loadEnvFile } from "./loadEnv";
 
 // ── Config ──
 
 const MODEL = "claude-haiku-4-5";
 const BATCH_SIZE = 20;
 
-function loadEnvFile(name: string): void {
-  const file = path.join(process.cwd(), name);
-  if (!fs.existsSync(file)) return;
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-  }
-}
 loadEnvFile(".env.local");
 loadEnvFile(".env.backfill.local");
 

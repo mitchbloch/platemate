@@ -8,18 +8,22 @@ const state = vi.hoisted(() => ({
   lastOptions: null as Record<string, unknown> | null,
 }));
 
-const APIConnectionTimeoutError = vi.hoisted(
-  () =>
-    class APIConnectionTimeoutError extends Error {
-      constructor() {
-        super("Request timed out.");
-        this.name = "APIConnectionTimeoutError";
-      }
-    },
-);
+const sdkErrors = vi.hoisted(() => ({
+  APIConnectionTimeoutError: class APIConnectionTimeoutError extends Error {
+    constructor() {
+      super("Request timed out.");
+    }
+  },
+  // What the SDK throws when our deadline's signal aborts the request
+  APIUserAbortError: class APIUserAbortError extends Error {
+    constructor() {
+      super("Request was aborted.");
+    }
+  },
+}));
 
 vi.mock("@anthropic-ai/sdk", () => ({
-  APIConnectionTimeoutError,
+  ...sdkErrors,
   default: class {
     messages = {
       create: async (req: Record<string, unknown>, options: Record<string, unknown>) => {
@@ -34,6 +38,8 @@ vi.mock("@anthropic-ai/sdk", () => ({
 
 import { buildRecipeRequestContent, parseRecipe, parseRecipeFromUserInput } from "../recipeParser";
 import { createDeadline } from "../import/fetchPage";
+
+const budget = () => createDeadline(30_000);
 import { ImportFailure } from "../import/failure";
 
 const recipeJson = (overrides: Record<string, unknown> = {}) => ({
@@ -99,19 +105,19 @@ describe("buildRecipeRequestContent", () => {
 
 describe("parseRecipe", () => {
   it("uses extraction's sourceName and imageUrl over the model's (regression: TikTok author was dropped)", async () => {
-    const recipe = await parseRecipe(source());
+    const recipe = await parseRecipe(source(), budget());
     expect(recipe.sourceName).toBe("TikTok — Panacea Palm");
     expect(recipe.imageUrl).toBeNull(); // never the model's guess
   });
 
   it("falls back to the model's sourceName when extraction has none", async () => {
-    const recipe = await parseRecipe(source({ sourceName: null, imageUrl: "https://static01.nyt.com/x.jpg" }));
+    const recipe = await parseRecipe(source({ sourceName: null, imageUrl: "https://static01.nyt.com/x.jpg" }), budget());
     expect(recipe.sourceName).toBe("TikTok");
     expect(recipe.imageUrl).toBe("https://static01.nyt.com/x.jpg");
   });
 
   it("sends one system prompt covering every section kind and the no-recipe rule", async () => {
-    await parseRecipe(source());
+    await parseRecipe(source(), budget());
     const system = state.lastRequest?.system as string;
     for (const label of ["STRUCTURED DATA", "PAGE TEXT", "CAPTION", "TRANSCRIPT", "USER TEXT"]) expect(system).toContain(label);
     expect(system).toContain("do not invent one");
@@ -120,8 +126,8 @@ describe("parseRecipe", () => {
 
   it("throws no_recipe when the model returns no ingredients", async () => {
     state.response = reply(recipeJson({ ingredients: [], instructions: [] }));
-    await expect(parseRecipe(source())).rejects.toMatchObject({ reason: "no_recipe" });
-    await expect(parseRecipe(source())).rejects.toBeInstanceOf(ImportFailure);
+    await expect(parseRecipe(source(), budget())).rejects.toMatchObject({ reason: "no_recipe" });
+    await expect(parseRecipe(source(), budget())).rejects.toBeInstanceOf(ImportFailure);
   });
 
   it("passes the remaining deadline as the request timeout without retries", async () => {
@@ -139,43 +145,43 @@ describe("parseRecipe", () => {
 
   it("warns when structured ingredient count and parsed count differ", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await parseRecipe(source({ expectedIngredientCount: 3 }));
+    await parseRecipe(source({ expectedIngredientCount: 3 }), budget());
     expect(warn).toHaveBeenCalledWith("[import] ingredient count mismatch", expect.objectContaining({ structured: 3, parsed: 1 }));
     warn.mockRestore();
   });
 
   it("turns a Claude timeout into a retryable message (seen live 2026-11-01)", async () => {
-    state.error = new APIConnectionTimeoutError();
+    state.error = new sdkErrors.APIConnectionTimeoutError();
     await expect(parseRecipe(source(), createDeadline(30_000))).rejects.toThrow("Importing took too long — try again");
-    state.error = Object.assign(new Error("aborted"), { name: "AbortError" });
+    state.error = new sdkErrors.APIUserAbortError();
     await expect(parseRecipe(source(), createDeadline(30_000))).rejects.toThrow("Importing took too long — try again");
   });
 
   it("surfaces refusals and truncation as errors", async () => {
     state.response = reply({}, "refusal");
-    await expect(parseRecipe(source())).rejects.toThrow("declined");
+    await expect(parseRecipe(source(), budget())).rejects.toThrow("declined");
     state.response = reply({}, "max_tokens");
-    await expect(parseRecipe(source())).rejects.toThrow("too long");
+    await expect(parseRecipe(source(), budget())).rejects.toThrow("too long");
   });
 });
 
 describe("parseRecipeFromUserInput", () => {
   it("sends pasted text as a USER TEXT section", async () => {
-    await parseRecipeFromUserInput({ text: "2 eggs, scrambled", images: [], sourceUrl: "https://instagram.com/p/x" });
+    await parseRecipeFromUserInput({ text: "2 eggs, scrambled", images: [], sourceUrl: "https://instagram.com/p/x" }, budget());
     const messages = state.lastRequest?.messages as { content: string }[];
     expect(messages[0].content).toContain("=== USER TEXT ===\n2 eggs, scrambled");
     expect(messages[0].content).toContain("Source URL: https://instagram.com/p/x");
   });
 
   it("sends screenshots alone as image blocks with no empty text section", async () => {
-    await parseRecipeFromUserInput({ text: "", images: ["AAAA"], sourceUrl: null });
+    await parseRecipeFromUserInput({ text: "", images: ["AAAA"], sourceUrl: null }, budget());
     const content = (state.lastRequest?.messages as { content: { type: string; text?: string }[] }[])[0].content;
     expect(content.map((b) => b.type)).toEqual(["image", "text"]);
     expect(content[1].text).toBe("Extract the recipe.");
   });
 
   it("sends screenshots and text together", async () => {
-    await parseRecipeFromUserInput({ text: "serves 4", images: ["AAAA", "BBBB"], sourceUrl: null });
+    await parseRecipeFromUserInput({ text: "serves 4", images: ["AAAA", "BBBB"], sourceUrl: null }, budget());
     const content = (state.lastRequest?.messages as { content: { type: string; text?: string }[] }[])[0].content;
     expect(content.map((b) => b.type)).toEqual(["image", "image", "text"]);
     expect(content[2].text).toContain("=== USER TEXT ===\nserves 4");

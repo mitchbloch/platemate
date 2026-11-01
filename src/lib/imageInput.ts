@@ -17,11 +17,12 @@ export function validateBase64Images(
   noun: string,
 ): { ok: true; images: string[] } | { ok: false; error: string } {
   if (value === undefined || value === null) return { ok: true, images: [] };
-  if (!Array.isArray(value)) return { ok: false, error: `${noun[0].toUpperCase()}${noun.slice(1)}s must be a list` };
+  const pluralLabel = `${noun[0].toUpperCase()}${noun.slice(1)}s`;
+  if (!Array.isArray(value)) return { ok: false, error: `${pluralLabel} must be a list` };
   if (value.length > max) return { ok: false, error: `Up to ${max} ${noun}s` };
   for (const img of value) {
     if (typeof img !== "string" || !BASE64.test(img)) {
-      return { ok: false, error: `${noun[0].toUpperCase()}${noun.slice(1)}s must be base64 JPEG` };
+      return { ok: false, error: `${pluralLabel} must be base64 JPEG` };
     }
     if (img.length > MAX_IMAGE_BASE64_CHARS) return { ok: false, error: `A ${noun} is too large — try a smaller one` };
   }

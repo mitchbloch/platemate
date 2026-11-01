@@ -42,22 +42,39 @@ function isPrivateIPv4(ip: string): boolean {
   );
 }
 
-function isPrivateIPv6(ip: string): boolean {
-  const addr = ip.toLowerCase();
-  if (addr === "::" || addr === "::1") return true;
-  // IPv4-mapped (::ffff:127.0.0.1, or the normalized hex form ::ffff:7f00:1)
-  const mapped = addr.match(/^::ffff:(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/);
-  if (mapped) {
-    if (mapped[1]) return isPrivateIPv4(mapped[1]);
-    const hi = parseInt(mapped[2], 16);
-    const lo = parseInt(mapped[3], 16);
-    return isPrivateIPv4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+/** The eight 16-bit groups of a valid IPv6 address (a trailing dotted
+ *  IPv4 part becomes the last two groups) */
+function ipv6Groups(ip: string): number[] {
+  let addr = ip.toLowerCase();
+  const dotted = addr.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(1).map(Number);
+    addr = `${addr.slice(0, dotted.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
   }
-  const first = parseInt(addr.split(":")[0] || "0", 16);
+  const [head, tail] = addr.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail === undefined ? [] : tail ? tail.split(":") : [];
+  const zeros = tail === undefined ? [] : Array<string>(8 - left.length - right.length).fill("0");
+  return [...left, ...zeros, ...right].map((g) => parseInt(g, 16));
+}
+
+const ipv4FromGroups = (hi: number, lo: number) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+
+function isPrivateIPv6(ip: string): boolean {
+  const g = ipv6Groups(ip);
+  const zeroUpTo = (n: number) => g.slice(0, n).every((x) => x === 0);
+  if (zeroUpTo(7) && g[7] <= 1) return true; // :: and ::1
+  // Forms that carry an IPv4 address — judge the IPv4 inside
+  if (zeroUpTo(5) && g[5] === 0xffff) return isPrivateIPv4(ipv4FromGroups(g[6], g[7])); // ::ffff:a.b.c.d mapped
+  if (zeroUpTo(6)) return isPrivateIPv4(ipv4FromGroups(g[6], g[7])); // ::a.b.c.d compatible
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) {
+    return isPrivateIPv4(ipv4FromGroups(g[6], g[7])); // 64:ff9b::/96 NAT64
+  }
+  if (g[0] === 0x2002) return isPrivateIPv4(ipv4FromGroups(g[1], g[2])); // 2002::/16 6to4
   return (
-    (first & 0xfe00) === 0xfc00 || // fc00::/7 unique-local
-    (first & 0xffc0) === 0xfe80 || // fe80::/10 link-local
-    (first & 0xff00) === 0xff00 // ff00::/8 multicast
+    (g[0] & 0xfe00) === 0xfc00 || // fc00::/7 unique-local
+    (g[0] & 0xffc0) === 0xfe80 || // fe80::/10 link-local
+    (g[0] & 0xff00) === 0xff00 // ff00::/8 multicast
   );
 }
 

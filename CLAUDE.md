@@ -35,7 +35,9 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 ## Key Files
 - `src/lib/types.ts` — All domain types, nutrition thresholds
 - `src/lib/recipeParser.ts` — `ImportSource` (sections + images) → one Claude call → validated ParsedRecipe; single system prompt for every input
-- `src/lib/import/` — Source extraction (Phase 9): `platforms.ts` (client-safe source detection, tracking strip), `fetchPage.ts` (SSRF-checked fetch per redirect hop, deadline, block detection, `ImportFailure`), `text.ts`, `jsonLd.ts`, `tiktok.ts`, `youtube.ts`, `index.ts` (`extractImportSource`)
+- `src/lib/import/` — Source extraction (Phase 9): `platforms.ts` (client-safe source detection, tracking strip, URL/credit helpers), `failure.ts` (`ImportFailure`, `importErrorResult` for both routes, `[import]` log line — no imports, because the parser is reachable from client bundles), `fetchPage.ts` (SSRF-checked fetch per redirect hop, deadline, block detection; Node-only), `text.ts`, `jsonLd.ts` (Recipe + Pinterest SocialMediaPosting), `tiktok.ts`, `youtube.ts`, `index.ts` (`extractImportSource`, time budgets)
+- `src/lib/imageInput.ts` — Server-side base64 image validation + limits shared by generation photos and import screenshots
+- `src/hooks/usePhotoAttachments.ts` + `src/components/AttachedPhotos.tsx` — Shared photo/screenshot picking (downscale, cap) and thumbnail strip
 - `scripts/eval-import.ts` — `npm run eval:import`: live drift check per import source
 - `src/lib/nutrition.ts` — Health flags, weekly summaries
 - `src/lib/recipes.ts` — Supabase CRUD (snake_case ↔ camelCase conversion)

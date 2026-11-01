@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseRecipeFromUserInput } from "@/lib/recipeParser";
-import { ImportFailure, importFailureBody, logImport } from "@/lib/import/failure";
+import { IMPORT_BUDGET_MS } from "@/lib/import";
+import { createDeadline } from "@/lib/import/fetchPage";
+import { importErrorResult, logImport } from "@/lib/import/failure";
 import { stripTracking } from "@/lib/import/platforms";
 import { MAX_IMPORT_SCREENSHOTS, validateBase64Images } from "@/lib/imageInput";
 
-// One Claude call (with screenshots, reading images takes longer)
+// One Claude call (reading screenshots takes longer), within IMPORT_BUDGET_MS
 export const maxDuration = 60;
 
 // Generous for any real recipe; prevents dumping arbitrarily large payloads
@@ -36,17 +38,14 @@ export async function POST(request: NextRequest) {
   const source = images.images.length ? "screenshots" : "text";
   const started = Date.now();
   try {
-    const parsed = await parseRecipeFromUserInput({ text, images: images.images, sourceUrl });
+    const parsed = await parseRecipeFromUserInput(
+      { text, images: images.images, sourceUrl },
+      createDeadline(IMPORT_BUDGET_MS),
+    );
     logImport({ source, outcome: "ok", stage: "parse", ms: Date.now() - started });
-    return NextResponse.json(parsed);
+    return NextResponse.json({ ...parsed, sourceUrl });
   } catch (error) {
-    if (error instanceof ImportFailure) {
-      logImport({ source, outcome: "failed", stage: "parse", ms: Date.now() - started, reason: error.reason, detail: error.detail });
-      return NextResponse.json(importFailureBody(error, sourceUrl), { status: 422 });
-    }
-    logImport({ source, outcome: "error", stage: "parse", ms: Date.now() - started });
-    console.error("Recipe text parse error:", error);
-    const message = error instanceof Error ? error.message : "Failed to parse recipe";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, body } = importErrorResult(error, { source, stage: "parse", started, sourceUrl });
+    return NextResponse.json(body, { status });
   }
 }

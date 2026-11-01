@@ -46,6 +46,22 @@ export function isVideoSource(url: string): boolean {
   return kind === "tiktok" || kind === "youtube" || kind === "instagram";
 }
 
+/** `raw` resolved against `base`, if it is an http(s) URL; else null */
+export function absoluteHttpUrl(raw: string | null | undefined, base: string): string | null {
+  if (!raw?.trim()) return null;
+  try {
+    const url = new URL(raw.trim(), base);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "TikTok — Panacea Palm", or just "TikTok" when the creator is unknown */
+export function creditedSourceName(platform: string, creator: string | null | undefined): string {
+  return creator?.trim() ? `${platform} — ${creator.trim()}` : platform;
+}
+
 // Share/analytics params that never change which recipe a URL points at
 const TRACKING_PARAMS = new Set(["si", "igsh", "igshid", "_t", "_r", "is_from_webapp", "sender_device", "fbclid", "gclid"]);
 

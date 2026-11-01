@@ -103,6 +103,23 @@ describe("assertPublicHttpUrl", () => {
     }
   });
 
+  it("rejects private IPv4 addresses embedded via NAT64 and 6to4", () => {
+    for (const host of [
+      "64:ff9b::127.0.0.1", // NAT64, dotted (URL normalizes to 64:ff9b::7f00:1)
+      "64:ff9b::a9fe:a9fe", // NAT64 → 169.254.169.254 metadata
+      "2002:7f00:1::", // 6to4 → 127.0.0.1
+      "2002:a00:5::1", // 6to4 → 10.0.0.5
+      "::127.0.0.1", // deprecated IPv4-compatible form
+    ]) {
+      expect(() => assertPublicHttpUrl(`http://[${host}]/`), host).toThrow();
+    }
+  });
+
+  it("allows NAT64/6to4 wrappers around public IPv4", () => {
+    expect(() => assertPublicHttpUrl("http://[64:ff9b::5db8:d822]/")).not.toThrow();
+    expect(() => assertPublicHttpUrl("http://[2002:5db8:d822::1]/")).not.toThrow();
+  });
+
   it("allows public IPv6 and IPv4-mapped public addresses", () => {
     expect(() => assertPublicHttpUrl("http://[2606:4700::6810:84e5]/")).not.toThrow();
     expect(() => assertPublicHttpUrl("http://[::ffff:5db8:d822]/")).not.toThrow(); // 93.184.216.34

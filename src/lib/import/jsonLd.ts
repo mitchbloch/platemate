@@ -1,3 +1,4 @@
+import { absoluteHttpUrl } from "./platforms";
 import { cleanInlineText } from "./text";
 
 /** schema.org/Recipe data embedded in a page — the structured "recipe
@@ -15,23 +16,24 @@ type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
 const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined || v === null ? [] : [v]);
 
-function isRecipe(node: Json): boolean {
+/** `@type` may be a string or an array, bare or prefixed (schema:Recipe) */
+function hasType(node: Json, type: string): boolean {
   return asArray(node["@type"]).some(
-    (t) => typeof t === "string" && (t === "Recipe" || t.endsWith(":Recipe") || t.endsWith("/Recipe")),
+    (t) => typeof t === "string" && (t === type || t.endsWith(`:${type}`) || t.endsWith(`/${type}`)),
   );
 }
 
-/** Every Recipe node, wherever the site nested it */
-function collectRecipes(node: unknown, out: Json[], depth = 0): void {
+/** Every node of a schema.org type, wherever the site nested it */
+function collectByType(node: unknown, type: string, out: Json[], depth = 0): void {
   if (depth > 8) return;
   if (Array.isArray(node)) {
-    for (const item of node) collectRecipes(item, out, depth + 1);
+    for (const item of node) collectByType(item, type, out, depth + 1);
     return;
   }
   if (!isObject(node)) return;
-  if (isRecipe(node)) out.push(node);
+  if (hasType(node, type)) out.push(node);
   for (const key of ["@graph", "mainEntity", "itemListElement", "item"]) {
-    if (key in node) collectRecipes(node[key], out, depth + 1);
+    if (key in node) collectByType(node[key], type, out, depth + 1);
   }
 }
 
@@ -111,13 +113,8 @@ function textList(value: unknown): string | undefined {
 function imageOf(value: unknown, pageUrl: string): string | null {
   for (const item of asArray(value)) {
     const raw = typeof item === "string" ? item : isObject(item) ? (item.url ?? item.contentUrl) : null;
-    if (typeof raw !== "string" || !raw.trim()) continue;
-    try {
-      const url = new URL(raw.trim(), pageUrl);
-      if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
-    } catch {
-      // try the next candidate
-    }
+    const url = typeof raw === "string" ? absoluteHttpUrl(raw, pageUrl) : null;
+    if (url) return url;
   }
   return null;
 }
@@ -153,7 +150,7 @@ function prune(recipe: Json, ingredients: string[], instructions: unknown[]): Js
 }
 
 /** Every parseable `application/ld+json` block on the page; malformed ones are skipped */
-export function parseJsonLdBlocks(html: string): unknown[] {
+function parseJsonLdBlocks(html: string): unknown[] {
   const blocks: unknown[] = [];
   for (const m of html.matchAll(/<script\b[^>]*type\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi)) {
     const parsed = parseBlock(m[1]);
@@ -168,7 +165,7 @@ export function extractRecipeJsonLd(html: string, pageUrl: string): JsonLdRecipe
   const candidates: { recipe: Json; ingredients: string[]; instructions: unknown[] }[] = [];
   for (const block of parseJsonLdBlocks(html)) {
     const found: Json[] = [];
-    collectRecipes(block, found);
+    collectByType(block, "Recipe", found);
     for (const recipe of found) {
       const ingredients = ingredientsOf(recipe);
       const instructions = instructionsOf(recipe.recipeInstructions);
@@ -189,4 +186,28 @@ export function extractRecipeJsonLd(html: string, pageUrl: string): JsonLdRecipe
     ingredientCount: best.ingredients.length,
     imageUrl: imageOf(best.recipe.image ?? best.recipe.thumbnailUrl, pageUrl),
   };
+}
+
+/** A Pinterest pin's schema.org SocialMediaPosting: the page the pin links
+ *  to (`sharedContent.url`), its own description, and who pinned it */
+export interface SocialPosting {
+  linkedUrl: string | null;
+  description: string;
+  author: string | null;
+}
+
+export function extractSocialPosting(html: string, pageUrl: string): SocialPosting | null {
+  for (const block of parseJsonLdBlocks(html)) {
+    const found: Json[] = [];
+    collectByType(block, "SocialMediaPosting", found);
+    const post = found[0];
+    if (!post) continue;
+    const shared = asArray(post.sharedContent).find(isObject);
+    return {
+      linkedUrl: typeof shared?.url === "string" ? absoluteHttpUrl(shared.url, pageUrl) : null,
+      description: typeof post.articleBody === "string" ? cleanInlineText(post.articleBody) : "",
+      author: namesOf(post.author)[0] ?? null,
+    };
+  }
+  return null;
 }

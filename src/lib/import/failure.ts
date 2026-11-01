@@ -1,8 +1,6 @@
 /** Import failures the user can act on, and how they're reported. No
- *  Node or network dependencies: the parser imports this, and the parser
- *  is reachable from client bundles (via recipeGeneration). */
-
-// ── Failures the user can act on (paste text / add screenshots) ──
+ *  Node, network or Next.js dependencies: the parser imports this, and the
+ *  parser is reachable from client bundles (via recipeGeneration). */
 
 export type ImportFailureReason =
   | "blocked"
@@ -35,20 +33,36 @@ export class ImportFailure extends Error {
   }
 }
 
-/** 422 body for a failed import: the form switches to Paste Text (with
- *  screenshots) and keeps the link as the recipe's source. */
-export function importFailureBody(err: ImportFailure, sourceUrl: string | null) {
-  return { error: err.message, reason: err.reason, canPaste: true as const, sourceUrl };
-}
+type ImportStage = "extract" | "parse";
 
 /** One structured line per import attempt, for diagnosing source drift */
 export function logImport(event: {
   source: string;
   outcome: "ok" | "failed" | "error";
-  stage: "extract" | "parse";
+  stage: ImportStage;
   ms: number;
   reason?: ImportFailureReason;
   detail?: string;
 }): void {
   console.info("[import]", JSON.stringify(event));
+}
+
+/** Status + body for an import that threw, logged. An ImportFailure is a
+ *  422 the form acts on (switch to Paste Text, keep the link as the
+ *  source); anything else is a 500. Plain data, so routes wrap it. */
+export function importErrorResult(
+  error: unknown,
+  ctx: { source: string; stage: ImportStage; started: number; sourceUrl: string | null },
+): { status: 422 | 500; body: Record<string, unknown> } {
+  const ms = Date.now() - ctx.started;
+  if (error instanceof ImportFailure) {
+    logImport({ source: ctx.source, outcome: "failed", stage: ctx.stage, ms, reason: error.reason, detail: error.detail });
+    return {
+      status: 422,
+      body: { error: error.message, reason: error.reason, canPaste: true, sourceUrl: ctx.sourceUrl },
+    };
+  }
+  logImport({ source: ctx.source, outcome: "error", stage: ctx.stage, ms });
+  console.error("Recipe import error:", error);
+  return { status: 500, body: { error: error instanceof Error ? error.message : "Failed to import recipe" } };
 }

@@ -1,6 +1,6 @@
 import { fetchPage, type Deadline } from "./fetchPage";
 import { ImportFailure } from "./failure";
-import { stripTracking } from "./platforms";
+import { creditedSourceName, stripTracking } from "./platforms";
 import { extractEmbeddedJson, extractMeta } from "./text";
 import type { ImportSource } from ".";
 
@@ -79,7 +79,7 @@ export async function extractYouTube(url: string, deadline: Deadline): Promise<I
   return {
     sections: [{ label: "CAPTION", text: caption }],
     images: [],
-    sourceName: author ? `YouTube — ${author}` : "YouTube",
+    sourceName: creditedSourceName("YouTube", author),
     imageUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
     sourceUrl: stripTracking(url),
   };

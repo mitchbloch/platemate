@@ -230,8 +230,9 @@ export function validateGenerateRequest(body: unknown): { ok: true; request: Gen
   const images = Array.isArray(b.images) ? b.images : [];
   if (!message && images.length === 0) return { ok: false, error: "Say what you'd like to cook, or add a photo" };
   if (message.length > MAX_MESSAGE_CHARS) return { ok: false, error: `Message is too long (max ${MAX_MESSAGE_CHARS.toLocaleString()} characters)` };
+  if (images.length > MAX_PHOTOS) return { ok: false, error: `Up to ${MAX_PHOTOS} photos per message` };
   const checked = validateBase64Images(images, MAX_PHOTOS, "photo");
-  if (!checked.ok) return checked;
+  if (!checked.ok) return { ok: false, error: checked.error };
   const generationId = typeof b.generationId === "string" && b.generationId ? b.generationId : null;
   return { ok: true, request: { generationId, message: message || "(see photo)", images: checked.images } };
 }

@@ -21,7 +21,9 @@ type FormState =
   | { step: "parsing" }
   | { step: "review"; parsed: ParsedRecipe }
   | { step: "saving" }
-  | { step: "error"; message: string; canPaste?: boolean };
+  // "warning": something the user can do next (paste, add screenshots);
+  // "error": something went wrong on our side
+  | { step: "error"; message: string; tone: "warning" | "error" };
 
 export default function RecipeForm() {
   const [inputMode, setInputMode] = useState<InputMode>("url");
@@ -52,7 +54,7 @@ export default function RecipeForm() {
 
     if (inputMode === "url" && !url.trim()) return;
     if (inputMode === "text" && !recipeText.trim() && screenshots.photos.length === 0) {
-      setFormState({ step: "error", message: "Paste the recipe text or add a screenshot.", canPaste: true });
+      setFormState({ step: "error", message: "Paste the recipe text or add a screenshot.", tone: "warning" });
       return;
     }
 
@@ -90,20 +92,24 @@ export default function RecipeForm() {
           setFormState({
             step: "error",
             message: `${data.error} ${FALLBACK_HINT}`,
-            canPaste: true,
+            tone: "warning",
           });
           return;
         }
         throw new Error(data.error || "Failed to parse recipe");
       }
 
-      const parsed: ParsedRecipe = await res.json();
+      // The server returns the link to save: short links resolved to the
+      // canonical post, tracking params stripped
+      const { sourceUrl, ...parsed }: ParsedRecipe & { sourceUrl?: string | null } = await res.json();
+      if (sourceUrl !== undefined) setUrl(sourceUrl ?? "");
       setEditedRecipe(toEditableRecipe(parsed));
       setFormState({ step: "review", parsed });
     } catch (err) {
       setFormState({
         step: "error",
         message: err instanceof Error ? err.message : "Unknown error",
+        tone: "error",
       });
     }
   }
@@ -243,7 +249,7 @@ export default function RecipeForm() {
             <div
               role="status"
               className={`rounded-xl border p-3 text-sm ${
-                formState.canPaste
+                formState.tone === "warning"
                   ? "border-gold-light bg-gold-light/50 text-gold"
                   : "border-danger-light bg-danger-light/50 text-danger"
               }`}

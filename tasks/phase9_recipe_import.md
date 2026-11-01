@@ -35,7 +35,7 @@ Not reachable: production runtime logs (Vercel MCP and CLI both return 403 for t
 | 9 | Time budget | One deadline per request (route `maxDuration` 60s): extraction ≤ 15s total including any Pinterest hop, transcript ≤ 4s, Claude gets the remainder minus 3s | An opaque Vercel 504 is the worst failure mode |
 | 10 | Images from sources | JSON-LD/og image as-is. YouTube → stable `i.ytimg.com/vi/<id>/hqdefault.jpg`. TikTok cover **not** stored (signed URL expires in days) | Broken images in the library |
 
-Routine calls made without asking: tracking params (`utm_*`, `si`, `igsh`, `_t`, `_r`, `is_from_webapp`) are stripped from the saved source URL. Pinterest follows exactly one hop. YouTube transcripts are capped at ~20k chars after the description. The page-text fallback (no JSON-LD) is cut at 60k chars of *text* (tags removed), not HTML. A JSON-LD vs. parsed ingredient-count mismatch logs a warning.
+Routine calls made without asking: tracking params (`utm_*`, `si`, `igsh`/`igshid`, `_t`, `_r`, `is_from_webapp`, `sender_device`, `fbclid`, `gclid`) are stripped from the saved source URL, which both parse routes return on success. Short links are saved as the canonical post URL. Instagram with no cross-post reports `blocked`, not `login_required`: the post isn't private, Instagram just serves nothing to apps. YouTube `LOGIN_REQUIRED` (bot check) with nothing readable is `blocked`. Page text under 200 chars and pin descriptions under 200 chars count as no recipe before any Claude call. Pinterest follows exactly one hop. YouTube transcripts are capped at ~20k chars after the description. The page-text fallback (no JSON-LD) is cut at 60k chars of *text* (tags removed), not HTML. A JSON-LD vs. parsed ingredient-count mismatch logs a warning.
 
 ---
 
@@ -45,20 +45,23 @@ Routine calls made without asking: tracking params (`utm_*`, `si`, `igsh`, `_t`,
 
 | File | Responsibility |
 | --- | --- |
-| `platforms.ts` | Client-safe, pure. `detectSource(url)` → `tiktok \| youtube \| instagram \| pinterest \| web` (TikTok `www./m./vm./vt.`, YouTube `www./m./music./youtu.be/youtube-nocookie`, `instagram.com`, `pin.it` + `*.pinterest.*`). `stripTracking(url)`. Used by the server and `RecipeForm` |
-| `fetchPage.ts` | `assertPublicHttpUrl` (moved; adds IPv4-mapped IPv6, `0.0.0.0/8`) plus a per-hop DNS private-address check. `ImportFailure` (`blocked`, `login_required`, `not_found`, `no_recipe`, `unsupported`, `fetch_failed`) with user-facing messages. `createDeadline`. `fetchPage(url, { deadline, maxBytes, accept })`: manual redirects (≤5, relative `Location`, loop detection, credentials-in-URL rejected), streamed size cap on decompressed bytes, charset decoding, content-type check, status mapping (404/410 → `not_found`; 401 → `login_required`; 402/403/429/503 or challenge markers on any status → `blocked`) |
+| `platforms.ts` | Client-safe, pure. `detectSource(url)` → `tiktok \| youtube \| instagram \| pinterest \| web` (TikTok `www./m./vm./vt.`, YouTube `www./m./music./youtu.be/youtube-nocookie`, `instagram.com`, `pin.it` + `*.pinterest.*`). `stripTracking(url)`, `absoluteHttpUrl`, `creditedSourceName` ("TikTok — Panacea Palm"). Used by the server and `RecipeForm` |
+| `failure.ts` | No imports at all (the parser imports it, and the parser is reachable from client bundles). `ImportFailure` (`blocked`, `login_required`, `not_found`, `no_recipe`, `unsupported`, `fetch_failed`) with user-facing messages. `logImport`. `importErrorResult(error, ctx)` → `{ status: 422 \| 500, body }`, shared by both routes |
+| `fetchPage.ts` | `assertPublicHttpUrl` (moved; adds every IPv6 form that embeds an IPv4 address: mapped, compatible, NAT64 `64:ff9b::/96`, 6to4 `2002::/16`; plus `0.0.0.0/8`) and a per-hop DNS private-address check. `createDeadline`/`subDeadline`. `fetchPage(url, { deadline, maxBytes, accept })`: manual redirects (≤5, relative `Location`, loop detection, credentials-in-URL rejected), streamed size cap on decompressed bytes, charset decoding, content-type check, status mapping (404/410 → `not_found`; 401 → `login_required`; 402/403/429/503 or challenge markers on any status → `blocked`) |
 | `text.ts` | `decodeEntities`, `htmlToText`, `extractMeta`, `vttToText` (dedupes rolling cues), `extractEmbeddedJson(html, marker)` (string-aware brace scanner) |
-| `jsonLd.ts` | `extractRecipeJsonLd(html, pageUrl)`: every `ld+json` block parsed on its own; `@graph`, `@type` string/array/`schema:Recipe`, `mainEntity`, `ItemList`; picks the recipe whose `url` matches the page, else most ingredients; empty ingredients/instructions = absent; entity/tag cleanup inside strings; absolute `image`; pruned to recipe fields |
+| `jsonLd.ts` | `extractRecipeJsonLd(html, pageUrl)`: every `ld+json` block parsed on its own; `@graph`, `@type` string/array/`schema:Recipe`, `mainEntity`, `ItemList`; picks the recipe whose `url` matches the page, else most ingredients; empty ingredients/instructions = absent; entity/tag cleanup inside strings; absolute `image`; pruned to recipe fields. `extractSocialPosting(html, pageUrl)`: a pin's linked page, description and author |
 | `tiktok.ts` | Resolve the short link → rehydration JSON → `statusCode`, `desc`, `author` → ASR VTT (original language preferred). Photo posts are caption only |
-| `youtube.ts` | `ytInitialPlayerResponse` → description, title, author, ASR caption track. Consent redirect or non-OK playability → oEmbed + `og:description`. Empty timedtext → no transcript |
-| `index.ts` | `extractImportSource(url, deadline)` → `ImportSource { sections: { label, text }[]; images: string[]; sourceName; imageUrl; sourceUrl }`. Web: JSON-LD, else page text. Pinterest: follow the outbound `link` once, else the pin's own `articleBody`. Instagram: Brave cross-post lookup, else `login_required` |
+| `youtube.ts` | `ytInitialPlayerResponse` → full description, title, author (no transcript, per amended decision 2). Consent redirect or non-OK playability → oEmbed + `og:description` |
+| `index.ts` | `extractImportSource(url, deadline)` → `ImportSource { sections: { label, text }[]; images: string[]; sourceName; imageUrl; sourceUrl }`. Web: JSON-LD, else page text. Pinterest: follow the pin's `sharedContent.url` once, else the pin's own description. Instagram: Brave cross-post lookup, else `blocked` |
 
-`recipeParser.ts` becomes Claude call + validation only. It has one system prompt (HTML and text prompts merged so they can't drift). `parseRecipe(source, deadline)` sends image blocks first, then labeled sections (`STRUCTURED DATA`, `CAPTION`, `TRANSCRIPT`, `PAGE TEXT`, `USER TEXT`). The adapter's `sourceName`/`imageUrl` override Claude's. Empty ingredients → `ImportFailure("no_recipe")`.
+`recipeParser.ts` becomes Claude call + validation only. It has one system prompt (HTML and text prompts merged so they can't drift). `parseRecipe(source, deadline)` (deadline required on every path, no SDK retries) sends image blocks first, then labeled sections (`STRUCTURED DATA`, `CAPTION`, `TRANSCRIPT`, `PAGE TEXT`, `USER TEXT`). The adapter's `sourceName`/`imageUrl` override Claude's. Empty ingredients → `ImportFailure("no_recipe")`. A Claude timeout or deadline abort → "Importing took too long — try again" (500).
+
+Shared with the generation chat: `src/lib/imageInput.ts` (server-side base64 image validation, `MAX_IMPORT_SCREENSHOTS`), `src/hooks/usePhotoAttachments.ts` (pick + downscale + cap, reserving slots for in-flight picks) and `src/components/AttachedPhotos.tsx` (thumbnail strip).
 
 ### API contract
 
-- `POST /api/recipes/parse { url }` returns 200 with a `ParsedRecipe`, or **422** `{ error, reason, canPaste: true, sourceUrl }` for any `ImportFailure`. 400 for bad input, 500 only for genuine server faults.
-- `POST /api/recipes/parse-text { text?, images?, sourceUrl? }` needs text or at least one image (≤5, each within the shared base64 cap). Same 422 mapping (`no_recipe`).
+- `POST /api/recipes/parse { url }` returns 200 with a `ParsedRecipe` plus `sourceUrl` (the clean canonical link to save), or **422** `{ error, reason, canPaste: true, sourceUrl }` for any `ImportFailure`. 400 for bad input, 500 only for genuine server faults.
+- `POST /api/recipes/parse-text { text?, images?, sourceUrl? }` needs text or at least one image (≤5, each within the shared base64 cap). Same import time budget, same 422 mapping (`no_recipe`), and the cleaned `sourceUrl` on success.
 - One structured log line per import: `[import] { source, outcome, reason, stage, ms }`.
 
 ### UI (`RecipeForm`)
@@ -68,16 +71,16 @@ Routine calls made without asking: tracking params (`utm_*`, `si`, `igsh`, `_t`,
   - `blocked` — "This site doesn't allow automatic import."
   - `login_required` — "This post is private or needs a login."
   - `not_found` — "Couldn't open that page — the link may be broken, or the site may not allow automatic import." (some sites answer apps with a 404, so a 404 is ambiguous)
-  - `no_recipe` — "Couldn't find a recipe there."
+  - `no_recipe` — "Couldn't find a full recipe there (it may be behind a paywall)."
 
-  Each message ends with "Paste the recipe text or add screenshots."
+  Each message ends with "Paste the recipe text or add screenshots below instead."
 - Spinner copy uses `detectSource` (no regex).
 
 ---
 
 ## Test plan
 
-Synthetic fixtures modeled on real page shapes, not copyrighted page dumps. The fixture README notes each shape and the capture date (2026-11-01).
+Synthetic fixtures modeled on real page shapes, not copyrighted page dumps. The header comment in `src/lib/import/__tests__/fixtures.ts` notes the shapes and capture date (2026-11-01).
 
 - **platforms:** every host and URL shape, lookalike domains, tracking strip.
 - **fetchPage** (stubbed `fetch` + DNS):

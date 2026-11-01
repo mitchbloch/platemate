@@ -43,7 +43,7 @@ describe("POST /api/recipes/parse", () => {
     };
     const res = await post({ url: "https://www.tiktok.com/t/ZPLPoL8uG/" });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ title: "Kebabs" });
+    expect(await res.json()).toEqual({ title: "Kebabs", sourceUrl: "https://www.tiktok.com/@panaceapalm/video/1" });
     expect(parsedSource).toBe(extracted);
     expect(info).toHaveBeenCalledWith("[import]", expect.stringContaining('"outcome":"ok"'));
   });

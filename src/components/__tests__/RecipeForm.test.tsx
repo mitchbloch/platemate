@@ -69,6 +69,17 @@ describe("RecipeForm — URL import", () => {
     expect(calls[0]).toEqual({ url: "/api/recipes/parse", body: { url: "https://www.tiktok.com/t/ZPLPoL8uG/" } });
   });
 
+  it("saves the clean canonical link the server returns, not the pasted one (regression)", async () => {
+    const canonical = "https://www.tiktok.com/@panaceapalm/video/7641621946563661078";
+    responses["/api/recipes/parse"] = () => json({ ...parsed, sourceUrl: canonical });
+    responses["/api/recipes"] = () => json({ id: "r1" });
+    const user = await importUrl("https://www.tiktok.com/t/ZPLPoL8uG/?_r=1&_t=ZP-9B");
+    await user.click(await screen.findByRole("button", { name: "Save Recipe" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/recipes/r1"));
+    expect(calls[1].body.sourceUrl).toBe(canonical);
+    expect(calls[1].body.title).toBe("Sheetpan Chicken Kebabs");
+  });
+
   it("on a blocked site, switches to Paste Text, keeps the cleaned link and explains why", async () => {
     responses["/api/recipes/parse"] = () =>
       json(

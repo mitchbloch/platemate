@@ -1,6 +1,6 @@
 import { fetchPage, subDeadline, type Deadline } from "./fetchPage";
 import { ImportFailure } from "./failure";
-import { stripTracking } from "./platforms";
+import { creditedSourceName, stripTracking } from "./platforms";
 import { extractEmbeddedJson, vttToText } from "./text";
 import type { ImportSource } from ".";
 
@@ -91,7 +91,7 @@ export async function extractTikTok(url: string, deadline: Deadline): Promise<Im
   return {
     sections,
     images: [],
-    sourceName: author ? `TikTok — ${author}` : "TikTok",
+    sourceName: creditedSourceName("TikTok", author),
     imageUrl: null, // cover URLs are signed and expire within days
     sourceUrl: stripTracking(page.url),
   };

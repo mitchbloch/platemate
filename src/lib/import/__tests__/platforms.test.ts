@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectSource, isVideoSource, stripTracking } from "../platforms";
+import { absoluteHttpUrl, creditedSourceName, detectSource, isVideoSource, stripTracking } from "../platforms";
 
 describe("detectSource", () => {
   it.each([
@@ -52,6 +52,25 @@ describe("isVideoSource", () => {
     expect(isVideoSource("https://www.instagram.com/reel/x/")).toBe(true);
     expect(isVideoSource("https://pin.it/x")).toBe(false);
     expect(isVideoSource("https://www.budgetbytes.com/x")).toBe(false);
+  });
+});
+
+describe("absoluteHttpUrl", () => {
+  it("resolves relative URLs and keeps only http(s)", () => {
+    expect(absoluteHttpUrl("/img/a.jpg", "https://site.com/r/1")).toBe("https://site.com/img/a.jpg");
+    expect(absoluteHttpUrl(" https://cdn.x/b.jpg ", "https://site.com/")).toBe("https://cdn.x/b.jpg");
+    expect(absoluteHttpUrl("javascript:alert(1)", "https://site.com/")).toBeNull();
+    expect(absoluteHttpUrl("data:image/png;base64,AA", "https://site.com/")).toBeNull();
+    expect(absoluteHttpUrl("", "https://site.com/")).toBeNull();
+    expect(absoluteHttpUrl(null, "https://site.com/")).toBeNull();
+  });
+});
+
+describe("creditedSourceName", () => {
+  it("credits the creator when known", () => {
+    expect(creditedSourceName("TikTok", "Panacea Palm")).toBe("TikTok — Panacea Palm");
+    expect(creditedSourceName("YouTube", "  ")).toBe("YouTube");
+    expect(creditedSourceName("Pinterest", undefined)).toBe("Pinterest");
   });
 });
 

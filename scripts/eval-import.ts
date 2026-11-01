@@ -12,20 +12,13 @@
  * Instagram cross-post lookup. Runs from this machine: Vercel's datacenter
  * IPs may see more blocks — verify on a preview deployment too.
  */
-import fs from "node:fs";
-import path from "node:path";
 import { EXTRACT_BUDGET_MS, IMPORT_BUDGET_MS, extractImportSource, type SectionLabel } from "../src/lib/import";
 import { createDeadline, subDeadline } from "../src/lib/import/fetchPage";
 import { ImportFailure, type ImportFailureReason } from "../src/lib/import/failure";
 import { parseRecipe } from "../src/lib/recipeParser";
+import { loadEnvFile } from "./loadEnv";
 
-const envFile = path.join(process.cwd(), ".env.local");
-if (fs.existsSync(envFile)) {
-  for (const line of fs.readFileSync(envFile, "utf8").split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-  }
-}
+loadEnvFile(".env.local");
 
 type Outcome = "ok" | ImportFailureReason;
 
