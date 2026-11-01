@@ -10,6 +10,8 @@ import RecipeEditor, { toEditableRecipe, fromEditableRecipe, type EditableRecipe
 
 type InputMode = "url" | "text";
 
+const FALLBACK_HINT = "Paste the recipe text below instead.";
+
 type FormState =
   | { step: "input" }
   | { step: "parsing" }
@@ -56,12 +58,15 @@ export default function RecipeForm() {
 
       if (!res.ok) {
         const data = await res.json();
-        // Import failed for a reason the user can work around: switch to text mode
+        // Import failed for a reason the user can work around (site blocks
+        // us, private post, no recipe found): switch to Paste Text and keep
+        // the link as the recipe's source
         if (data.canPaste) {
           setInputMode("text");
+          if (typeof data.sourceUrl === "string") setUrl(data.sourceUrl);
           setFormState({
             step: "error",
-            message: data.error,
+            message: `${data.error} ${FALLBACK_HINT}`,
             canPaste: true,
           });
           return;
@@ -196,6 +201,7 @@ export default function RecipeForm() {
 
           {formState.step === "error" && (
             <div
+              role="status"
               className={`rounded-xl border p-3 text-sm ${
                 formState.canPaste
                   ? "border-gold-light bg-gold-light/50 text-gold"

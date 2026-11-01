@@ -15,7 +15,7 @@ const FAILURE_MESSAGES: Record<ImportFailureReason, string> = {
   blocked: "This site doesn't allow automatic import.",
   login_required: "This post is private or needs a login.",
   not_found: "That post or page wasn't found.",
-  no_recipe: "Couldn't find a recipe there.",
+  no_recipe: "Couldn't find a full recipe there (it may be behind a paywall).",
   unsupported: "That link isn't a page we can read.",
   fetch_failed: "Couldn't reach that page.",
 };
