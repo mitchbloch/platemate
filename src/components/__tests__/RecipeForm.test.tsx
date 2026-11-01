@@ -95,6 +95,15 @@ describe("RecipeForm — URL import", () => {
     expect(screen.getByLabelText(/Source URL/)).toHaveValue("https://www.budgetbytes.com/x/");
   });
 
+  it("puts the explanation above the fields it points to (seen on a phone: it was below the fold)", async () => {
+    responses["/api/recipes/parse"] = () =>
+      json({ error: "This site doesn't allow automatic import.", reason: "blocked", canPaste: true, sourceUrl: "https://x.com/" }, 422);
+    await importUrl("https://x.com/");
+    const status = await screen.findByRole("status");
+    const textarea = screen.getByLabelText("Recipe Text");
+    expect(status.compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("saves the pasted fallback with the kept link as its source", async () => {
     responses["/api/recipes/parse"] = () =>
       json({ error: "This post is private or needs a login.", reason: "login_required", canPaste: true, sourceUrl: "https://www.instagram.com/reel/x/" }, 422);

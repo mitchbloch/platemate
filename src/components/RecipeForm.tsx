@@ -151,6 +151,20 @@ export default function RecipeForm() {
     return (
       <div>
         <form onSubmit={handleParse} className="space-y-4">
+          {/* First, so a fallback's reason is visible on a phone without scrolling */}
+          {formState.step === "error" && (
+            <div
+              role="status"
+              className={`rounded-xl border p-3 text-sm ${
+                formState.tone === "warning"
+                  ? "border-gold-light bg-gold-light/50 text-gold"
+                  : "border-danger-light bg-danger-light/50 text-danger"
+              }`}
+            >
+              {formState.message}
+            </div>
+          )}
+
           {inputMode === "url" ? (
             <div>
               <label
@@ -243,19 +257,6 @@ export default function RecipeForm() {
                 />
               </div>
             </>
-          )}
-
-          {formState.step === "error" && (
-            <div
-              role="status"
-              className={`rounded-xl border p-3 text-sm ${
-                formState.tone === "warning"
-                  ? "border-gold-light bg-gold-light/50 text-gold"
-                  : "border-danger-light bg-danger-light/50 text-danger"
-              }`}
-            >
-              {formState.message}
-            </div>
           )}
 
           <button
