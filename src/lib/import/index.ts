@@ -22,6 +22,11 @@ export interface ImportSource {
   expectedIngredientCount?: number;
 }
 
+/** One budget per import, inside the route's 60s maxDuration (decision 9).
+ *  Extraction gets at most EXTRACT_BUDGET_MS so Claude always has time. */
+export const IMPORT_BUDGET_MS = 57_000;
+export const EXTRACT_BUDGET_MS = 15_000;
+
 /** Visible page text sent when a site has no Recipe JSON-LD. Text, not
  *  HTML, so 60k covers far more of the page than the old HTML cut did. */
 const PAGE_TEXT_LIMIT = 60_000;

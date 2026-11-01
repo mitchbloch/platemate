@@ -3,16 +3,29 @@ import type { ImportSource } from "../import";
 
 const state = vi.hoisted(() => ({
   response: null as unknown,
+  error: null as Error | null,
   lastRequest: null as Record<string, unknown> | null,
   lastOptions: null as Record<string, unknown> | null,
 }));
 
+const APIConnectionTimeoutError = vi.hoisted(
+  () =>
+    class APIConnectionTimeoutError extends Error {
+      constructor() {
+        super("Request timed out.");
+        this.name = "APIConnectionTimeoutError";
+      }
+    },
+);
+
 vi.mock("@anthropic-ai/sdk", () => ({
+  APIConnectionTimeoutError,
   default: class {
     messages = {
       create: async (req: Record<string, unknown>, options: Record<string, unknown>) => {
         state.lastRequest = req;
         state.lastOptions = options;
+        if (state.error) throw state.error;
         return state.response;
       },
     };
@@ -59,6 +72,7 @@ const source = (overrides: Partial<ImportSource> = {}): ImportSource => ({
 
 beforeEach(() => {
   state.response = reply(recipeJson());
+  state.error = null;
   state.lastRequest = null;
   state.lastOptions = null;
 });
@@ -118,7 +132,7 @@ describe("parseRecipe", () => {
   });
 
   it("fails fast when the deadline is already spent", async () => {
-    await expect(parseRecipe(source(), createDeadline(1_000))).rejects.toMatchObject({ reason: "fetch_failed" });
+    await expect(parseRecipe(source(), createDeadline(1_000))).rejects.toThrow("Importing took too long — try again");
     expect(state.lastRequest).toBeNull();
   });
 
@@ -127,6 +141,13 @@ describe("parseRecipe", () => {
     await parseRecipe(source({ expectedIngredientCount: 3 }));
     expect(warn).toHaveBeenCalledWith("[import] ingredient count mismatch", expect.objectContaining({ structured: 3, parsed: 1 }));
     warn.mockRestore();
+  });
+
+  it("turns a Claude timeout into a retryable message (seen live 2026-11-01)", async () => {
+    state.error = new APIConnectionTimeoutError();
+    await expect(parseRecipe(source(), createDeadline(30_000))).rejects.toThrow("Importing took too long — try again");
+    state.error = Object.assign(new Error("aborted"), { name: "AbortError" });
+    await expect(parseRecipe(source(), createDeadline(30_000))).rejects.toThrow("Importing took too long — try again");
   });
 
   it("surfaces refusals and truncation as errors", async () => {

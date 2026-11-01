@@ -14,7 +14,9 @@ export type ImportFailureReason =
 const FAILURE_MESSAGES: Record<ImportFailureReason, string> = {
   blocked: "This site doesn't allow automatic import.",
   login_required: "This post is private or needs a login.",
-  not_found: "That post or page wasn't found.",
+  // Some sites answer apps with a 404 rather than a block page, so a 404
+  // can't tell "broken link" from "no automatic import" — say both
+  not_found: "Couldn't open that page — the link may be broken, or the site may not allow automatic import.",
   no_recipe: "Couldn't find a full recipe there (it may be behind a paywall).",
   unsupported: "That link isn't a page we can read.",
   fetch_failed: "Couldn't reach that page.",

@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, { APIConnectionTimeoutError } from "@anthropic-ai/sdk";
 import type { ParsedRecipe, Ingredient, DietaryFlag } from "./types";
 import {
   CUISINES,
@@ -195,6 +195,7 @@ export function validateParsedRecipe(data: unknown): ParsedRecipe {
 const DEFAULT_CLAUDE_TIMEOUT_MS = 50_000;
 // Leave room to serialize the response before the function's maxDuration
 const RESPONSE_MARGIN_MS = 3_000;
+const TOO_SLOW_MESSAGE = "Importing took too long — try again";
 
 /** The user message: images first (the vision guidance in Anthropic's docs),
  *  then each labeled section. */
@@ -215,23 +216,32 @@ export function buildRecipeRequestContent(source: ImportSource): Anthropic.Messa
  *  ImportFailure("no_recipe") when the content holds no recipe. */
 export async function parseRecipe(source: ImportSource, deadline?: Deadline): Promise<ParsedRecipe> {
   const timeout = deadline ? deadline.remainingMs() - RESPONSE_MARGIN_MS : DEFAULT_CLAUDE_TIMEOUT_MS;
-  if (timeout <= 0) throw new ImportFailure("fetch_failed", "no time left for extraction");
+  if (timeout <= 0) throw new Error(TOO_SLOW_MESSAGE);
 
-  const message = await getAnthropic().messages.create(
-    {
-      // claude-sonnet-4-20250514 was retired June 2026 (every import 404ed)
-      model: "claude-sonnet-5",
-      max_tokens: 16000,
-      system: SYSTEM_PROMPT,
-      // Structured outputs: the response is guaranteed to be valid JSON
-      // conforming to the schema — no markdown fences, no missing fields.
-      output_config: {
-        format: { type: "json_schema", schema: RECIPE_JSON_SCHEMA },
+  let message: Anthropic.Message;
+  try {
+    message = await getAnthropic().messages.create(
+      {
+        // claude-sonnet-4-20250514 was retired June 2026 (every import 404ed)
+        model: "claude-sonnet-5",
+        max_tokens: 16000,
+        system: SYSTEM_PROMPT,
+        // Structured outputs: the response is guaranteed to be valid JSON
+        // conforming to the schema — no markdown fences, no missing fields.
+        output_config: {
+          format: { type: "json_schema", schema: RECIPE_JSON_SCHEMA },
+        },
+        messages: [{ role: "user", content: buildRecipeRequestContent(source) }],
       },
-      messages: [{ role: "user", content: buildRecipeRequestContent(source) }],
-    },
-    { timeout, signal: deadline?.signal, maxRetries: deadline ? 0 : undefined },
-  );
+      { timeout, signal: deadline?.signal, maxRetries: deadline ? 0 : undefined },
+    );
+  } catch (err) {
+    // A slow model response shouldn't surface as "Request timed out."
+    if (err instanceof APIConnectionTimeoutError || (err instanceof Error && err.name === "AbortError")) {
+      throw new Error(TOO_SLOW_MESSAGE);
+    }
+    throw err;
+  }
 
   if (message.stop_reason === "refusal") {
     throw new Error("Claude declined to process this content");
@@ -252,6 +262,8 @@ export async function parseRecipe(source: ImportSource, deadline?: Deadline): Pr
   }
   const recipe = validateParsedRecipe(data);
 
+  // Usually legitimate (a combined "cilantro, avocado, ... for serving" line
+  // split into shoppable items) but a drop means lost ingredients — log both
   if (source.expectedIngredientCount !== undefined && recipe.ingredients.length !== source.expectedIngredientCount) {
     console.warn("[import] ingredient count mismatch", {
       sourceUrl: source.sourceUrl,

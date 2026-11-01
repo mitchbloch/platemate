@@ -11,7 +11,7 @@
 | Every TikTok link says "paste the recipe text instead" (user report: `tiktok.com/t/ZPLPoL8uG/`) | Since ~2026-10-19, TikTok's oEmbed returns no `title` (caption) or `author_name` for any video. We treat a missing caption as "nothing to extract". The caption is still served on the public video page in the `__UNIVERSAL_DATA_FOR_REHYDRATION__` JSON (`webapp.video-detail` → `itemInfo.itemStruct.desc`) | `extractVideoContent` |
 | Website imports silently drop the end of the ingredient list | `fetchRecipeHtml` strips **every** `<script>`, including the schema.org Recipe JSON-LD the prompt tells Claude to prefer. The remaining HTML is cut at 60k characters. Measured: BBC Good Food lost 3/3 of the last ingredients, Bon Appétit 2/3. JSON-LD is 4–45k chars where cleaned HTML is 93–261k | `fetchRecipeHtml` |
 | YouTube recipes come in thin | Reads the 160-char `og:description`. The page's `ytInitialPlayerResponse.videoDetails.shortDescription` had 2,112 chars, and an ASR caption track is listed | `extractVideoContent` |
-| ~40% of sites fail with "Failed to fetch recipe page: 403" (HTTP 500) | Cloudflare managed challenges (Budget Bytes, Half Baked Harvest, Cookie and Kate) and People Inc's licensing block, a 402 (AllRecipes, Serious Eats), are treated as server errors. The user is never moved to paste mode | `parse/route.ts` |
+| ~40% of sites fail with "Failed to fetch recipe page: 403" (HTTP 500) | Two causes. (1) Cloudflare managed challenges on Budget Bytes, Half Baked Harvest and Cookie and Kate were triggered by our fake Chrome User-Agent: all three import fully with the honest UA (verified live 2026-11-01). (2) People Inc's licensing block, a 402 (AllRecipes, Serious Eats), is deliberate. Both were treated as server errors, and the user was never moved to paste mode | `fetchPage.ts`, `parse/route.ts` |
 | TikTok author never shown | The route passes only the text to Claude and discards `extracted.sourceName` | `parse/route.ts` |
 | SSRF guard only checks the first URL | `redirect: "follow"`, so a public URL that redirects to a private address is fetched | `fetchRecipeHtml`, `resolveRedirect` |
 | `vt.tiktok.com` links and Pinterest pins unhandled | Host list gaps. A pin's page carries the outbound recipe URL (`"link"`) | `PLATFORM_HOSTNAMES` |
@@ -67,7 +67,7 @@ Routine calls made without asking: tracking params (`utm_*`, `si`, `igsh`, `_t`,
 - On a 422 from URL import: switch to Paste Text, keep the URL in "Source URL", and show a reason-specific message:
   - `blocked` — "This site doesn't allow automatic import."
   - `login_required` — "This post is private or needs a login."
-  - `not_found` — "That post or page wasn't found."
+  - `not_found` — "Couldn't open that page — the link may be broken, or the site may not allow automatic import." (some sites answer apps with a 404, so a 404 is ambiguous)
   - `no_recipe` — "Couldn't find a recipe there."
 
   Each message ends with "Paste the recipe text or add screenshots."

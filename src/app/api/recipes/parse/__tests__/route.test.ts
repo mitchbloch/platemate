@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({
   parse: null as null | ((source: unknown) => Promise<unknown>),
 }));
 
-vi.mock("@/lib/import", () => ({ extractImportSource: (url: string) => state.extract!(url) }));
+vi.mock("@/lib/import", () => ({ IMPORT_BUDGET_MS: 57_000, EXTRACT_BUDGET_MS: 15_000, extractImportSource: (url: string) => state.extract!(url) }));
 vi.mock("@/lib/recipeParser", () => ({ parseRecipe: (source: unknown) => state.parse!(source) }));
 
 import { POST } from "../route";
@@ -51,7 +51,7 @@ describe("POST /api/recipes/parse", () => {
   it.each([
     ["blocked", "This site doesn't allow automatic import."],
     ["login_required", "This post is private or needs a login."],
-    ["not_found", "That post or page wasn't found."],
+    ["not_found", "Couldn't open that page — the link may be broken, or the site may not allow automatic import."],
     ["unsupported", "That link isn't a page we can read."],
     ["fetch_failed", "Couldn't reach that page."],
   ] as const)("maps an extraction failure (%s) to a 422 the form can act on", async (reason, message) => {

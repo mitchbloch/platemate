@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseRecipe } from "@/lib/recipeParser";
-import { extractImportSource } from "@/lib/import";
+import { EXTRACT_BUDGET_MS, IMPORT_BUDGET_MS, extractImportSource } from "@/lib/import";
 import { detectSource, stripTracking } from "@/lib/import/platforms";
 import { createDeadline, ImportFailure, importFailureBody, logImport, subDeadline } from "@/lib/import/fetchPage";
 
-// Extraction (page, transcript) + one Claude call
+// Extraction (page, transcript) + one Claude call, within IMPORT_BUDGET_MS
 export const maxDuration = 60;
-
-// One budget for the whole import, inside maxDuration. Extraction gets at
-// most EXTRACT_BUDGET_MS so Claude always has time left.
-const IMPORT_BUDGET_MS = 57_000;
-const EXTRACT_BUDGET_MS = 15_000;
 
 export async function POST(request: NextRequest) {
   let url: unknown;
