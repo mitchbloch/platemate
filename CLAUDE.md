@@ -18,9 +18,10 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - **Single Claude API call** per recipe import (extraction + nutrition + per-ingredient `shoppingName` in one pass)
 - **Recipe generation** (`/recipes/generate`): Sonnet 5 chat, one structured-output call per turn returning either up to 3 options or a full `ParsedRecipe` draft plus library matches; household dietary/nutrient priorities in the system prompt; the library digest is the last system block with `cache_control`; photos downscaled client-side and never stored
 - **Grocery merge key is `shoppingName`** (brand-agnostic, "what you'd write on a paper list"); falls back to the ingredient name for recipes imported before Phase 8C. One-time backfill: `npm run backfill:shopping-names` (needs the service-role key in a git-ignored env file — see the script header)
-- **Dual input mode**: URL scraping for recipe sites, freeform text for video/non-scrapable sources
-- **Video auto-extraction**: TikTok (oEmbed), YouTube (oEmbed + meta tags), Instagram (Brave Search cross-post lookup)
-- **Graceful degradation**: auto-extract → manual text paste fallback for all video platforms
+- **Import pipeline** (`src/lib/import/`, Phase 9): deterministic extraction → one Claude call. Sites: schema.org Recipe JSON-LD, else page text. TikTok: public page `__UNIVERSAL_DATA_FOR_REHYDRATION__` caption + ASR WebVTT transcript (oEmbed stopped returning captions ~2026-10-19). YouTube: `ytInitialPlayerResponse` full description (no transcript: caption tracks need a proof-of-origin token from YouTube's bot check, which we don't defeat). Pinterest: follow the pin's outbound link. Instagram: Brave Search cross-post lookup
+- **Import input modes**: URL, or Paste Text with optional screenshots (≤5, downscaled client-side to 1568px, never stored)
+- **Graceful degradation**: any `ImportFailure` (blocked, private, not found, no recipe) → 422 `{ reason, canPaste, sourceUrl }` → form switches to Paste Text with the link kept. Never bypass bot challenges; honest `Platemate/1.0` User-Agent, one fetch per pasted link, never retry under another identity
+- **Drift check**: `npm run eval:import` (one live URL per source; `-- --parse` adds Claude, a few cents) — run when an import source misbehaves or before touching `src/lib/import/`
 - **Unordered meal sets**: weekly planner uses sets (not day-assigned grids) — matches actual workflow
 - **Weeks start Sunday**: grocery shopping + first cook is Sunday
 - **Optimistic UI**: meal add/remove updates state immediately, reverts on API failure
@@ -33,7 +34,11 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 
 ## Key Files
 - `src/lib/types.ts` — All domain types, nutrition thresholds
-- `src/lib/recipeParser.ts` — URL → HTML → Claude → ParsedRecipe (also text → Claude for video recipes)
+- `src/lib/recipeParser.ts` — `ImportSource` (sections + images) → one Claude call → validated ParsedRecipe; single system prompt for every input
+- `src/lib/import/` — Source extraction (Phase 9): `platforms.ts` (client-safe source detection, tracking strip, URL/credit helpers), `failure.ts` (`ImportFailure`, `importErrorResult` for both routes, `[import]` log line — no imports, because the parser is reachable from client bundles), `fetchPage.ts` (SSRF-checked fetch per redirect hop, deadline, block detection; Node-only), `text.ts`, `jsonLd.ts` (Recipe + Pinterest SocialMediaPosting), `tiktok.ts`, `youtube.ts`, `index.ts` (`extractImportSource`, time budgets)
+- `src/lib/imageInput.ts` — Server-side base64 image validation + limits shared by generation photos and import screenshots
+- `src/hooks/usePhotoAttachments.ts` + `src/components/AttachedPhotos.tsx` — Shared photo/screenshot picking (downscale, cap) and thumbnail strip
+- `scripts/eval-import.ts` — `npm run eval:import`: live drift check per import source
 - `src/lib/nutrition.ts` — Health flags, weekly summaries
 - `src/lib/recipes.ts` — Supabase CRUD (snake_case ↔ camelCase conversion)
 - `src/lib/mealPlans.ts` — Meal plan DAL (CRUD, getWeekStart, joined recipe queries)

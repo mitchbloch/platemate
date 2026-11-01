@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import type { GenerationMessage, ParsedRecipe, RecipeGeneration } from "@/lib/types";
 import { CUISINE_LABELS, MEAL_TYPE_LABELS } from "@/lib/types";
 import { MAX_PHOTOS, MAX_TURNS, countUserTurns } from "@/lib/recipeGeneration";
-import { downscaleToJpegBase64 } from "@/lib/imageDownscale";
 import { getCurrentWeekStart } from "@/lib/weekDates";
 import { useUrlMirror } from "@/hooks/useUrlMirror";
+import { usePhotoAttachments, type Photo } from "@/hooks/usePhotoAttachments";
+import AttachedPhotos from "./AttachedPhotos";
 import NutritionBadge from "./NutritionBadge";
 import { useToast, ToastContainer } from "./Toast";
 
@@ -16,8 +17,6 @@ interface Props {
   drafts: RecipeGeneration[];
   initial: RecipeGeneration | null;
 }
-
-type Photo = { id: string; preview: string; base64: string };
 
 const primaryBtn = "inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-white shadow-warm transition-colors hover:bg-primary-dark disabled:opacity-50";
 const secondaryBtn = "inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm text-text-secondary transition-colors hover:bg-border-light disabled:opacity-50";
@@ -28,7 +27,7 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
   const [drafts, setDrafts] = useState(initialDrafts);
   const [chat, setChat] = useState<RecipeGeneration | null>(initial);
   const [text, setText] = useState("");
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const { photos, add: attachPhotos, remove: removePhoto, clear: clearPhotos, full: photosFull } = usePhotoAttachments(MAX_PHOTOS);
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +69,7 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
       if (activeChatId.current === targetId) {
         selectChat(updated);
         setText("");
-        setPhotos([]);
+        clearPhotos();
       }
     } catch (err) {
       if (activeChatId.current === targetId) setError(err instanceof Error ? err.message : "Something went wrong");
@@ -80,23 +79,10 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
   }
 
   async function addPhotos(files: FileList | null) {
-    if (!files) return;
-    const room = MAX_PHOTOS - photos.length;
-    const chosen = Array.from(files).slice(0, room);
-    if (files.length > room) showToast(`Up to ${MAX_PHOTOS} photos per message`);
-    try {
-      const next = await Promise.all(
-        chosen.map(async (f) => {
-          const base64 = await downscaleToJpegBase64(f);
-          return { id: `${f.name}-${f.lastModified}-${Math.random()}`, preview: `data:image/jpeg;base64,${base64}`, base64 };
-        }),
-      );
-      setPhotos((prev) => [...prev, ...next]);
-    } catch {
-      showToast("Couldn't read that photo — try a JPEG or a screenshot");
-    } finally {
-      if (fileInput.current) fileInput.current.value = "";
-    }
+    const problem = await attachPhotos(files);
+    if (problem === "too_many") showToast(`Up to ${MAX_PHOTOS} photos per message`);
+    if (problem === "unreadable") showToast("Couldn't read that photo — try a JPEG or a screenshot");
+    if (fileInput.current) fileInput.current.value = "";
   }
 
   async function saveDraft() {
@@ -201,17 +187,7 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
           onSubmit={(e) => { e.preventDefault(); if (text.trim() || photos.length) send(text.trim()); }}
           className="space-y-2 rounded-2xl border border-border bg-surface p-3 shadow-warm"
         >
-          {photos.length > 0 && (
-            <div className="flex gap-2">
-              {photos.map((p) => (
-                <div key={p.id} className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.preview} alt="Attached photo" className="h-16 w-16 rounded-lg object-cover" />
-                  <button type="button" onClick={() => setPhotos((prev) => prev.filter((x) => x.id !== p.id))} aria-label="Remove photo" className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-text text-xs text-white">&times;</button>
-                </div>
-              ))}
-            </div>
-          )}
+          <AttachedPhotos photos={photos} onRemove={removePhoto} noun="photo" />
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -230,9 +206,9 @@ export default function RecipeGenerator({ drafts: initialDrafts, initial }: Prop
           />
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <div className="flex items-center justify-between gap-2">
-            <label className={`${secondaryBtn} cursor-pointer ${photos.length >= MAX_PHOTOS || sending ? "pointer-events-none opacity-50" : ""}`}>
+            <label className={`${secondaryBtn} cursor-pointer ${photosFull || sending ? "pointer-events-none opacity-50" : ""}`}>
               📷 Photo
-              <input ref={fileInput} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => addPhotos(e.target.files)} disabled={photos.length >= MAX_PHOTOS || sending} />
+              <input ref={fileInput} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => addPhotos(e.target.files)} disabled={photosFull || sending} />
             </label>
             <span className="text-xs text-text-muted">{userTurns}/{MAX_TURNS}</span>
             <button type="submit" className={primaryBtn} disabled={sending || atCap || (!text.trim() && photos.length === 0)}>Send</button>

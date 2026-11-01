@@ -1,65 +1,197 @@
-import { describe, it, expect } from "vitest";
-import { assertPublicHttpUrl, isVideoUrl } from "../recipeParser";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ImportSource } from "../import";
 
-describe("assertPublicHttpUrl", () => {
-  it("accepts normal public recipe URLs", () => {
-    expect(() => assertPublicHttpUrl("https://www.budgetbytes.com/some-recipe/")).not.toThrow();
-    expect(() => assertPublicHttpUrl("http://cooking.nytimes.com/recipes/123")).not.toThrow();
-  });
+const state = vi.hoisted(() => ({
+  response: null as unknown,
+  error: null as Error | null,
+  lastRequest: null as Record<string, unknown> | null,
+  lastOptions: null as Record<string, unknown> | null,
+}));
 
-  it("rejects non-http(s) protocols", () => {
-    expect(() => assertPublicHttpUrl("file:///etc/passwd")).toThrow();
-    expect(() => assertPublicHttpUrl("ftp://example.com/x")).toThrow();
-    expect(() => assertPublicHttpUrl("javascript:alert(1)")).toThrow();
-  });
-
-  it("rejects malformed URLs", () => {
-    expect(() => assertPublicHttpUrl("not a url")).toThrow("Invalid URL");
-  });
-
-  it("rejects localhost and internal hostnames", () => {
-    expect(() => assertPublicHttpUrl("http://localhost:3000/admin")).toThrow();
-    expect(() => assertPublicHttpUrl("http://intranet/secrets")).toThrow();
-    expect(() => assertPublicHttpUrl("http://db.internal/")).toThrow();
-    expect(() => assertPublicHttpUrl("http://printer.local/")).toThrow();
-  });
-
-  it("rejects private and reserved IPv4 ranges", () => {
-    for (const host of [
-      "127.0.0.1",
-      "10.0.0.5",
-      "192.168.1.1",
-      "172.16.0.1",
-      "172.31.255.255",
-      "169.254.169.254", // cloud metadata endpoint
-      "100.64.0.1",
-      "0.0.0.0",
-    ]) {
-      expect(() => assertPublicHttpUrl(`http://${host}/`), host).toThrow();
+const sdkErrors = vi.hoisted(() => ({
+  APIConnectionTimeoutError: class APIConnectionTimeoutError extends Error {
+    constructor() {
+      super("Request timed out.");
     }
+  },
+  // What the SDK throws when our deadline's signal aborts the request
+  APIUserAbortError: class APIUserAbortError extends Error {
+    constructor() {
+      super("Request was aborted.");
+    }
+  },
+}));
+
+vi.mock("@anthropic-ai/sdk", () => ({
+  ...sdkErrors,
+  default: class {
+    messages = {
+      create: async (req: Record<string, unknown>, options: Record<string, unknown>) => {
+        state.lastRequest = req;
+        state.lastOptions = options;
+        if (state.error) throw state.error;
+        return state.response;
+      },
+    };
+  },
+}));
+
+import { buildRecipeRequestContent, parseRecipe, parseRecipeFromUserInput } from "../recipeParser";
+import { createDeadline } from "../import/fetchPage";
+
+const budget = () => createDeadline(30_000);
+import { ImportFailure } from "../import/failure";
+
+const recipeJson = (overrides: Record<string, unknown> = {}) => ({
+  title: "Sheetpan Chicken Kebabs",
+  description: null,
+  cuisine: "middle-eastern",
+  mealType: "dinner",
+  difficulty: "easy",
+  servings: 4,
+  totalTimeMinutes: 40,
+  ingredients: [
+    { name: "ground chicken", quantity: 1, unit: "kg", preparation: null, category: "meat", raw: "1kg lean ground chicken", shoppingName: "ground chicken" },
+  ],
+  instructions: ["Bake at 190°C for 20–25 minutes."],
+  nutrition: { calories: 586, protein: 62, carbs: 45, fat: 16, saturatedFat: 4, cholesterol: 150, fiber: 5, sodium: 900 },
+  dietaryFlags: [],
+  tags: [],
+  imageUrl: "https://hallucinated.example/img.jpg",
+  isSlowCooker: false,
+  sourceName: "TikTok",
+  ...overrides,
+});
+
+const reply = (data: unknown, stop_reason = "end_turn") => ({ stop_reason, content: [{ type: "text", text: JSON.stringify(data) }] });
+
+const source = (overrides: Partial<ImportSource> = {}): ImportSource => ({
+  sections: [
+    { label: "CAPTION", text: "High Protein Sheetpan Chicken Kebabs! 1kg lean ground chicken..." },
+    { label: "TRANSCRIPT", text: "Get your onions, bell pepper and garlic" },
+  ],
+  images: [],
+  sourceName: "TikTok — Panacea Palm",
+  imageUrl: null,
+  sourceUrl: "https://www.tiktok.com/@panaceapalm/video/7641621946563661078",
+  ...overrides,
+});
+
+beforeEach(() => {
+  state.response = reply(recipeJson());
+  state.error = null;
+  state.lastRequest = null;
+  state.lastOptions = null;
+});
+
+describe("buildRecipeRequestContent", () => {
+  it("labels each section and includes the source URL", () => {
+    const content = buildRecipeRequestContent(source());
+    expect(content).toBe(
+      "Extract the recipe.\n\nSource URL: https://www.tiktok.com/@panaceapalm/video/7641621946563661078\n\n" +
+        "=== CAPTION ===\nHigh Protein Sheetpan Chicken Kebabs! 1kg lean ground chicken...\n\n" +
+        "=== TRANSCRIPT ===\nGet your onions, bell pepper and garlic",
+    );
   });
 
-  it("allows public IPv4 addresses", () => {
-    expect(() => assertPublicHttpUrl("http://93.184.216.34/")).not.toThrow();
-    expect(() => assertPublicHttpUrl("http://172.32.0.1/")).not.toThrow(); // just outside 172.16/12
-  });
-
-  it("rejects IPv6 loopback and private addresses", () => {
-    expect(() => assertPublicHttpUrl("http://[::1]/")).toThrow();
-    expect(() => assertPublicHttpUrl("http://[fc00::1]/")).toThrow();
-    expect(() => assertPublicHttpUrl("http://[fe80::1]/")).toThrow();
+  it("puts images before the text", () => {
+    const content = buildRecipeRequestContent(source({ images: ["AAAA", "BBBB"], sourceUrl: null }));
+    expect(Array.isArray(content)).toBe(true);
+    const blocks = content as { type: string; source?: { data: string; media_type: string } }[];
+    expect(blocks.map((b) => b.type)).toEqual(["image", "image", "text"]);
+    expect(blocks[0].source).toMatchObject({ data: "AAAA", media_type: "image/jpeg" });
   });
 });
 
-describe("isVideoUrl", () => {
-  it("detects video platforms", () => {
-    expect(isVideoUrl("https://www.tiktok.com/@user/video/123")).toBe(true);
-    expect(isVideoUrl("https://youtu.be/abc123")).toBe(true);
-    expect(isVideoUrl("https://www.instagram.com/reel/xyz/")).toBe(true);
+describe("parseRecipe", () => {
+  it("uses extraction's sourceName and imageUrl over the model's (regression: TikTok author was dropped)", async () => {
+    const recipe = await parseRecipe(source(), budget());
+    expect(recipe.sourceName).toBe("TikTok — Panacea Palm");
+    expect(recipe.imageUrl).toBeNull(); // never the model's guess
   });
 
-  it("does not flag lookalike domains", () => {
-    expect(isVideoUrl("https://nottiktok.com/video")).toBe(false);
-    expect(isVideoUrl("https://www.budgetbytes.com/recipe")).toBe(false);
+  it("falls back to the model's sourceName when extraction has none", async () => {
+    const recipe = await parseRecipe(source({ sourceName: null, imageUrl: "https://static01.nyt.com/x.jpg" }), budget());
+    expect(recipe.sourceName).toBe("TikTok");
+    expect(recipe.imageUrl).toBe("https://static01.nyt.com/x.jpg");
+  });
+
+  it("sends one system prompt covering every section kind and the no-recipe rule", async () => {
+    await parseRecipe(source(), budget());
+    const system = state.lastRequest?.system as string;
+    for (const label of ["STRUCTURED DATA", "PAGE TEXT", "CAPTION", "TRANSCRIPT", "USER TEXT"]) expect(system).toContain(label);
+    expect(system).toContain("do not invent one");
+    expect(system).toContain("shoppingName");
+  });
+
+  it("throws no_recipe when the model returns no ingredients", async () => {
+    state.response = reply(recipeJson({ ingredients: [], instructions: [] }));
+    await expect(parseRecipe(source(), budget())).rejects.toMatchObject({ reason: "no_recipe" });
+    await expect(parseRecipe(source(), budget())).rejects.toBeInstanceOf(ImportFailure);
+  });
+
+  it("passes the remaining deadline as the request timeout without retries", async () => {
+    await parseRecipe(source(), createDeadline(30_000));
+    expect(state.lastOptions?.timeout).toBeGreaterThan(25_000);
+    expect(state.lastOptions?.timeout).toBeLessThanOrEqual(27_000);
+    expect(state.lastOptions?.maxRetries).toBe(0);
+    expect(state.lastOptions?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("fails fast when the deadline is already spent", async () => {
+    await expect(parseRecipe(source(), createDeadline(1_000))).rejects.toThrow("Importing took too long — try again");
+    expect(state.lastRequest).toBeNull();
+  });
+
+  it("warns when structured ingredient count and parsed count differ", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await parseRecipe(source({ expectedIngredientCount: 3 }), budget());
+    expect(warn).toHaveBeenCalledWith("[import] ingredient count mismatch", expect.objectContaining({ structured: 3, parsed: 1 }));
+    warn.mockRestore();
+  });
+
+  it("turns a Claude timeout into a retryable message (seen live 2026-11-01)", async () => {
+    state.error = new sdkErrors.APIConnectionTimeoutError();
+    await expect(parseRecipe(source(), createDeadline(30_000))).rejects.toThrow("Importing took too long — try again");
+    state.error = new sdkErrors.APIUserAbortError();
+    await expect(parseRecipe(source(), createDeadline(30_000))).rejects.toThrow("Importing took too long — try again");
+  });
+
+  it("hides raw SDK/API errors behind a plain message, keeping them as the cause (seen on the Vercel preview)", async () => {
+    const missingKey = new Error("Could not resolve authentication method. Expected one of apiKey, authToken, ...");
+    state.error = missingKey;
+    const err = await parseRecipe(source(), budget()).then(() => null, (e: Error) => e);
+    expect(err?.message).toBe("Couldn't read the recipe right now — try again in a minute");
+    expect(err?.cause).toBe(missingKey);
+  });
+
+  it("surfaces refusals and truncation as errors", async () => {
+    state.response = reply({}, "refusal");
+    await expect(parseRecipe(source(), budget())).rejects.toThrow("declined");
+    state.response = reply({}, "max_tokens");
+    await expect(parseRecipe(source(), budget())).rejects.toThrow("too long");
+  });
+});
+
+describe("parseRecipeFromUserInput", () => {
+  it("sends pasted text as a USER TEXT section", async () => {
+    await parseRecipeFromUserInput({ text: "2 eggs, scrambled", images: [], sourceUrl: "https://instagram.com/p/x" }, budget());
+    const messages = state.lastRequest?.messages as { content: string }[];
+    expect(messages[0].content).toContain("=== USER TEXT ===\n2 eggs, scrambled");
+    expect(messages[0].content).toContain("Source URL: https://instagram.com/p/x");
+  });
+
+  it("sends screenshots alone as image blocks with no empty text section", async () => {
+    await parseRecipeFromUserInput({ text: "", images: ["AAAA"], sourceUrl: null }, budget());
+    const content = (state.lastRequest?.messages as { content: { type: string; text?: string }[] }[])[0].content;
+    expect(content.map((b) => b.type)).toEqual(["image", "text"]);
+    expect(content[1].text).toBe("Extract the recipe.");
+  });
+
+  it("sends screenshots and text together", async () => {
+    await parseRecipeFromUserInput({ text: "serves 4", images: ["AAAA", "BBBB"], sourceUrl: null }, budget());
+    const content = (state.lastRequest?.messages as { content: { type: string; text?: string }[] }[])[0].content;
+    expect(content.map((b) => b.type)).toEqual(["image", "image", "text"]);
+    expect(content[2].text).toContain("=== USER TEXT ===\nserves 4");
   });
 });

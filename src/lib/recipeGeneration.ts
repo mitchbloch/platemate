@@ -5,6 +5,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { RECIPE_JSON_SCHEMA, validateParsedRecipe } from "./recipeParser";
 import { SHOPPING_NAME_RULES } from "./shoppingName";
+import { validateBase64Images } from "./imageInput";
 import { NUTRITION_LABELS, DIETARY_FLAG_LABELS } from "./types";
 import type {
   DietaryFlag,
@@ -23,8 +24,6 @@ export const MAX_TURNS = 20;
  *  spend even if someone keeps starting fresh chats. */
 export const MAX_TURNS_PER_DAY = 100;
 export const MAX_PHOTOS = 3;
-/** Base64 length cap: 800K chars ≈ 600KB of JPEG (base64 inflates by 4/3). */
-export const MAX_PHOTO_BASE64_CHARS = 800_000;
 export const MAX_OPTIONS = 3;
 export const MAX_LIBRARY_MATCHES = 5;
 export const MAX_MESSAGE_CHARS = 4_000;
@@ -232,12 +231,10 @@ export function validateGenerateRequest(body: unknown): { ok: true; request: Gen
   if (!message && images.length === 0) return { ok: false, error: "Say what you'd like to cook, or add a photo" };
   if (message.length > MAX_MESSAGE_CHARS) return { ok: false, error: `Message is too long (max ${MAX_MESSAGE_CHARS.toLocaleString()} characters)` };
   if (images.length > MAX_PHOTOS) return { ok: false, error: `Up to ${MAX_PHOTOS} photos per message` };
-  for (const img of images) {
-    if (typeof img !== "string" || !/^[A-Za-z0-9+/=]+$/.test(img)) return { ok: false, error: "Photos must be base64 JPEG" };
-    if (img.length > MAX_PHOTO_BASE64_CHARS) return { ok: false, error: "A photo is too large — try a smaller one" };
-  }
+  const checked = validateBase64Images(images, MAX_PHOTOS, "photo");
+  if (!checked.ok) return { ok: false, error: checked.error };
   const generationId = typeof b.generationId === "string" && b.generationId ? b.generationId : null;
-  return { ok: true, request: { generationId, message: message || "(see photo)", images: images as string[] } };
+  return { ok: true, request: { generationId, message: message || "(see photo)", images: checked.images } };
 }
 
 /** User turns in a chat (the unit the per-chat and per-day caps count). */

@@ -7,7 +7,7 @@ Every weekend, a couple plans 2-4 dinners + 1 slow cooker lunch prep, then groce
 Platemate automates this workflow: curated recipe DB → AI-powered recipe import → health-aware weekly suggestions → store-grouped grocery list.
 
 ## Core Workflow
-1. **Import** — Paste a recipe URL or freeform text (for video recipes) → AI extracts structured recipe + estimates nutrition
+1. **Import** — Paste a recipe URL (site, TikTok, YouTube, Pinterest, Instagram), freeform text, or screenshots → AI extracts structured recipe + estimates nutrition
 2. **Review** — Edit extracted fields, see cholesterol/sat fat flags, save to library
 3. **Plan** — Get AI suggestions for the week → pick 3-4 dinners + slow cooker → assign days
 4. **Shop** — Auto-generated grocery list grouped by store (TJ's default), checkable, shared
@@ -71,9 +71,19 @@ Full spec and root-cause table: `tasks/phase8_qol_and_features.md`.
 - **Share**: Public read-only recipe page per share token (full recipe visible, OG preview), "Save to Platemate" behind sign-in, independent copy into the recipient's household. `recipe_shares` keeps one active link per recipe per sharer with view/save counts and revocation.
 - **Generation**: Household-scoped chat with Sonnet 5; each turn returns either up to three options or a full draft with nutrition; photos downscaled client-side and not persisted; library matches offer View and Add to plan; household dietary and nutrient priorities shape every draft. Conversations persist server-side until saved (linked to the recipe) or discarded (deleted).
 
+## Phase 9: Recipe Import Pipeline — Design Decisions
+Full spec, audit evidence and root-cause table: `tasks/phase9_recipe_import.md`.
+- **Layered extraction, one Claude call**: deterministic extraction first (schema.org Recipe JSON-LD on sites; caption + auto-transcript on TikTok/YouTube; Pinterest follows the pin to its source), then a single Claude call normalizes it (shopping names, categories, nutrition fill-in). Site-provided nutrition is used as given.
+- **Transcripts always included** for TikTok so spoken-only recipes import; best-effort with a short timeout. YouTube sends its full description only — its transcripts sit behind a bot check we don't defeat.
+- **Respect blocks**: sites that refuse automated access (Cloudflare challenges, publisher blocks) and private posts get a clear message and drop the user into Paste Text with the link kept — never bypassed. Requests identify honestly as Platemate, make exactly one fetch per pasted link, and never retry under another identity.
+- **Screenshot import**: up to 5 screenshots/photos (caption, recipe card, cookbook page) in Paste Text mode, read in the same single call, downscaled in the browser, never stored. This is also the fallback for Instagram and blocked sites.
+- **No invented recipes**: when the source has no recipe ("recipe in bio"), import says so instead of guessing.
+- **Drift check**: `npm run eval:import` runs one real link per source and reports each stage, so the next silent platform change is caught by a script.
+
 ## Success Metrics
 - Can import a recipe from any major cooking site in <10 seconds
-- Video recipe links (TikTok, Instagram, YouTube) detected and gracefully redirected to text input
+- Imports are complete: every ingredient and step the source lists (structured data preferred over page text)
+- TikTok and YouTube links auto-import (TikTok including recipes that are only spoken); Instagram and blocked sites fall back to paste or screenshots with a clear reason
 - Nutrition flags correctly identify high-cholesterol recipes
 - Weekly planning takes <5 minutes (vs 30+ manual)
 - Grocery list generation from meal plan in <2 seconds

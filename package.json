@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "backfill:shopping-names": "tsx scripts/backfill-shopping-names.ts",
-    "eval:generate": "tsx scripts/eval-generate.ts"
+    "eval:generate": "tsx scripts/eval-generate.ts",
+    "eval:import": "tsx scripts/eval-import.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
