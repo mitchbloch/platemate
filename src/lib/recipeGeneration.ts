@@ -18,7 +18,11 @@ import type {
   Recipe,
 } from "./types";
 
-export const GENERATION_MODEL = "claude-sonnet-5";
+export const GENERATION_MODEL = "claude-sonnet-5-5";
+/** Sonnet 5.5 effort levels are recalibrated vs Sonnet 5 (default `high`);
+ *  `medium` is the guide's starting point for multistep work. Shared by the
+ *  route and `scripts/eval-generate.ts` so the eval exercises what ships. */
+export const GENERATION_EFFORT = "medium" as const;
 export const MAX_TURNS = 20;
 /** Household-wide ceiling on generation turns per rolling day — bounds
  *  spend even if someone keeps starting fresh chats. */

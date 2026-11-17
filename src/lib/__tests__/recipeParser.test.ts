@@ -124,6 +124,23 @@ describe("parseRecipe", () => {
     expect(system).toContain("shoppingName");
   });
 
+  it("calls Sonnet 5.5 at low effort with structured output, no thinking override and no prefill", async () => {
+    await parseRecipe(source(), budget());
+    const req = state.lastRequest!;
+    expect(req.model).toBe("claude-sonnet-5-5");
+    const config = req.output_config as { effort: string; format: { type: string } };
+    expect(config.effort).toBe("low");
+    expect(config.format.type).toBe("json_schema");
+    // `thinking: {type: "disabled"}` 400s on Sonnet 5.5; leave the default (adaptive)
+    expect(req).not.toHaveProperty("thinking");
+    expect((req.messages as { role: string }[]).at(-1)?.role).toBe("user");
+  });
+
+  it("reads the text block when thinking blocks come first", async () => {
+    state.response = { stop_reason: "end_turn", content: [{ type: "thinking" }, { type: "text", text: JSON.stringify(recipeJson()) }] };
+    await expect(parseRecipe(source(), budget())).resolves.toMatchObject({ title: "Sheetpan Chicken Kebabs" });
+  });
+
   it("throws no_recipe when the model returns no ingredients", async () => {
     state.response = reply(recipeJson({ ingredients: [], instructions: [] }));
     await expect(parseRecipe(source(), budget())).rejects.toMatchObject({ reason: "no_recipe" });
