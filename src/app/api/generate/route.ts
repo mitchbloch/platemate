@@ -12,6 +12,7 @@ import {
   listActiveGenerations,
 } from "@/lib/recipeGenerations";
 import {
+  GENERATION_EFFORT,
   GENERATION_MODEL,
   GENERATION_RESPONSE_SCHEMA,
   MAX_TURNS,
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
         ...toApiMessages(generation?.messages ?? []),
         { role: "user", content: userTurnContent(message, images) },
       ],
-      output_config: { format: { type: "json_schema", schema: GENERATION_RESPONSE_SCHEMA } },
+      output_config: { effort: GENERATION_EFFORT, format: { type: "json_schema", schema: GENERATION_RESPONSE_SCHEMA } },
     });
 
     if (response.stop_reason === "refusal") {

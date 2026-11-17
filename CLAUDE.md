@@ -14,9 +14,9 @@ Weekly meal planning & grocery list tool for a couple. AI-powered recipe import 
 - **Hybrid**: Pure TypeScript modules in `src/lib/`, thin App Router UI on top
 - **Server components** by default (read-heavy pages)
 - **Client components** only when needed (`"use client"` for forms, auth state, interactive planner)
-- **JSONB ingredients** in recipes table (no normalization until Phase 4)
+- **JSONB ingredients** in the recipes table (not normalized at rest; grocery merge normalizes them via `ingredientMerge.ts`)
 - **Single Claude API call** per recipe import (extraction + nutrition + per-ingredient `shoppingName` in one pass)
-- **Recipe generation** (`/recipes/generate`): Sonnet 5 chat, one structured-output call per turn returning either up to 3 options or a full `ParsedRecipe` draft plus library matches; household dietary/nutrient priorities in the system prompt; the library digest is the last system block with `cache_control`; photos downscaled client-side and never stored
+- **Recipe generation** (`/recipes/generate`): Sonnet 5.5 chat (`effort: "medium"`), one structured-output call per turn returning either up to 3 options or a full `ParsedRecipe` draft plus library matches; household dietary/nutrient priorities in the system prompt; the library digest is the last system block with `cache_control`; photos downscaled client-side and never stored
 - **Grocery merge key is `shoppingName`** (brand-agnostic, "what you'd write on a paper list"); falls back to the ingredient name for recipes imported before Phase 8C. One-time backfill: `npm run backfill:shopping-names` (needs the service-role key in a git-ignored env file — see the script header)
 - **Dual input mode**: URL scraping for recipe sites, freeform text for video/non-scrapable sources
 - **Video auto-extraction**: TikTok (oEmbed), YouTube (oEmbed + meta tags), Instagram (Brave Search cross-post lookup)

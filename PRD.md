@@ -69,7 +69,7 @@ Full spec and root-cause table: `tasks/phase8_qol_and_features.md`.
 - **Search**: Client-side over the loaded library (title, cuisine, tags, meal type, ingredient names); URL-backed on the Recipes page.
 - **Weekly staples**: Editable in place; edits propagate to this week's unchecked copy so the change is visible immediately.
 - **Share**: Public read-only recipe page per share token (full recipe visible, OG preview), "Save to Platemate" behind sign-in, independent copy into the recipient's household. `recipe_shares` keeps one active link per recipe per sharer with view/save counts and revocation.
-- **Generation**: Household-scoped chat with Sonnet 5; each turn returns either up to three options or a full draft with nutrition; photos downscaled client-side and not persisted; library matches offer View and Add to plan; household dietary and nutrient priorities shape every draft. Conversations persist server-side until saved (linked to the recipe) or discarded (deleted).
+- **Generation**: Household-scoped chat with Sonnet 5.5; each turn returns either up to three options or a full draft with nutrition; photos downscaled client-side and not persisted; library matches offer View and Add to plan; household dietary and nutrient priorities shape every draft. Conversations persist server-side until saved (linked to the recipe) or discarded (deleted).
 
 ## Success Metrics
 - Can import a recipe from any major cooking site in <10 seconds

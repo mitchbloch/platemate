@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import { GENERATION_MODEL, GENERATION_RESPONSE_SCHEMA, buildSystemBlocks, toApiMessages, userTurnContent, validateGenerationResponse } from "../src/lib/recipeGeneration";
+import { GENERATION_EFFORT, GENERATION_MODEL, GENERATION_RESPONSE_SCHEMA, buildSystemBlocks, toApiMessages, userTurnContent, validateGenerationResponse } from "../src/lib/recipeGeneration";
 import type { GenerationMessage } from "../src/lib/types";
 
 for (const line of fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf8").split("\n")) {
@@ -15,6 +15,9 @@ for (const line of fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf8
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
 }
 const client = new Anthropic();
+// Defaults are what ships; override to compare, e.g. EVAL_MODEL=claude-sonnet-5 EVAL_EFFORT=high
+const MODEL = process.env.EVAL_MODEL ?? GENERATION_MODEL;
+const EFFORT = (process.env.EVAL_EFFORT ?? GENERATION_EFFORT) as "low" | "medium" | "high" | "xhigh" | "max";
 const household = { defaultServings: 2, dietaryPreferences: [] as string[], nutritionPriorities: [{ nutrient: "cholesterol" as const, rank: 1 }, { nutrient: "saturatedFat" as const, rank: 2 }] };
 const library = [
   { id: "lib-1", title: "Chicken Tacos", mealType: "dinner" as const, ingredients: [{ name: "chicken thighs", shoppingName: "chicken thighs", quantity: 1, unit: "lb", preparation: null, category: "meat" as const, raw: "" }, { name: "tortillas", quantity: 8, unit: null, preparation: null, category: "grain" as const, raw: "" }] },
@@ -25,9 +28,9 @@ const history: GenerationMessage[] = [];
 async function turn(message: string) {
   const t0 = Date.now();
   const res = await client.messages.create({
-    model: GENERATION_MODEL, max_tokens: 16000, system: buildSystemBlocks(household, library),
+    model: MODEL, max_tokens: 16000, system: buildSystemBlocks(household, library),
     messages: [...toApiMessages(history), { role: "user", content: userTurnContent(message, []) }],
-    output_config: { format: { type: "json_schema", schema: GENERATION_RESPONSE_SCHEMA } },
+    output_config: { effort: EFFORT, format: { type: "json_schema", schema: GENERATION_RESPONSE_SCHEMA } },
   });
   const text = res.content.find((b) => b.type === "text");
   const result = validateGenerationResponse(JSON.parse(text!.text), library);

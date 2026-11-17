@@ -20,7 +20,7 @@ import type { Ingredient } from "../src/lib/types";
 
 // ── Config ──
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-haiku-5-5";
 const BATCH_SIZE = 20;
 
 function loadEnvFile(name: string): void {
@@ -101,7 +101,9 @@ async function assignShoppingNames(batch: RecipeRow[]): Promise<Map<string, stri
     model: MODEL,
     max_tokens: 8000,
     system: SYSTEM_PROMPT,
-    output_config: { format: { type: "json_schema", schema: RESPONSE_SCHEMA } },
+    // Haiku 5.5 thinks by default (effort defaults to medium); this is a
+    // simple structured mapping, so `low` keeps it fast and cheap
+    output_config: { effort: "low", format: { type: "json_schema", schema: RESPONSE_SCHEMA } },
     messages: [{ role: "user", content: userMessage }],
   });
   if (message.stop_reason !== "end_turn") {

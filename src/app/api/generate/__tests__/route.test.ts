@@ -62,9 +62,12 @@ describe("POST /api/generate", () => {
     expect(res.status).toBe(200);
     expect(state.created).toEqual(["Something with chicken"]);
     const req = state.lastRequest!;
-    expect(req.model).toBe("claude-sonnet-5");
+    expect(req.model).toBe("claude-sonnet-5-5");
     expect((req.system as { cache_control?: unknown }[]).at(-1)?.cache_control).toEqual({ type: "ephemeral" });
     expect((req.output_config as { format: { type: string } }).format.type).toBe("json_schema");
+    expect((req.output_config as { effort: string }).effort).toBe("medium");
+    // Thinking stays at the model default (adaptive): `disabled` 400s on Sonnet 5.5
+    expect(req).not.toHaveProperty("thinking");
     const { turn, draft } = state.appended[0] as { turn: { user: { content: string }; assistant: { options: unknown[]; libraryMatches: { title: string }[] } }; draft: unknown };
     expect(turn.user.content).toBe("Something with chicken");
     expect(turn.assistant.options).toHaveLength(1);

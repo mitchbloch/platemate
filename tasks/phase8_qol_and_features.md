@@ -31,7 +31,7 @@
 | 6 | Shared editor | One `RecipeEditor` component used by import review, detail edit, and generation save | Two near-duplicate 150-line blocks today; generation would make three |
 | 7 | Grocery merge | Claude emits `shoppingName` per ingredient inside the existing import extraction call (zero extra calls). Merge keys and displays on it. Rule engine also learns `\d+%` and yoghurt→yogurt | Judgment happens where Claude already reads every ingredient; rules bound its variance |
 | 8 | Shopping-name rule | Drop brand, marketing, size words always; drop fat level on milk/yogurt unless the recipe depends on it; keep form (canned/fresh), cut (thighs/breast), type (greek/regular). Merged lines display the canonical name ("Milk") | The "what you'd write on a paper list" test; one carton covers both recipes |
-| 9 | Backfill | One-shot idempotent local script with the service-role key (never committed), Haiku 4.5, covers all households | Every old recipe merges properly from the next list onward |
+| 9 | Backfill | One-shot idempotent local script with the service-role key (never committed), Haiku 5.5, covers all households | Every old recipe merges properly from the next list onward |
 | 10 | Onboarding | Shared `NumberField` (text while typing, clamp on blur/Enter, numeric keyboard) replaces every coerce-on-keystroke input, plus a full phone-width walkthrough of signup → household → preferences → tour | Generalized fix, then look for what else is awkward |
 | 11 | Share visibility | Full recipe visible to anyone with the link; "Save to Platemate" requires sign-in | A link nobody can read is a link nobody opens |
 | 12 | Share model | `recipe_shares` table: one active row per (recipe, sharer) reused on repeat shares; `revoked_at`; `view_count`/`save_count` bumped by the public RPC. Sharer sees "Shared · N views · N saved" | Stable links plus analytics; known drawback: unauthenticated view counting is spammable (acceptable at this scale) |
@@ -43,7 +43,7 @@
 | 18 | Turn shape | Structured output per turn: reply text plus *either* up to 3 brief options *or* a full `ParsedRecipe` draft; no streaming in v1 (10–20s per full draft, ~3s for options) | Same wait as import; streaming can come later without changing the data model |
 | 19 | Generation persistence | `recipe_generations` table, household-scoped; photo bytes not stored (marker + extracted ingredient list instead); Discard deletes the row; Save links the chat to the recipe | Survives iOS killing the PWA; nothing accumulates unless saved |
 | 20 | Testing | Add `@testing-library/react` + jsdom to Vitest; pure functions stay in lib with unit tests, shared components get behavior tests | "Well-tested" has to be a fact, not a claim |
-| 21 | Models | Sonnet 5 for import and generation; Haiku 4.5 for backfill. Prompt caching on the library block | Cost/latency fit |
+| 21 | Models | Sonnet 5.5 for import (`effort: low`) and generation (`effort: medium`); Haiku 5.5 for backfill (`effort: low`). Prompt caching on the library block | Cost/latency fit |
 
 Routine calls made without asking: search hides the Suggestions banner while a query is active; `PinnedItemsManager.tsx` deleted; renaming a staple renames this week's copy; login and signup honor a same-origin `next` param; conversations capped at 20 turns; bottom bar loses `backdrop-blur` (solid surface) while the paper-grain overlay stays; resume-from-background after ≥5 minutes refreshes route data and auth session.
 
@@ -195,7 +195,7 @@ create table recipe_generations (
 - Tests: prompt builder (pure, with household prefs), response validator (drops unknown match ids, rejects empty answers, options/recipe exclusivity), library digest builder (deterministic), request validator, route with mocked Anthropic client (cap, persistence shape, refusal), generator component (options → next turn, save, discard, library match add-to-plan, errors, read-only when saved). Plus `npm run eval:generate` for a live 3-turn check.
 
 ### E4. Cost posture
-- Full-draft turn ≈ 3–5k output tokens on Sonnet 5 (a few cents); options turn ≈ 300. Library digest cached. Behind auth; per-household use only.
+- Full-draft turn ≈ 3–5k output tokens on Sonnet 5.5 (a few cents); options turn ≈ 300. Library digest cached. Behind auth; per-household use only.
 
 ---
 

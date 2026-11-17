@@ -313,9 +313,9 @@ export const RECIPE_JSON_SCHEMA = {
   },
 } as const;
 
-const COMPLETENESS_RULES = `Completeness is critical:
-- Include EVERY ingredient that appears in the source, in order — do not omit, merge, or deduplicate any, including garnishes, "for serving" items, and sauce/marinade sub-lists.
-- Include EVERY instruction step, in order — do not condense multiple steps into one or drop finishing/serving steps.
+const COMPLETENESS_RULES = `Extract the recipe in full, because a dropped ingredient becomes a missing item on the grocery list:
+- Every ingredient in the source, in order, as separate lines (no merging or deduplicating), including garnishes, "for serving" items, and sauce/marinade sub-lists.
+- Every instruction step, in order, one per source step, including finishing and serving steps.
 - If the source repeats an ingredient in two components (e.g. sauce and marinade), list it twice with its component noted in "preparation".
 - "raw" must be the ingredient line exactly as written in the source.
 
@@ -327,7 +327,6 @@ const NUTRITION_GUIDELINES = `Nutrition estimation guidelines:
 - Be realistic — use typical portion sizes
 - cholesterol in mg, saturatedFat in g, sodium in mg, fiber in g
 - For cholesterol: eggs ~186mg each, shrimp ~170mg/3oz, chicken breast ~85mg/3oz, butter ~31mg/tbsp
-- Flag any recipe with >100mg cholesterol per serving as notable
 
 For dietaryFlags: include any that apply — "vegetarian", "vegan", "gluten-free", "dairy-free", "nut-free", "shellfish-free", "low-sodium" (<=600mg/serving), "low-cholesterol" (<=60mg/serving). Only include flags that are clearly true based on the ingredients.
 
@@ -457,12 +456,14 @@ async function callClaudeForRecipe(
 ): Promise<ParsedRecipe> {
   const message = await getAnthropic().messages.create({
     // claude-sonnet-4-20250514 was retired June 2026 (every import 404ed)
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-5-5",
     max_tokens: 16000,
     system: systemPrompt,
     // Structured outputs: the response is guaranteed to be valid JSON
     // conforming to the schema — no markdown fences, no missing fields.
+    // `low` effort: extraction (Sonnet 5.5 levels are recalibrated; default is high).
     output_config: {
+      effort: "low",
       format: { type: "json_schema", schema: RECIPE_JSON_SCHEMA },
     },
     messages: [{ role: "user", content: userMessage }],
