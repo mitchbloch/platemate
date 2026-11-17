@@ -122,7 +122,7 @@ Routine calls made without asking: search hides the Suggestions banner while a q
 - Tests: new normalizer cases; dedup with mixed shoppingName/none; canonical display wins; existing 158 stay green.
 
 ### C3. Backfill
-- `scripts/backfill-shopping-names.ts` (run with `node --experimental-strip-types` or `npx tsx`): reads `SUPABASE_SERVICE_ROLE_KEY` + URL from env; selects recipes whose ingredients lack `shoppingName`; batches 20 recipes per Haiku 4.5 call with a structured schema `{ recipes: [{ id, shoppingNames: string[] }] }`; validates array length per recipe; writes back; `--dry-run` prints the plan. Idempotent. Logged counts.
+- `scripts/backfill-shopping-names.ts` (run with `node --experimental-strip-types` or `npx tsx`): reads `SUPABASE_SERVICE_ROLE_KEY` + URL from env; selects recipes whose ingredients lack `shoppingName`; batches 20 recipes per Haiku 5.5 call (`effort: low`) with a structured schema `{ recipes: [{ id, shoppingNames: string[] }] }`; validates array length per recipe; writes back; `--dry-run` prints the plan. Idempotent. Logged counts.
 - `tasks/phase5b_smart_grocery_merge.md` gets a superseded banner pointing here.
 
 ---
@@ -183,7 +183,7 @@ create table recipe_generations (
 ```
 
 ### E2. API
-- `POST /api/generate` `{ generationId?, message, images?: base64jpeg[] (≤3, ≤600KB each) }` → load/create conversation → build Claude messages (persisted photo turns replaced by `[N photos attached earlier. Ingredients seen: …]`) → Sonnet 5, `maxDuration = 60`, structured output:
+- `POST /api/generate` `{ generationId?, message, images?: base64jpeg[] (≤3, ≤600KB each) }` → load/create conversation → build Claude messages (persisted photo turns replaced by `[N photos attached earlier. Ingredients seen: …]`) → Sonnet 5.5 (`effort: medium`), `maxDuration = 60`, structured output:
   `{ reply: string, options: [{ title, summary }] | null, recipe: ParsedRecipe | null, libraryMatches: [{ recipeId, reason }], seenIngredients: string[] }` — `seenIngredients` is how photo content survives without storing bytes
   → validate (`validateParsedRecipe` for the draft; `libraryMatches` filtered to real household recipe ids) → append assistant message, persist, return the turn. 20-turn cap → 409.
 - System prompt: role, household dietary preferences, nutrition priorities with the app's thresholds, default servings, the shopping-name rules, and the library digest (`id | title | ingredient names`) as a cached block.

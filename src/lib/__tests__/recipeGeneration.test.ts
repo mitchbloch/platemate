@@ -124,7 +124,7 @@ describe("validateGenerateRequest", () => {
     expect(validateGenerateRequest({ message: " " }).ok).toBe(false);
     expect(validateGenerateRequest({ message: "", images: ["QUJD"] })).toEqual({ ok: true, request: { generationId: null, message: "(see photo)", images: ["QUJD"] } });
     expect(validateGenerateRequest({ message: "x".repeat(4001) }).ok).toBe(false);
-    expect(validateGenerateRequest({ message: "hi", images: ["QUJD", "QUJD", "QUJD", "QUJD"] }).ok).toBe(false);
+    expect(validateGenerateRequest({ message: "hi", images: ["QUJD", "QUJD", "QUJD", "QUJD"] })).toEqual({ ok: false, error: "Up to 3 photos per message" });
     expect(validateGenerateRequest({ message: "hi", images: ["not base64!"] }).ok).toBe(false);
     expect(validateGenerateRequest({ message: "hi", images: ["A".repeat(800_001)] }).ok).toBe(false);
     expect(validateGenerateRequest({ message: "hi", images: ["A".repeat(800_000)] }).ok).toBe(true);

@@ -4,16 +4,12 @@
  * (open request → pick an option → revise). Run: npm run eval:generate
  * Needs ANTHROPIC_API_KEY in .env.local. Costs a few cents.
  */
-import fs from "node:fs";
-import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { GENERATION_EFFORT, GENERATION_MODEL, GENERATION_RESPONSE_SCHEMA, buildSystemBlocks, toApiMessages, userTurnContent, validateGenerationResponse } from "../src/lib/recipeGeneration";
 import type { GenerationMessage } from "../src/lib/types";
+import { loadEnvFile } from "./loadEnv";
 
-for (const line of fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf8").split("\n")) {
-  const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-}
+loadEnvFile(".env.local");
 const client = new Anthropic();
 // Defaults are what ships; override to compare, e.g. EVAL_MODEL=claude-sonnet-5 EVAL_EFFORT=high
 const MODEL = process.env.EVAL_MODEL ?? GENERATION_MODEL;
